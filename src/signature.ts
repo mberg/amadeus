@@ -1,6 +1,8 @@
 // ABOUTME: HMAC-SHA256 signature verification for Linear webhooks.
 // ABOUTME: Validates that incoming webhooks are authentically from Linear.
 
+import { timingSafeEqual } from "crypto";
+
 export async function verifyLinearSignature(
   payload: string,
   signature: string | null,
@@ -22,5 +24,9 @@ export async function verifyLinearSignature(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  return expectedSignature === signature;
+  const expectedBuffer = Buffer.from(expectedSignature, "hex");
+  const signatureBuffer = Buffer.from(signature, "hex");
+
+  if (expectedBuffer.length !== signatureBuffer.length) return false;
+  return timingSafeEqual(expectedBuffer, signatureBuffer);
 }
