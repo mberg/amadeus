@@ -61,15 +61,20 @@ You are working in branch \`issue/${issue.identifier}\`. All commits go to this 
 
 ### Workflow
 
-**FIRST:** Set status to Building immediately:
+**FIRST:** Set status to Building and announce you're starting:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+linear-cli comments create --body "**🤖 Claude:** Starting work on this issue." ${issue.identifier}
 \`\`\`
 
 Then:
 1. **Analyze**: Read the requirements. Post a comment with your implementation plan.
 2. **Implement**: Write the code with tests. Commit your changes.
-3. **If you need input**: Post a comment with your question AND set status to "Feedback Needed".
+3. **If you need input**: Post a comment with your question AND set status to "Feedback Needed":
+   \`\`\`bash
+   linear-cli comments create --body "**🤖 Claude:** [Your question here]" ${issue.identifier}
+   linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
+   \`\`\`
 
 **WHEN DONE:** Push branch and create PR:
 \`\`\`bash
@@ -122,33 +127,28 @@ ${comment.body}
 
 ${authorName} has replied.
 
-**FIRST:** Set status to Building:
+**FIRST:** Set status to Building and announce you're resuming:
 \`\`\`bash
 linear-cli issues update ${comment.issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+linear-cli comments create --body "**🤖 Claude:** Resuming work after feedback." ${comment.issue.identifier}
 \`\`\`
 
 Then:
 1. **Read and understand** the feedback
-2. **Post a comment** acknowledging their input (always prefix with \`**🤖 Claude:**\`):
-   \`\`\`bash
-   linear-cli comments create --body "**🤖 Claude:** Your response here" ${comment.issue.identifier}
-   \`\`\`
-3. **Do the work** they requested
+2. **Do the work** they requested
 
-**WHEN DONE:** Push branch and create/update PR:
+**WHEN DONE:** Push branch and create/update PR, then set status to Review:
 \`\`\`bash
 git push -u origin issue/${comment.issue.identifier}
 # Create PR if not exists, or just push if PR already open
 gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --body "Resolves ${comment.issue.identifier}" 2>/dev/null || echo "PR already exists"
-\`\`\`
-
-**LAST:** Set status to Review:
-\`\`\`bash
 linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+linear-cli comments create --body "**🤖 Claude:** Ready for review." ${comment.issue.identifier}
 \`\`\`
 
-If you have questions, set status to Feedback Needed instead:
+If you have questions, post a comment with your question AND set status to Feedback Needed:
 \`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** [Your question here]" ${comment.issue.identifier}
 linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
 \`\`\`
 `.trim();
