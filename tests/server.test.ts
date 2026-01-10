@@ -50,7 +50,7 @@ describe("HTTP Server", () => {
 
       const html = await res.text();
       expect(html).toContain("<!DOCTYPE html>");
-      expect(html).toContain("AMADEUS");
+      expect(html).toContain("Amadeus");
     });
   });
 
