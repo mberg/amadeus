@@ -94,6 +94,18 @@ describe("HTTP Server", () => {
     });
   });
 
+  describe("POST /trigger", () => {
+    it("returns Sent for valid request", async () => {
+      const res = await fetch(`${baseUrl}/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentKey: "test-key", message: "hello" }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("Sent");
+    });
+  });
+
   describe("GET /unknown", () => {
     it("returns 404", async () => {
       const res = await fetch(`${baseUrl}/unknown`);

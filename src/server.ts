@@ -85,9 +85,16 @@ export const server = Bun.serve({
 
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
-      const { agentKey, message } = await req.json();
-      await orchestrator.sendMessage(agentKey, message);
-      return new Response("Sent");
+      try {
+        const { agentKey, message } = await req.json();
+        if (!agentKey || !message) {
+          return new Response("Bad Request: agentKey and message required", { status: 400 });
+        }
+        await orchestrator.sendMessage(agentKey, message);
+        return new Response("Sent");
+      } catch {
+        return new Response("Bad Request", { status: 400 });
+      }
     }
 
     return new Response("Not Found", { status: 404 });
