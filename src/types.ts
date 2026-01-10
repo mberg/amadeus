@@ -9,10 +9,11 @@ export interface LinearIssue {
   title: string;
   description?: string;
   priority?: number;
-  state?: { id: string; name: string };
+  state?: { id: string; name: string; type?: string };
   assignee?: { id: string };
   labels?: { name: string }[];
   team?: { key: string };
+  trashed?: boolean;
 }
 
 export interface LinearComment {
@@ -34,6 +35,7 @@ export interface AgentInstance {
   process: Subprocess;
   port: number;
   projectPath: string;
+  worktreePath?: string;
   linearIssueId: string;
   issueIdentifier: string;
   status: "starting" | "idle" | "working";

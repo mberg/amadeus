@@ -7,6 +7,10 @@ import { ClaudeOrchestrator } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt } from "./prompt";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 
+const dashboardHtml = await Bun.file(
+  new URL("./dashboard.html", import.meta.url).pathname
+).text();
+
 const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
   triggerStates: CONFIG.triggerStates,
@@ -17,10 +21,25 @@ function isComment(data: LinearIssue | LinearComment): data is LinearComment {
   return "body" in data && "issueId" in data;
 }
 
+function isDraft(issue: LinearIssue): boolean {
+  // Draft issues have state type "triage" or state name containing "Draft"
+  const stateType = issue.state?.type?.toLowerCase();
+  const stateName = issue.state?.name?.toLowerCase() ?? "";
+  return stateType === "triage" || stateName.includes("draft");
+}
+
 async function handleIssueWebhook(
   action: string,
   issue: LinearIssue
 ): Promise<void> {
+  // Skip draft issues
+  if (isDraft(issue)) {
+    console.log(
+      `[${new Date().toISOString()}] Skipping draft issue: ${issue.identifier}`
+    );
+    return;
+  }
+
   const agentKey = orchestrator.getAgentKey(issue);
 
   console.log(
@@ -48,11 +67,10 @@ async function handleCommentWebhook(
   // Only handle new comments
   if (action !== "create") return;
 
-  const agentKey = orchestrator.findAgentByIssueId(comment.issueId);
-
-  if (!agentKey) {
+  // Skip comments on draft issues
+  if (isDraft(comment.issue)) {
     console.log(
-      `[${new Date().toISOString()}] Comment on ${comment.issue.identifier} - no active agent`
+      `[${new Date().toISOString()}] Skipping comment on draft issue: ${comment.issue.identifier}`
     );
     return;
   }
@@ -60,6 +78,24 @@ async function handleCommentWebhook(
   console.log(
     `[${new Date().toISOString()}] Comment ${action}: ${comment.issue.identifier} from ${comment.user?.name ?? "unknown"}`
   );
+
+  let agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+  // Spawn a new agent if one doesn't exist for this issue
+  if (!agentKey) {
+    console.log(
+      `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
+    );
+    await orchestrator.startAgent(comment.issue);
+    agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+    if (!agentKey) {
+      console.error(
+        `[${new Date().toISOString()}] Failed to spawn agent for ${comment.issue.identifier}`
+      );
+      return;
+    }
+  }
 
   await orchestrator.sendMessage(agentKey, buildCommentPrompt(comment));
 }
@@ -119,6 +155,13 @@ export const server = Bun.serve({
       });
     }
 
+    // Visual dashboard
+    if (req.method === "GET" && url.pathname === "/dashboard") {
+      return new Response(dashboardHtml, {
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
       try {
@@ -156,5 +199,6 @@ process.on("SIGTERM", async () => {
 });
 
 console.log(`🎼 Amadeus listening on http://localhost:${server.port}`);
-console.log(`   Webhook: https://your-machine.ts.net/webhook`);
-console.log(`   Status:  http://localhost:${server.port}/status`);
+console.log(`   Webhook:   https://your-machine.ts.net/webhook`);
+console.log(`   Status:    http://localhost:${server.port}/status`);
+console.log(`   Dashboard: http://localhost:${server.port}/dashboard`);

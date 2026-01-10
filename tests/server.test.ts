@@ -41,6 +41,18 @@ describe("HTTP Server", () => {
     });
   });
 
+  describe("GET /dashboard", () => {
+    it("returns HTML dashboard", async () => {
+      const res = await fetch(`${baseUrl}/dashboard`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/html");
+
+      const html = await res.text();
+      expect(html).toContain("<!DOCTYPE html>");
+      expect(html).toContain("AMADEUS");
+    });
+  });
+
   describe("POST /webhook", () => {
     it("rejects invalid signature", async () => {
       const res = await fetch(`${baseUrl}/webhook`, {
