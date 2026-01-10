@@ -69,7 +69,15 @@ export class ClaudeOrchestrator {
     console.log(`[Agent] Starting new agent on port ${port} for ${issue.identifier}`);
 
     const proc = spawn({
-      cmd: ["agentapi", "server", "claude", "--port", String(port)],
+      cmd: [
+        "agentapi",
+        "server",
+        "claude",
+        "--port",
+        String(port),
+        "--",
+        "--dangerously-skip-permissions",
+      ],
       cwd: projectPath,
       env: {
         ...process.env,

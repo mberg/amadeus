@@ -26,10 +26,12 @@ Linear Issue (status: "Building", comments, etc.)
 ```
 
 1. **Webhook triggers**: When a Linear issue enters a trigger state (e.g., "Scoping"), Linear sends a webhook to Amadeus
-2. **Agent spawns**: Amadeus runs `agentapi server claude --port <port>` in the configured project directory
+2. **Agent spawns**: Amadeus runs `agentapi server claude --port <port> -- --dangerously-skip-permissions` in the configured project directory
 3. **Prompt sent**: Amadeus sends the issue details to the agent via HTTP
 4. **Claude works**: Claude Code analyzes the issue, updates Linear status via MCP, writes code, etc.
 5. **Lifecycle managed**: When the issue is removed or done, Amadeus stops the agent
+
+**Note:** Agents run with `--dangerously-skip-permissions` so they can work autonomously without prompting for approval. Review agent output in Linear before merging any code.
 
 ## Prerequisites
 
