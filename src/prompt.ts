@@ -33,20 +33,12 @@ linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.i
 linear-cli issues update ${issue.identifier} --state "<state-id>"
 \`\`\`
 
-**Star issue (for visibility):**
-\`\`\`bash
-curl -s -X POST https://api.linear.app/graphql \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: \$LINEAR_API_KEY" \\
-  -d '{"query": "mutation { favoriteCreate(input: { issueId: \\"${issue.identifier}\\" }) { success } }"}'
-\`\`\`
-
 **State IDs:**
 | Status | State ID |
 |--------|----------|
-| Scoping | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
-| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
+| Planning | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
 | Feedback Needed | \`38ab3462-5550-4dcf-a1dd-6845e3a1e963\` |
+| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
 | Review | \`e5708707-32a0-4ede-9f24-fb525d92b3d4\` |
 | Done | \`edbec4af-dc30-4d27-a122-84395ac3b885\` |
 
@@ -58,41 +50,50 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 
 ### Status Workflow
 
-**Important status rules:**
-- After posting a comment with a question → set status to "Feedback Needed" AND star the issue
-- After receiving feedback and resuming work → set status to "Building"
-- When implementation is complete → set status to "Review"
-- The user will see status changes in Linear, so always update status when your state changes
+The workflow has distinct phases:
+1. **Planning** → Analyze requirements, create implementation plan
+2. **Feedback Needed** → Present plan to user, wait for approval
+3. **Building** → Implement after user approves (only entered via user feedback)
+4. **Review** → Work complete, PR created
 
 ### Git Branch
 
 You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
 
-### Workflow
+### Workflow (Planning Phase)
 
-**FIRST:** Set status to Building immediately:
+You are currently in the **Planning** phase. Do NOT start building yet.
+
+**Step 1:** Announce you're starting planning:
 \`\`\`bash
-linear-cli issues update ${issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+linear-cli comments create --body "**🤖 Claude:** Starting to analyze this issue and create an implementation plan." ${issue.identifier}
 \`\`\`
 
-Then:
-1. **Analyze**: Read the requirements. Post a comment with your implementation plan.
-2. **Implement**: Write the code with tests. Commit your changes.
-3. **If you need input**: Post a comment with your question, set status to "Feedback Needed", AND star the issue for visibility.
+**Step 2:** Analyze the requirements thoroughly:
+- Read and understand the issue description
+- Explore the codebase to understand the context
+- Identify files that need to be modified
+- Consider edge cases and potential challenges
 
-**WHEN DONE:** Push branch and create PR:
+**Step 3:** Post your implementation plan as a comment:
 \`\`\`bash
-git push -u origin issue/${issue.identifier}
-gh pr create --title "${issue.identifier}: ${issue.title}" --body "Resolves ${issue.identifier}
+linear-cli comments create --body "**🤖 Claude:** Here's my implementation plan:
 
-Linear: https://linear.app/ona/issue/${issue.identifier}"
+[Your detailed plan here - include:
+- What files will be modified/created
+- The approach you'll take
+- Any assumptions you're making
+- Estimated scope of changes]
+
+Please review and let me know if you'd like any changes to this plan." ${issue.identifier}
 \`\`\`
 
-**LAST:** Set status to Review and post PR link:
+**Step 4:** Set status to Feedback Needed and STOP:
 \`\`\`bash
-linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
-linear-cli comments create --body "**🤖 Claude:** PR created: <paste PR URL here>" ${issue.identifier}
+linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
 \`\`\`
+
+**IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
 
 ### Important
 
@@ -129,40 +130,43 @@ ${comment.body}
 
 ### Instructions
 
-${authorName} has replied.
+${authorName} has provided feedback on your plan or work.
 
-**FIRST:** Set status to Building:
+**First, determine the nature of the feedback:**
+- If they **approved your plan** or said to proceed → Go to Building phase
+- If they **requested changes to the plan** → Update your plan and stay in Feedback Needed
+- If they **asked a question** → Answer it and stay in Feedback Needed
+
+**If approved to build:**
+
+1. Set status to Building:
 \`\`\`bash
 linear-cli issues update ${comment.issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+linear-cli comments create --body "**🤖 Claude:** Starting implementation based on the approved plan." ${comment.issue.identifier}
 \`\`\`
 
-Then:
-1. **Read and understand** the feedback
-2. **Post a comment** acknowledging their input (always prefix with \`**🤖 Claude:**\`):
-   \`\`\`bash
-   linear-cli comments create --body "**🤖 Claude:** Your response here" ${comment.issue.identifier}
-   \`\`\`
-3. **Do the work** they requested
+2. Implement the plan - write code, tests, commit changes
 
-**WHEN DONE:** Push branch and create/update PR:
+3. When done, push and create PR:
 \`\`\`bash
 git push -u origin issue/${comment.issue.identifier}
-# Create PR if not exists, or just push if PR already open
-gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --body "Resolves ${comment.issue.identifier}" 2>/dev/null || echo "PR already exists"
+gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --body "Resolves ${comment.issue.identifier}
+
+Linear: https://linear.app/ona/issue/${comment.issue.identifier}" 2>/dev/null || echo "PR already exists, pushing updates"
 \`\`\`
 
-**LAST:** Set status to Review:
+4. Set status to Review:
 \`\`\`bash
 linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+linear-cli comments create --body "**🤖 Claude:** Implementation complete. PR created/updated and ready for review." ${comment.issue.identifier}
 \`\`\`
 
-If you have questions, set status to Feedback Needed AND star the issue for visibility:
+**If plan changes requested or you have questions:**
+
+Post your response and keep status at Feedback Needed:
 \`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** [Your updated plan or answer to their question]" ${comment.issue.identifier}
 linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
-curl -s -X POST https://api.linear.app/graphql \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: \$LINEAR_API_KEY" \\
-  -d '{"query": "mutation { favoriteCreate(input: { issueId: \\"${comment.issue.identifier}\\" }) { success } }"}'
 \`\`\`
 `.trim();
 }

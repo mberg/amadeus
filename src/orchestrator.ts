@@ -68,6 +68,7 @@ export class ClaudeOrchestrator {
       port: agent.port,
       issueId: agent.linearIssueId,
       issueIdentifier: agent.issueIdentifier,
+      linearState: agent.linearState,
       status: agent.status,
       uptime: Date.now() - agent.startedAt.getTime(),
       worktreePath: agent.worktreePath,
@@ -85,6 +86,13 @@ export class ClaudeOrchestrator {
       }
     }
     return null;
+  }
+
+  updateIssueState(key: string, state: string): void {
+    const agent = this.agents.get(key);
+    if (agent) {
+      agent.linearState = state;
+    }
   }
 
   async startAgent(issue: LinearIssue, comments?: CommentData[]): Promise<void> {
@@ -164,6 +172,7 @@ export class ClaudeOrchestrator {
       worktreePath,
       linearIssueId: issue.id,
       issueIdentifier: issue.identifier,
+      linearState: issue.state?.name,
       status: "starting",
       startedAt: new Date(),
     });
