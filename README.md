@@ -183,6 +183,97 @@ Configure your Linear workflow with these states for best results:
 | **Feedback Needed** | Agent blocked, needs human input |
 | **Done** | Human approved |
 
+## Tailscale Funnel Setup
+
+Tailscale Funnel exposes your local Amadeus server to the internet so Linear can send webhooks to it. This is the recommended approach for development and personal use.
+
+### Install Tailscale
+
+1. **Download and install Tailscale** from [tailscale.com/download](https://tailscale.com/download)
+
+2. **Authenticate with your Tailscale account:**
+   ```bash
+   tailscale login
+   ```
+
+3. **Verify Tailscale is running:**
+   ```bash
+   tailscale status
+   ```
+
+### Enable Funnel
+
+Funnel requires HTTPS and must be enabled in your Tailscale admin console:
+
+1. Go to [login.tailscale.com/admin/acls](https://login.tailscale.com/admin/acls)
+2. Add the following to your ACL policy (or enable via the UI under DNS → Funnel):
+   ```json
+   {
+     "nodeAttrs": [
+       {
+         "target": ["*"],
+         "attr": ["funnel"]
+       }
+     ]
+   }
+   ```
+
+### Start Funnel for Amadeus
+
+```bash
+# Start Amadeus server first
+bun run start
+
+# In another terminal, expose port 5678 via Funnel
+tailscale funnel --bg 5678
+```
+
+The `--bg` flag runs Funnel in the background. Your server is now accessible at:
+```
+https://<your-machine-name>.<tailnet-name>.ts.net/
+```
+
+To find your Funnel URL:
+```bash
+tailscale funnel status
+```
+
+### Configure Linear Webhook
+
+Use your Funnel URL as the webhook endpoint in Linear:
+
+1. Go to **Linear → Settings → API → Webhooks**
+2. Set the webhook URL to: `https://<your-machine>.ts.net/webhook`
+3. Select events: **Issues**, **Comments**
+4. Copy the signing secret to your `.env` as `LINEAR_WEBHOOK_SECRET`
+
+### Funnel Commands Reference
+
+```bash
+# Start Funnel (foreground)
+tailscale funnel 5678
+
+# Start Funnel (background)
+tailscale funnel --bg 5678
+
+# Check Funnel status
+tailscale funnel status
+
+# Stop Funnel
+tailscale funnel off
+```
+
+### Troubleshooting
+
+**Funnel not working?**
+- Ensure Tailscale is connected: `tailscale status`
+- Verify Funnel is enabled in your admin console
+- Check that MagicDNS is enabled in your Tailscale admin
+
+**Webhook verification failing?**
+- Confirm the URL in Linear matches your Funnel URL exactly
+- Ensure `LINEAR_WEBHOOK_SECRET` in `.env` matches the secret shown in Linear
+
 ## Development
 
 ```bash
