@@ -48,3 +48,23 @@ export interface AgentStatus {
   status: string;
   uptime: number;
 }
+
+export interface AgentProfileSkills {
+  marketplaces?: string[];
+  install?: string[];
+  local?: string[];
+}
+
+export interface AgentProfile {
+  extends?: string;
+  mcpServers?: Record<string, McpServerConfig>;
+  permissions?: { allow?: string[]; deny?: string[] };
+  skills?: AgentProfileSkills;
+  promptAdditions?: string[];
+}
+
+export interface McpServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}

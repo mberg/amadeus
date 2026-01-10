@@ -1,6 +1,8 @@
 // ABOUTME: Configuration for the orchestrator server.
 // ABOUTME: Loads environment variables and defines project path mappings.
 
+import { join } from "node:path";
+
 function loadProjectPaths(): Record<string, string> {
   const paths: Record<string, string> = {};
 
@@ -23,10 +25,30 @@ function loadProjectPaths(): Record<string, string> {
   return paths;
 }
 
+function loadTeamProfiles(): Record<string, string> {
+  const teamProfiles: Record<string, string> = {};
+
+  // Load from TEAM_PROFILES env var (format: "TEAM1:profile1,TEAM2:profile2")
+  const profilesEnv = process.env.TEAM_PROFILES;
+  if (profilesEnv) {
+    for (const mapping of profilesEnv.split(",")) {
+      const [team, profile] = mapping.split(":");
+      if (team && profile) {
+        teamProfiles[team.trim()] = profile.trim();
+      }
+    }
+  }
+
+  return teamProfiles;
+}
+
 export const CONFIG = {
   port: Number(process.env.PORT) || 5678,
   linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
   claudeBotUserId: process.env.CLAUDE_BOT_USER_ID,
   projectPaths: loadProjectPaths(),
   triggerStates: (process.env.TRIGGER_STATES ?? "Scoping,Ready to Build").split(","),
+  profilesDir: process.env.PROFILES_DIR ?? join(import.meta.dir, "..", "agent-profiles"),
+  defaultProfile: process.env.DEFAULT_PROFILE ?? "base",
+  teamProfiles: loadTeamProfiles(),
 };

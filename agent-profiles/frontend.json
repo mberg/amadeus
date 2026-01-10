@@ -1,0 +1,22 @@
+{
+  "extends": "base",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-playwright"]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(playwright:*)"
+    ]
+  },
+  "skills": {
+    "marketplaces": ["anthropics/skills"],
+    "install": ["frontend-design@anthropic-agent-skills"]
+  },
+  "promptAdditions": [
+    "You have access to Playwright for browser automation and testing.",
+    "Use the frontend-design skill for creating polished UI components."
+  ]
+}

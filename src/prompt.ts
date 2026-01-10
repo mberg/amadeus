@@ -1,9 +1,11 @@
 // ABOUTME: Builds Claude prompts from Linear issue data.
 // ABOUTME: Formats issue details into actionable instructions for the agent.
 
-import type { LinearIssue, LinearComment } from "./types";
+import type { LinearIssue, LinearComment, AgentProfile } from "./types";
 
-export function buildPrompt(issue: LinearIssue): string {
+export function buildPrompt(issue: LinearIssue, profile?: AgentProfile): string {
+  const profileSection = buildProfileSection(profile);
+
   return `
 ## New Task from Linear
 
@@ -17,24 +19,35 @@ ${issue.description || "No description provided."}
 
 ### How to Communicate with Linear
 
-You have access to the Linear MCP server. Use it to:
-- Update issue status: Use the Linear MCP tool to change the issue state
-- Post comments: Add comments to ${issue.identifier} to share your progress, ask questions, or report blockers
-- The issue ID is: ${issue.id}
-- The issue identifier is: ${issue.identifier}
+Use the \`linear-cli\` command line tool for all Linear interactions.
+
+**Post a comment:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.identifier}
+\`\`\`
+**Important:** Always prefix your comments with \`**🤖 Claude:**\` so users know it's from the AI agent.
+
+**Update status:**
+\`\`\`bash
+linear-cli issues update ${issue.identifier} --state "<state-id>"
+\`\`\`
+
+**State IDs:**
+| Status | State ID |
+|--------|----------|
+| Scoping | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
+| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
+| Feedback Needed | \`38ab3462-5550-4dcf-a1dd-6845e3a1e963\` |
+| Review | \`e5708707-32a0-4ede-9f24-fb525d92b3d4\` |
+| Done | \`edbec4af-dc30-4d27-a122-84395ac3b885\` |
+
+**Issue details:**
+- Issue ID: ${issue.id}
+- Issue identifier: ${issue.identifier}
 
 These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_ISSUE_IDENTIFIER.
 
 ### Status Workflow
-
-Use these statuses to communicate your progress:
-
-| Status | When to Use |
-|--------|-------------|
-| **Scoping** | Analyzing requirements, creating plan |
-| **Building** | Actively writing code |
-| **Feedback Needed** | You have a question or need input from the user |
-| **Review** | Work is complete and ready for human review |
 
 **Important status rules:**
 - After posting a comment with a question → set status to "Feedback Needed"
@@ -44,19 +57,40 @@ Use these statuses to communicate your progress:
 
 ### Workflow
 
-1. **Analyze**: Read the requirements. Post a comment on ${issue.identifier} with your implementation plan.
-2. **Update status to "Building"**: When you start coding.
-3. **Implement**: Write the code with tests. Commit your changes.
-4. **Update status to "Review"**: When implementation is complete.
-5. **If you need input**: Post a comment with your question AND update status to "Feedback Needed".
+**FIRST:** Set status to Building immediately:
+\`\`\`bash
+linear-cli issues update ${issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+\`\`\`
+
+Then:
+1. **Analyze**: Read the requirements. Post a comment with your implementation plan.
+2. **Implement**: Write the code with tests. Commit your changes.
+3. **If you need input**: Post a comment with your question AND set status to "Feedback Needed".
+
+**LAST:** When done, set status to Review:
+\`\`\`bash
+linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+\`\`\`
 
 ### Important
 
-- Always communicate your progress via Linear comments
-- Always update the issue status to reflect your current state
-- If you can't access Linear MCP, focus on the implementation and document your work in commit messages
+- Always communicate your progress via Linear comments using \`linear-cli comments create\`
+- Always update the issue status to reflect your current state using \`linear-cli issues update\`
 - Keep the human in the loop—post meaningful updates, not just status changes
-`.trim();
+${profileSection}`.trim();
+}
+
+function buildProfileSection(profile?: AgentProfile): string {
+  if (!profile?.promptAdditions?.length) {
+    return "";
+  }
+
+  return `
+
+### Profile Capabilities
+
+${profile.promptAdditions.join("\n\n")}
+`;
 }
 
 export function buildCommentPrompt(comment: LinearComment): string {
@@ -73,20 +107,29 @@ ${comment.body}
 
 ### Instructions
 
-${authorName} has replied to your previous comment or added new information. Please:
+${authorName} has replied.
 
-1. **Read and understand** the feedback or question
-2. **Respond appropriately**:
-   - If they answered your question → continue with the work, update status to "Building"
-   - If they asked a follow-up question → answer it and update status to "Feedback Needed" if you need more info
-   - If they approved your work → proceed with implementation or mark as "Review" if done
-   - If they requested changes → implement the changes
-3. **Post a comment** on ${comment.issue.identifier} acknowledging their input and explaining your next steps
-4. **Update the issue status** to reflect your current state:
-   - "Building" if you're continuing work
-   - "Feedback Needed" if you have questions
-   - "Review" if work is complete
+**FIRST:** Set status to Building:
+\`\`\`bash
+linear-cli issues update ${comment.issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+\`\`\`
 
-Remember: The user is watching Linear for status updates. Always update the status so they know what's happening.
+Then:
+1. **Read and understand** the feedback
+2. **Post a comment** acknowledging their input (always prefix with \`**🤖 Claude:**\`):
+   \`\`\`bash
+   linear-cli comments create --body "**🤖 Claude:** Your response here" ${comment.issue.identifier}
+   \`\`\`
+3. **Do the work** they requested
+
+**LAST:** When done, set status to Review:
+\`\`\`bash
+linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+\`\`\`
+
+If you have questions, set status to Feedback Needed instead:
+\`\`\`bash
+linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
+\`\`\`
 `.trim();
 }

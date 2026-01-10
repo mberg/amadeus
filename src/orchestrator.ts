@@ -2,22 +2,44 @@
 // ABOUTME: Handles spawning, messaging, and stopping agent processes.
 
 import { spawn, type Subprocess } from "bun";
-import type { LinearIssue, AgentInstance, AgentStatus } from "./types";
+import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
 import { buildPrompt } from "./prompt";
+import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
 
 export interface OrchestratorConfig {
   projectPaths: Record<string, string>;
   triggerStates: string[];
   claudeBotUserId?: string;
+  profilesDir?: string;
+  defaultProfile?: string;
+  teamProfiles?: Record<string, string>;
 }
 
 export class ClaudeOrchestrator {
   private agents = new Map<string, AgentInstance>();
   private nextPort = 8001;
   private config: OrchestratorConfig;
+  private profiles: Record<string, AgentProfile> = {};
+  private profilesLoaded = false;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
+  }
+
+  async loadProfiles(): Promise<void> {
+    if (this.profilesLoaded || !this.config.profilesDir) return;
+
+    this.profiles = await loadProfiles(this.config.profilesDir);
+    this.profilesLoaded = true;
+    console.log(`[Agent] Loaded ${Object.keys(this.profiles).length} profiles`);
+  }
+
+  getProfileForIssue(issue: LinearIssue): AgentProfile {
+    const teamKey = issue.team?.key;
+    const teamDefault = teamKey ? this.config.teamProfiles?.[teamKey] : undefined;
+    const defaultProfile = teamDefault ?? this.config.defaultProfile ?? "base";
+
+    return resolveAndMergeProfiles(issue, this.profiles, defaultProfile);
   }
 
   shouldStartAgent(issue: LinearIssue): boolean {
@@ -74,6 +96,9 @@ export class ClaudeOrchestrator {
       return;
     }
 
+    await this.loadProfiles();
+    const profile = this.getProfileForIssue(issue);
+
     const port = this.nextPort++;
     console.log(`[Agent] Starting new agent on port ${port} for ${issue.identifier}`);
 
@@ -120,7 +145,7 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
-    await this.sendMessage(key, buildPrompt(issue));
+    await this.sendMessage(key, buildPrompt(issue, profile));
   }
 
   private async waitForAgent(port: number, maxAttempts = 30): Promise<void> {

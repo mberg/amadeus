@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "linear": {
+      "command": "npx",
+      "args": ["-y", "@larryhudson/linear-mcp-server"],
+      "env": {
+        "LINEAR_API_KEY": "${LINEAR_API_KEY}"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(linear-cli:*)",
+      "Bash(git:*)",
+      "Bash(bun:*)"
+    ]
+  },
+  "promptAdditions": []
+}

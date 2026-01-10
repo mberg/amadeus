@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { buildPrompt } from "../src/prompt";
-import type { LinearIssue } from "../src/types";
+import type { LinearIssue, AgentProfile } from "../src/types";
 
 describe("buildPrompt", () => {
   it("includes issue identifier and title", () => {
@@ -69,5 +69,52 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt(issue);
 
     expect(prompt).toContain("**Priority**: 1");
+  });
+
+  it("includes profile prompt additions when provided", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+    const profile: AgentProfile = {
+      promptAdditions: [
+        "You have access to Playwright for browser automation.",
+        "Use the frontend-design skill for UI work.",
+      ],
+    };
+
+    const prompt = buildPrompt(issue, profile);
+
+    expect(prompt).toContain("Profile Capabilities");
+    expect(prompt).toContain("You have access to Playwright");
+    expect(prompt).toContain("frontend-design skill");
+  });
+
+  it("excludes profile section when no prompt additions", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+    const profile: AgentProfile = {
+      mcpServers: { linear: { command: "npx", args: [] } },
+    };
+
+    const prompt = buildPrompt(issue, profile);
+
+    expect(prompt).not.toContain("Profile Capabilities");
+  });
+
+  it("excludes profile section when profile is undefined", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt).not.toContain("Profile Capabilities");
   });
 });
