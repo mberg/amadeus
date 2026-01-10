@@ -32,6 +32,14 @@ linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.i
 linear-cli issues update ${issue.identifier} --state "<state-id>"
 \`\`\`
 
+**Star issue (for visibility):**
+\`\`\`bash
+curl -s -X POST https://api.linear.app/graphql \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: \$LINEAR_API_KEY" \\
+  -d '{"query": "mutation { favoriteCreate(input: { issueId: \\"${issue.identifier}\\" }) { success } }"}'
+\`\`\`
+
 **State IDs:**
 | Status | State ID |
 |--------|----------|
@@ -50,7 +58,7 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 ### Status Workflow
 
 **Important status rules:**
-- After posting a comment with a question → set status to "Feedback Needed"
+- After posting a comment with a question → set status to "Feedback Needed" AND star the issue
 - After receiving feedback and resuming work → set status to "Building"
 - When implementation is complete → set status to "Review"
 - The user will see status changes in Linear, so always update status when your state changes
@@ -69,7 +77,7 @@ linear-cli issues update ${issue.identifier} --state "0aab3254-cc63-4979-84ab-ed
 Then:
 1. **Analyze**: Read the requirements. Post a comment with your implementation plan.
 2. **Implement**: Write the code with tests. Commit your changes.
-3. **If you need input**: Post a comment with your question AND set status to "Feedback Needed".
+3. **If you need input**: Post a comment with your question, set status to "Feedback Needed", AND star the issue for visibility.
 
 **WHEN DONE:** Push branch and create PR:
 \`\`\`bash
@@ -147,9 +155,13 @@ gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --bod
 linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 \`\`\`
 
-If you have questions, set status to Feedback Needed instead:
+If you have questions, set status to Feedback Needed AND star the issue for visibility:
 \`\`\`bash
 linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
+curl -s -X POST https://api.linear.app/graphql \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: \$LINEAR_API_KEY" \\
+  -d '{"query": "mutation { favoriteCreate(input: { issueId: \\"${comment.issue.identifier}\\" }) { success } }"}'
 \`\`\`
 `.trim();
 }

@@ -2,8 +2,8 @@
 // ABOUTME: Ensures prompts include all relevant issue information.
 
 import { describe, expect, it } from "bun:test";
-import { buildPrompt } from "../src/prompt";
-import type { LinearIssue, AgentProfile } from "../src/types";
+import { buildPrompt, buildCommentPrompt } from "../src/prompt";
+import type { LinearIssue, AgentProfile, LinearComment } from "../src/types";
 
 describe("buildPrompt", () => {
   it("includes issue identifier and title", () => {
@@ -116,5 +116,42 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt(issue);
 
     expect(prompt).not.toContain("Profile Capabilities");
+  });
+
+  it("includes star command when setting Feedback Needed status", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt).toContain("star");
+    expect(prompt).toContain("favoriteCreate");
+    expect(prompt).toContain("ENG-42");
+  });
+});
+
+describe("buildCommentPrompt", () => {
+  it("includes star command when setting Feedback Needed status", () => {
+    const comment: LinearComment = {
+      id: "comment-123",
+      body: "Can you clarify this?",
+      issue: {
+        id: "issue-123",
+        identifier: "ENG-42",
+        title: "Test issue",
+      },
+      user: {
+        name: "Matt",
+      },
+    };
+
+    const prompt = buildCommentPrompt(comment);
+
+    expect(prompt).toContain("star");
+    expect(prompt).toContain("favoriteCreate");
+    expect(prompt).toContain("ENG-42");
   });
 });
