@@ -88,4 +88,12 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.getAgentKey(issue)).toBe("DEFAULT-issue-123");
     });
   });
+
+  describe("updateIssueState", () => {
+    it("does not crash when updating non-existent agent", () => {
+      expect(() => {
+        orchestrator.updateIssueState("non-existent-key", "Building");
+      }).not.toThrow();
+    });
+  });
 });
