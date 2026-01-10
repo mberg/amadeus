@@ -4,6 +4,7 @@
 import { CONFIG } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator } from "./orchestrator";
+import { buildPrompt } from "./prompt";
 import type { LinearWebhookPayload } from "./types";
 
 const orchestrator = new ClaudeOrchestrator({
@@ -30,7 +31,6 @@ async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
 
   if (orchestrator.shouldStartAgent(data)) {
     if (orchestrator.hasAgent(agentKey)) {
-      const { buildPrompt } = await import("./prompt");
       await orchestrator.sendMessage(agentKey, buildPrompt(data));
     } else {
       await orchestrator.startAgent(data);
@@ -99,6 +99,24 @@ export const server = Bun.serve({
 
     return new Response("Not Found", { status: 404 });
   },
+});
+
+process.on("SIGINT", async () => {
+  console.log("\nShutting down...");
+  for (const status of orchestrator.getStatus()) {
+    await orchestrator.stopAgent(status.key);
+  }
+  server.stop();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.log("\nShutting down...");
+  for (const status of orchestrator.getStatus()) {
+    await orchestrator.stopAgent(status.key);
+  }
+  server.stop();
+  process.exit(0);
 });
 
 console.log(`🎼 Amadeus listening on http://localhost:${server.port}`);

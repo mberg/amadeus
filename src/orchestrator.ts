@@ -90,7 +90,14 @@ export class ClaudeOrchestrator {
       startedAt: new Date(),
     });
 
-    await this.waitForAgent(port);
+    try {
+      await this.waitForAgent(port);
+    } catch (err) {
+      console.error(`[Agent] Failed to start agent ${key}:`, err);
+      proc.kill();
+      this.agents.delete(key);
+      return;
+    }
 
     const agent = this.agents.get(key)!;
     agent.status = "idle";
