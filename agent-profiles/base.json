@@ -12,7 +12,8 @@
     "allow": [
       "Bash(linear-cli:*)",
       "Bash(git:*)",
-      "Bash(bun:*)"
+      "Bash(bun:*)",
+      "Bash(curl:*)"
     ]
   },
   "promptAdditions": []
