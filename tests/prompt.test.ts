@@ -68,6 +68,6 @@ describe("buildPrompt", () => {
 
     const prompt = buildPrompt(issue);
 
-    expect(prompt).toContain("1");
+    expect(prompt).toContain("**Priority**: 1");
   });
 });
