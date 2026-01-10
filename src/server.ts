@@ -192,7 +192,7 @@ export const server = Bun.serve({
         const res = await fetch(`http://localhost:${agent.port}/messages`);
         const data = await res.json();
         return Response.json(data);
-      } catch (err) {
+      } catch {
         return new Response("Failed to fetch agent messages", { status: 502 });
       }
     }
