@@ -47,7 +47,7 @@ export const CONFIG = {
   linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
   claudeBotUserId: process.env.CLAUDE_BOT_USER_ID,
   projectPaths: loadProjectPaths(),
-  triggerStates: (process.env.TRIGGER_STATES ?? "Scoping,Ready to Build").split(","),
+  triggerStates: (process.env.TRIGGER_STATES ?? "Planning,Ready to Build").split(","),
   profilesDir: process.env.PROFILES_DIR ?? join(import.meta.dir, "..", "agent-profiles"),
   defaultProfile: process.env.DEFAULT_PROFILE ?? "base",
   teamProfiles: loadTeamProfiles(),

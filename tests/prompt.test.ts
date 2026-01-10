@@ -118,7 +118,7 @@ describe("buildPrompt", () => {
     expect(prompt).not.toContain("Profile Capabilities");
   });
 
-  it("pairs initial Building state change with a comment", () => {
+  it("pairs plan comment with Feedback Needed state change", () => {
     const issue: LinearIssue = {
       id: "issue-123",
       identifier: "ENG-42",
@@ -127,14 +127,13 @@ describe("buildPrompt", () => {
 
     const prompt = buildPrompt(issue);
 
-    // The first state change to Building should be followed by a comment
-    // Check that after the Building state command, there's a comment command
-    const buildingStateRegex =
-      /linear-cli issues update.*--state "0aab3254.*"[\s\S]*?linear-cli comments create.*Starting work/;
-    expect(prompt).toMatch(buildingStateRegex);
+    // In Planning workflow, posting the plan comment should precede the Feedback Needed state change
+    const planThenFeedbackRegex =
+      /linear-cli comments create.*plan[\s\S]*?linear-cli issues update.*--state "38ab3462/;
+    expect(prompt).toMatch(planThenFeedbackRegex);
   });
 
-  it("pairs Feedback Needed state change with a comment instruction", () => {
+  it("instructs agent to stop after setting Feedback Needed", () => {
     const issue: LinearIssue = {
       id: "issue-123",
       identifier: "ENG-42",
@@ -143,17 +142,14 @@ describe("buildPrompt", () => {
 
     const prompt = buildPrompt(issue);
 
-    // Instructions for Feedback Needed should mention posting a comment with the question
+    // Agent should be told to STOP after setting Feedback Needed
     expect(prompt).toContain("Feedback Needed");
-    // The prompt should explicitly say to post a comment when setting Feedback Needed
-    expect(prompt).toMatch(
-      /post.*comment.*question.*Feedback Needed|Feedback Needed.*post.*comment/i
-    );
+    expect(prompt).toMatch(/Feedback Needed.*STOP|STOP.*Feedback Needed/i);
   });
 });
 
 describe("buildCommentPrompt", () => {
-  it("pairs Building state change with a comment about resuming work", () => {
+  it("pairs Building state change with a comment about starting implementation", () => {
     const comment: LinearComment = {
       id: "comment-123",
       body: "Please also add tests",
@@ -168,9 +164,9 @@ describe("buildCommentPrompt", () => {
 
     const prompt = buildCommentPrompt(comment);
 
-    // The Building state command should be followed by a comment about resuming
+    // The Building state command should be followed by a comment about starting implementation
     const buildingStateRegex =
-      /linear-cli issues update.*--state "0aab3254.*"[\s\S]*?linear-cli comments create.*Resuming work/i;
+      /linear-cli issues update.*--state "0aab3254.*"[\s\S]*?linear-cli comments create.*Starting implementation/i;
     expect(prompt).toMatch(buildingStateRegex);
   });
 
