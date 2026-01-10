@@ -6,7 +6,7 @@ import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt } from "./prompt";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
-import dashboardHtml from "./dashboard.html";
+import dashboardHtml from "./dashboard/index.html";
 
 const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
