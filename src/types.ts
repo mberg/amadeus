@@ -49,6 +49,7 @@ export interface AgentStatus {
   issueIdentifier: string;
   status: string;
   uptime: number;
+  worktreePath?: string;
 }
 
 export interface AgentProfileSkills {

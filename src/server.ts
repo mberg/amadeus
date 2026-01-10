@@ -15,6 +15,8 @@ const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
   triggerStates: CONFIG.triggerStates,
   claudeBotUserId: CONFIG.claudeBotUserId,
+  useWorktrees: CONFIG.useWorktrees,
+  worktreesDir: CONFIG.worktreesDir,
 });
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {

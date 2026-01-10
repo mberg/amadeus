@@ -72,6 +72,49 @@ Amadeus supports running agents across multiple projects simultaneously:
 
 Each issue gets its own agent instance, even if multiple issues target the same project. Agents are isolated and don't interfere with each other.
 
+## Git Worktrees
+
+By default, Amadeus creates a separate git worktree for each issue. This means each agent works in an isolated directory with its own branch, preventing agents from conflicting with each other when multiple issues target the same project.
+
+```
+/code/backend/                    ← Main project (stays clean)
+/.amadeus-worktrees/
+  ├── ONA-123/                    ← Worktree for issue ONA-123
+  │   └── (full project checkout on branch issue/ONA-123)
+  ├── ONA-124/                    ← Worktree for issue ONA-124
+  │   └── (full project checkout on branch issue/ONA-124)
+  └── ONA-125/                    ← Worktree for issue ONA-125
+      └── (full project checkout on branch issue/ONA-125)
+```
+
+### How It Works
+
+1. When an agent starts for issue `ONA-123`, Amadeus:
+   - Creates branch `issue/ONA-123` (or uses it if it exists)
+   - Creates a worktree at `../.amadeus-worktrees/ONA-123`
+   - Runs the agent in the worktree directory
+
+2. Each agent works in complete isolation—no file conflicts between parallel agents
+
+3. When the agent stops, the worktree is cleaned up but the **branch is preserved** for review/merging
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `USE_WORKTREES` | `true` | Set to `false` to disable worktrees (agents work in project root) |
+| `WORKTREES_DIR` | `../.amadeus-worktrees` | Custom directory for worktrees |
+
+### Disabling Worktrees
+
+If you prefer agents to work directly in the project directory (like before):
+
+```bash
+USE_WORKTREES=false bun run start
+```
+
+Note: Without worktrees, multiple agents on the same project may conflict with each other's file changes.
+
 ## Prerequisites
 
 You need these installed on your machine:
@@ -161,6 +204,8 @@ Set these environment variables:
 | `TRIGGER_STATES` | No | States that spawn agents (default: `Scoping,Ready to Build`) |
 | `CLAUDE_BOT_USER_ID` | No | Linear user ID to trigger on assignment |
 | `PORT` | No | Server port (default: 5678) |
+| `USE_WORKTREES` | No | Enable git worktrees for issue isolation (default: `true`) |
+| `WORKTREES_DIR` | No | Custom directory for worktrees (default: `../.amadeus-worktrees`) |
 
 ### Project Path Mapping
 

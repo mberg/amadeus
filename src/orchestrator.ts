@@ -2,9 +2,11 @@
 // ABOUTME: Handles spawning, messaging, and stopping agent processes.
 
 import { spawn, type Subprocess } from "bun";
+import { dirname, join } from "node:path";
 import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
 import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
+import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 
 export interface OrchestratorConfig {
   projectPaths: Record<string, string>;
@@ -13,6 +15,8 @@ export interface OrchestratorConfig {
   profilesDir?: string;
   defaultProfile?: string;
   teamProfiles?: Record<string, string>;
+  useWorktrees?: boolean;
+  worktreesDir?: string;
 }
 
 export class ClaudeOrchestrator {
@@ -65,6 +69,7 @@ export class ClaudeOrchestrator {
       issueIdentifier: agent.issueIdentifier,
       status: agent.status,
       uptime: Date.now() - agent.startedAt.getTime(),
+      worktreePath: agent.worktreePath,
     }));
   }
 
@@ -102,6 +107,35 @@ export class ClaudeOrchestrator {
     const port = this.nextPort++;
     console.log(`[Agent] Starting new agent on port ${port} for ${issue.identifier}`);
 
+    // Determine working directory (worktree or project root)
+    let workingDir = projectPath;
+    let worktreePath: string | undefined;
+
+    if (this.config.useWorktrees !== false) {
+      // Default worktrees dir is a sibling directory named .amadeus-worktrees
+      const worktreesDir =
+        this.config.worktreesDir ?? join(dirname(projectPath), ".amadeus-worktrees");
+
+      const worktreeResult = await createWorktree({
+        repoPath: projectPath,
+        worktreesDir,
+        issueIdentifier: issue.identifier,
+      });
+
+      if (worktreeResult.success && worktreeResult.worktreePath) {
+        worktreePath = worktreeResult.worktreePath;
+        workingDir = worktreePath;
+        console.log(
+          `[Agent] Created worktree at ${worktreePath} (branch: ${worktreeResult.branchName})`
+        );
+      } else {
+        console.warn(
+          `[Agent] Failed to create worktree for ${issue.identifier}: ${worktreeResult.error}`
+        );
+        console.log(`[Agent] Falling back to project root: ${projectPath}`);
+      }
+    }
+
     const proc = spawn({
       cmd: [
         "agentapi",
@@ -112,7 +146,7 @@ export class ClaudeOrchestrator {
         "--",
         "--dangerously-skip-permissions",
       ],
-      cwd: projectPath,
+      cwd: workingDir,
       env: {
         ...process.env,
         LINEAR_ISSUE_ID: issue.id,
@@ -126,6 +160,7 @@ export class ClaudeOrchestrator {
       process: proc,
       port,
       projectPath,
+      worktreePath,
       linearIssueId: issue.id,
       issueIdentifier: issue.identifier,
       status: "starting",
@@ -138,6 +173,10 @@ export class ClaudeOrchestrator {
     } catch (err) {
       console.error(`[Agent] Failed to start agent ${key}:`, err);
       proc.kill();
+      // Clean up worktree if we created one
+      if (worktreePath) {
+        await removeWorktree({ repoPath: projectPath, worktreePath });
+      }
       this.agents.delete(key);
       return;
     }
@@ -226,6 +265,19 @@ export class ClaudeOrchestrator {
 
     console.log(`[Agent] Stopping agent: ${key}`);
     agent.process.kill();
+
+    // Clean up worktree if one was created
+    if (agent.worktreePath) {
+      console.log(`[Agent] Removing worktree: ${agent.worktreePath}`);
+      const result = await removeWorktree({
+        repoPath: agent.projectPath,
+        worktreePath: agent.worktreePath,
+      });
+      if (!result.success) {
+        console.warn(`[Agent] Failed to remove worktree: ${result.error}`);
+      }
+    }
+
     this.agents.delete(key);
   }
 }

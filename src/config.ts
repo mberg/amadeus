@@ -51,4 +51,6 @@ export const CONFIG = {
   profilesDir: process.env.PROFILES_DIR ?? join(import.meta.dir, "..", "agent-profiles"),
   defaultProfile: process.env.DEFAULT_PROFILE ?? "base",
   teamProfiles: loadTeamProfiles(),
+  useWorktrees: process.env.USE_WORKTREES !== "false",
+  worktreesDir: process.env.WORKTREES_DIR,
 };
