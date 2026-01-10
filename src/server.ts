@@ -53,6 +53,11 @@ async function handleIssueWebhook(
     return;
   }
 
+  // Update Linear state if agent exists (for dashboard display)
+  if (orchestrator.hasAgent(agentKey) && issue.state?.name) {
+    orchestrator.updateIssueState(agentKey, issue.state.name);
+  }
+
   if (orchestrator.shouldStartAgent(issue)) {
     if (orchestrator.hasAgent(agentKey)) {
       await orchestrator.sendMessage(agentKey, buildPrompt(issue));
