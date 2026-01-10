@@ -17,6 +17,7 @@ export interface OrchestratorConfig {
   teamProfiles?: Record<string, string>;
   useWorktrees?: boolean;
   worktreesDir?: string;
+  linearWorkspace?: string;
 }
 
 export class ClaudeOrchestrator {
@@ -195,7 +196,7 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
-    await this.sendMessage(key, buildPrompt(issue, profile));
+    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
   }
 
   private async waitForAgent(port: number, maxAttempts = 30): Promise<void> {
