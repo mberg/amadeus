@@ -116,8 +116,13 @@ export class ClaudeOrchestrator {
   private async waitForAgent(port: number, maxAttempts = 30): Promise<void> {
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const res = await fetch(`http://localhost:${port}/health`);
-        if (res.ok) return;
+        const res = await fetch(`http://localhost:${port}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "stable" || data.status === "running") {
+            return;
+          }
+        }
       } catch {
         // Server not ready yet
       }
@@ -136,7 +141,7 @@ export class ClaudeOrchestrator {
       await fetch(`http://localhost:${agent.port}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ content: message, type: "user" }),
       });
       agent.status = "idle";
     } catch (err) {

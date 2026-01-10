@@ -120,5 +120,5 @@ process.on("SIGTERM", async () => {
 });
 
 console.log(`🎼 Amadeus listening on http://localhost:${server.port}`);
-console.log(`   Webhook URL: https://your-machine.ts.net/webhook`);
-console.log(`   Status: http://localhost:${server.port}/status`);
+console.log(`   Webhook: https://your-machine.ts.net/webhook`);
+console.log(`   Status:  http://localhost:${server.port}/status`);
