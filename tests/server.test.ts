@@ -46,7 +46,7 @@ describe("HTTP Server", () => {
     it("returns HTML dashboard", async () => {
       const res = await fetch(`${baseUrl}/dashboard`);
       expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toBe("text/html");
+      expect(res.headers.get("content-type")).toStartWith("text/html");
 
       const html = await res.text();
       expect(html).toContain("<!DOCTYPE html>");

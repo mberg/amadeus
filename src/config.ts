@@ -53,4 +53,5 @@ export const CONFIG = {
   teamProfiles: loadTeamProfiles(),
   useWorktrees: process.env.USE_WORKTREES !== "false",
   worktreesDir: process.env.WORKTREES_DIR,
+  linearWorkspace: process.env.LINEAR_WORKSPACE,
 };

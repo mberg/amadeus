@@ -6,10 +6,7 @@ import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt } from "./prompt";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
-
-const dashboardHtml = await Bun.file(
-  new URL("./dashboard.html", import.meta.url).pathname
-).text();
+import dashboardHtml from "./dashboard.html";
 
 const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
@@ -120,6 +117,10 @@ async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
 export const server = Bun.serve({
   port: CONFIG.port,
 
+  routes: {
+    "/dashboard": dashboardHtml,
+  },
+
   async fetch(req) {
     const url = new URL(req.url);
 
@@ -162,10 +163,10 @@ export const server = Bun.serve({
       });
     }
 
-    // Visual dashboard
-    if (req.method === "GET" && url.pathname === "/dashboard") {
-      return new Response(dashboardHtml, {
-        headers: { "Content-Type": "text/html" },
+    // Dashboard config
+    if (req.method === "GET" && url.pathname === "/config") {
+      return Response.json({
+        linearWorkspace: CONFIG.linearWorkspace,
       });
     }
 
