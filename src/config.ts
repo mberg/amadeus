@@ -45,6 +45,7 @@ function loadTeamProfiles(): Record<string, string> {
 export const CONFIG = {
   port: Number(process.env.PORT) || 5678,
   linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
+  linearApiKey: process.env.LINEAR_API_KEY,
   claudeBotUserId: process.env.CLAUDE_BOT_USER_ID,
   projectPaths: loadProjectPaths(),
   triggerStates: (process.env.TRIGGER_STATES ?? "Scoping,Ready to Build").split(","),

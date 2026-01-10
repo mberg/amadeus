@@ -2,8 +2,9 @@
 // ABOUTME: Ensures prompts include all relevant issue information.
 
 import { describe, expect, it } from "bun:test";
-import { buildPrompt, buildCommentPrompt } from "../src/prompt";
+import { buildPrompt, buildCommentPrompt, buildPromptWithCommentHistory } from "../src/prompt";
 import type { LinearIssue, AgentProfile, LinearComment } from "../src/types";
+import type { CommentData } from "../src/linear-api";
 
 describe("buildPrompt", () => {
   it("includes issue identifier and title", () => {
@@ -153,5 +154,101 @@ describe("buildCommentPrompt", () => {
     expect(prompt).toContain("star");
     expect(prompt).toContain("favoriteCreate");
     expect(prompt).toContain("ENG-42");
+  });
+});
+
+describe("buildPromptWithCommentHistory", () => {
+  const baseIssue: LinearIssue = {
+    id: "issue-123",
+    identifier: "ENG-42",
+    title: "Test issue",
+    description: "Test description",
+  };
+
+  it("includes issue details", () => {
+    const prompt = buildPromptWithCommentHistory(baseIssue, []);
+
+    expect(prompt).toContain("ENG-42");
+    expect(prompt).toContain("Test issue");
+    expect(prompt).toContain("Test description");
+  });
+
+  it("includes all comments in chronological order", () => {
+    const comments: CommentData[] = [
+      {
+        id: "c1",
+        body: "First comment",
+        createdAt: "2024-01-10T10:00:00Z",
+        user: { id: "u1", name: "Alice" },
+      },
+      {
+        id: "c2",
+        body: "Second comment",
+        createdAt: "2024-01-10T11:00:00Z",
+        user: { id: "u2", name: "Bob" },
+      },
+    ];
+
+    const prompt = buildPromptWithCommentHistory(baseIssue, comments);
+
+    expect(prompt).toContain("Comment History");
+    expect(prompt).toContain("Alice");
+    expect(prompt).toContain("First comment");
+    expect(prompt).toContain("Bob");
+    expect(prompt).toContain("Second comment");
+    // Verify order: First should appear before Second
+    const firstIndex = prompt.indexOf("First comment");
+    const secondIndex = prompt.indexOf("Second comment");
+    expect(firstIndex).toBeLessThan(secondIndex);
+  });
+
+  it("handles comments without user", () => {
+    const comments: CommentData[] = [
+      {
+        id: "c1",
+        body: "Anonymous comment",
+        createdAt: "2024-01-10T10:00:00Z",
+        user: null,
+      },
+    ];
+
+    const prompt = buildPromptWithCommentHistory(baseIssue, comments);
+
+    expect(prompt).toContain("Anonymous comment");
+    expect(prompt).toContain("Unknown");
+  });
+
+  it("omits comment history section when no comments", () => {
+    const prompt = buildPromptWithCommentHistory(baseIssue, []);
+
+    expect(prompt).not.toContain("Comment History");
+  });
+
+  it("includes profile prompt additions", () => {
+    const profile: AgentProfile = {
+      promptAdditions: ["You have access to Playwright."],
+    };
+
+    const prompt = buildPromptWithCommentHistory(baseIssue, [], profile);
+
+    expect(prompt).toContain("Profile Capabilities");
+    expect(prompt).toContain("Playwright");
+  });
+
+  it("includes instructions for continuing work", () => {
+    const comments: CommentData[] = [
+      {
+        id: "c1",
+        body: "Please fix the bug",
+        createdAt: "2024-01-10T10:00:00Z",
+        user: { id: "u1", name: "Matt" },
+      },
+    ];
+
+    const prompt = buildPromptWithCommentHistory(baseIssue, comments);
+
+    // Should include context about resuming work
+    expect(prompt).toContain("Building");
+    expect(prompt).toContain("linear-cli");
   });
 });

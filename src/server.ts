@@ -5,6 +5,8 @@ import { CONFIG } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt } from "./prompt";
+import { isClaudeBotComment } from "./comment-filter";
+import { fetchIssueComments } from "./linear-api";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 
 const dashboardHtml = await Bun.file(
@@ -77,6 +79,14 @@ async function handleCommentWebhook(
     return;
   }
 
+  // Skip Claude's own comments to prevent feedback loops
+  if (isClaudeBotComment(comment, CONFIG.claudeBotUserId)) {
+    console.log(
+      `[${new Date().toISOString()}] Skipping Claude bot comment on ${comment.issue.identifier}`
+    );
+    return;
+  }
+
   console.log(
     `[${new Date().toISOString()}] Comment ${action}: ${comment.issue.identifier} from ${comment.user?.name ?? "unknown"}`
   );
@@ -86,9 +96,22 @@ async function handleCommentWebhook(
   // Spawn a new agent if one doesn't exist for this issue
   if (!agentKey) {
     console.log(
-      `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
+      `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent with comment history`
     );
-    await orchestrator.startAgent(comment.issue);
+
+    // Fetch all comments for full context
+    const allComments = await fetchIssueComments(comment.issue.id, CONFIG.linearApiKey);
+
+    // Filter out Claude's own comments to avoid confusion
+    const humanComments = allComments.filter(
+      (c) => c.user?.id !== CONFIG.claudeBotUserId
+    );
+
+    console.log(
+      `[${new Date().toISOString()}] Fetched ${allComments.length} comments, ${humanComments.length} from humans`
+    );
+
+    await orchestrator.startAgent(comment.issue, humanComments);
     agentKey = orchestrator.findAgentByIssueId(comment.issueId);
 
     if (!agentKey) {
@@ -97,8 +120,11 @@ async function handleCommentWebhook(
       );
       return;
     }
+    // Agent already received full context including this comment, no need to send separately
+    return;
   }
 
+  // Send the new comment to the existing agent
   await orchestrator.sendMessage(agentKey, buildCommentPrompt(comment));
 }
 

@@ -4,7 +4,8 @@
 import { spawn, type Subprocess } from "bun";
 import { dirname, join } from "node:path";
 import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
-import { buildPrompt } from "./prompt";
+import type { CommentData } from "./linear-api";
+import { buildPrompt, buildPromptWithCommentHistory } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 
@@ -86,7 +87,7 @@ export class ClaudeOrchestrator {
     return null;
   }
 
-  async startAgent(issue: LinearIssue): Promise<void> {
+  async startAgent(issue: LinearIssue, comments?: CommentData[]): Promise<void> {
     const key = this.getAgentKey(issue);
     const projectKey = issue.team?.key ?? "DEFAULT";
     const projectPath = this.config.projectPaths[projectKey];
@@ -184,7 +185,10 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
-    await this.sendMessage(key, buildPrompt(issue, profile));
+    const initialPrompt = comments?.length
+      ? buildPromptWithCommentHistory(issue, comments, profile)
+      : buildPrompt(issue, profile);
+    await this.sendMessage(key, initialPrompt);
   }
 
   private async waitForAgent(port: number, maxAttempts = 30): Promise<void> {
