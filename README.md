@@ -115,6 +115,117 @@ USE_WORKTREES=false bun run start
 
 Note: Without worktrees, multiple agents on the same project may conflict with each other's file changes.
 
+## Agent Profiles
+
+Agent profiles let you configure different setups for different types of issues. For example, frontend issues might get Playwright for browser testing, while backend issues get database tools.
+
+### How Profiles Work
+
+Profiles are JSON files in the `agent-profiles/` directory. Each profile can specify:
+
+- **MCP Servers** - Tools the agent can use (Playwright, database clients, etc.)
+- **Permissions** - What commands the agent is allowed to run
+- **Skills** - Claude Code skills to install from marketplaces
+- **Prompt Additions** - Extra instructions appended to the agent's prompt
+
+### Profile Format
+
+```json
+{
+  "extends": "base",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-playwright"]
+    }
+  },
+  "permissions": {
+    "allow": ["Bash(playwright:*)"],
+    "deny": []
+  },
+  "skills": {
+    "marketplaces": ["anthropics/skills"],
+    "install": ["frontend-design@anthropic-agent-skills"],
+    "local": []
+  },
+  "promptAdditions": [
+    "You have access to Playwright for browser automation.",
+    "Use the frontend-design skill for UI components."
+  ]
+}
+```
+
+### Profile Selection
+
+Profiles are selected in this order:
+
+1. **Issue Labels** - Add a `profile:<name>` label to the issue (e.g., `profile:frontend`)
+2. **Team Default** - Configure a default profile per Linear team
+3. **Global Default** - Falls back to the `base` profile
+
+Multiple `profile:` labels on an issue will merge those profiles together.
+
+### Profile Inheritance
+
+Profiles can extend other profiles using the `extends` field:
+
+```json
+{
+  "extends": "base",
+  "mcpServers": {
+    "playwright": { ... }
+  }
+}
+```
+
+When extending:
+- MCP servers are merged (child overrides parent for same key)
+- Permissions are combined (both allow and deny lists)
+- Skills are combined and deduplicated
+- Prompt additions are concatenated (parent first, then child)
+
+### Built-in Profiles
+
+| Profile | Description |
+|---------|-------------|
+| `base` | Default profile with Linear MCP and basic Git/Bun permissions |
+| `frontend` | Extends base with Playwright and frontend-design skill |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PROFILES_DIR` | `./agent-profiles` | Directory containing profile JSON files |
+| `DEFAULT_PROFILE` | `base` | Profile to use when no label matches |
+| `TEAM_PROFILES` | - | Per-team defaults: `TEAM1:profile1,TEAM2:profile2` |
+
+### Example: Adding a Profile
+
+Create `agent-profiles/backend.json`:
+
+```json
+{
+  "extends": "base",
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-postgres"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    }
+  },
+  "permissions": {
+    "allow": ["Bash(psql:*)"]
+  },
+  "promptAdditions": [
+    "You have access to PostgreSQL via MCP for database operations."
+  ]
+}
+```
+
+Then add the `profile:backend` label to relevant Linear issues.
+
 ## Prerequisites
 
 You need these installed on your machine:
@@ -206,6 +317,9 @@ Set these environment variables:
 | `PORT` | No | Server port (default: 5678) |
 | `USE_WORKTREES` | No | Enable git worktrees for issue isolation (default: `true`) |
 | `WORKTREES_DIR` | No | Custom directory for worktrees (default: `../.amadeus-worktrees`) |
+| `PROFILES_DIR` | No | Directory containing profile JSON files (default: `./agent-profiles`) |
+| `DEFAULT_PROFILE` | No | Profile to use when no label matches (default: `base`) |
+| `TEAM_PROFILES` | No | Per-team default profiles: `TEAM1:profile1,TEAM2:profile2` |
 
 ### Project Path Mapping
 
@@ -222,6 +336,7 @@ When an issue from team "ENG" triggers, Amadeus spawns Claude Code in `/Users/yo
 
 - `GET /health` - Health check
 - `GET /status` - JSON status of all running agents
+- `GET /dashboard` - Visual dashboard for agent status
 - `POST /webhook` - Linear webhook receiver
 - `POST /trigger` - Manual agent message: `{"agentKey": "...", "message": "..."}`
 
