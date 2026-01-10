@@ -15,10 +15,19 @@ export interface LinearIssue {
   team?: { key: string };
 }
 
+export interface LinearComment {
+  id: string;
+  body: string;
+  issueId: string;
+  issue: LinearIssue;
+  user?: { id: string; name: string };
+  createdAt: string;
+}
+
 export interface LinearWebhookPayload {
   action: "create" | "update" | "remove";
   type: "Issue" | "Comment";
-  data: LinearIssue;
+  data: LinearIssue | LinearComment;
 }
 
 export interface AgentInstance {

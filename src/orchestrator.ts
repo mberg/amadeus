@@ -50,6 +50,15 @@ export class ClaudeOrchestrator {
     return this.agents.has(key);
   }
 
+  findAgentByIssueId(issueId: string): string | null {
+    for (const [key, agent] of this.agents.entries()) {
+      if (agent.linearIssueId === issueId) {
+        return key;
+      }
+    }
+    return null;
+  }
+
   async startAgent(issue: LinearIssue): Promise<void> {
     const key = this.getAgentKey(issue);
     const projectKey = issue.team?.key ?? "DEFAULT";
@@ -100,6 +109,7 @@ export class ClaudeOrchestrator {
 
     try {
       await this.waitForAgent(port);
+      await this.waitForAgentReady(port);
     } catch (err) {
       console.error(`[Agent] Failed to start agent ${key}:`, err);
       proc.kill();
@@ -131,18 +141,53 @@ export class ClaudeOrchestrator {
     throw new Error(`Agent on port ${port} failed to start`);
   }
 
+  private async waitForAgentReady(port: number, maxAttempts = 60): Promise<void> {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const [statusRes, messagesRes] = await Promise.all([
+          fetch(`http://localhost:${port}/status`),
+          fetch(`http://localhost:${port}/messages`),
+        ]);
+
+        if (statusRes.ok && messagesRes.ok) {
+          const status = await statusRes.json();
+          const messages = await messagesRes.json();
+
+          // Agent is ready when: stable status AND has at least one message
+          if (status.status === "stable" && messages.messages?.length > 0) {
+            console.log(`[Agent] Agent on port ${port} is ready`);
+            return;
+          }
+        }
+      } catch {
+        // Not ready yet
+      }
+      await Bun.sleep(500);
+    }
+    throw new Error(`Agent on port ${port} never became ready`);
+  }
+
   async sendMessage(key: string, message: string): Promise<void> {
     const agent = this.agents.get(key);
     if (!agent) return;
 
     agent.status = "working";
+    console.log(`[Agent] Sending message to ${key} on port ${agent.port}`);
 
     try {
-      await fetch(`http://localhost:${agent.port}/message`, {
+      const res = await fetch(`http://localhost:${agent.port}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: message, type: "user" }),
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[Agent] Message send failed (${res.status}): ${text}`);
+      } else {
+        console.log(`[Agent] Message sent successfully to ${key}`);
+      }
+
       agent.status = "idle";
     } catch (err) {
       console.error(`[Agent] Failed to send message to ${key}:`, err);
