@@ -1,7 +1,7 @@
 // ABOUTME: Tests for the Claude orchestrator agent management.
 // ABOUTME: Tests agent spawning, stopping, and status tracking.
 
-import { describe, expect, it, beforeEach, mock } from "bun:test";
+import { describe, expect, it, beforeEach } from "bun:test";
 import { ClaudeOrchestrator } from "../src/orchestrator";
 import type { LinearIssue } from "../src/types";
 

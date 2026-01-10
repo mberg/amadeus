@@ -123,6 +123,7 @@ export class ClaudeOrchestrator {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
+      agent.status = "idle";
     } catch (err) {
       console.error(`[Agent] Failed to send message to ${key}:`, err);
       agent.status = "idle";
