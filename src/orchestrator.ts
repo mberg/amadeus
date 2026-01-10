@@ -95,6 +95,10 @@ export class ClaudeOrchestrator {
     }
   }
 
+  getAgentsInReviewState(): AgentStatus[] {
+    return this.getStatus().filter((agent) => agent.linearState === "Review");
+  }
+
   async startAgent(issue: LinearIssue): Promise<void> {
     const key = this.getAgentKey(issue);
     const projectKey = issue.team?.key ?? "DEFAULT";

@@ -1,12 +1,14 @@
 // ABOUTME: Amadeus orchestrator server - receives Linear webhooks and manages Claude Code agents.
 // ABOUTME: Entry point for the Bun server.
 
+import { $ } from "bun";
 import { CONFIG } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt } from "./prompt";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 import dashboardHtml from "./dashboard/index.html";
+import { checkPRMerged } from "./github";
 
 const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
@@ -114,6 +116,61 @@ async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
   }
 }
 
+const DONE_STATE_ID = "edbec4af-dc30-4d27-a122-84395ac3b885";
+const PR_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function checkMergedPRsAndUpdateLinear(): Promise<void> {
+  const reviewAgents = orchestrator.getAgentsInReviewState();
+
+  if (reviewAgents.length === 0) {
+    return;
+  }
+
+  console.log(
+    `[PR Check] Checking ${reviewAgents.length} agent(s) in Review state for merged PRs`
+  );
+
+  for (const agent of reviewAgents) {
+    const projectPath = agent.worktreePath ?? CONFIG.projectPaths[agent.issueIdentifier.split("-")[0]] ?? "";
+
+    if (!projectPath) {
+      console.warn(
+        `[PR Check] No project path for agent ${agent.issueIdentifier}, skipping`
+      );
+      continue;
+    }
+
+    const prStatus = await checkPRMerged(agent.issueIdentifier, projectPath);
+
+    if (prStatus.merged) {
+      console.log(
+        `[PR Check] PR merged for ${agent.issueIdentifier}, updating Linear to Done`
+      );
+
+      try {
+        await $`linear-cli issues update ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.quiet();
+        console.log(
+          `[PR Check] Successfully updated ${agent.issueIdentifier} to Done`
+        );
+
+        // Update local state tracking
+        orchestrator.updateIssueState(agent.key, "Done");
+      } catch (err) {
+        console.error(
+          `[PR Check] Failed to update Linear for ${agent.issueIdentifier}:`,
+          err
+        );
+      }
+    } else if (prStatus.state === "NO_PR") {
+      // No PR exists yet, this is normal
+    } else if (prStatus.state === "ERROR") {
+      console.warn(
+        `[PR Check] Error checking PR for ${agent.issueIdentifier}: ${prStatus.error}`
+      );
+    }
+  }
+}
+
 export const server = Bun.serve({
   port: CONFIG.port,
 
@@ -207,25 +264,28 @@ export const server = Bun.serve({
   },
 });
 
-process.on("SIGINT", async () => {
-  console.log("\nShutting down...");
-  for (const status of orchestrator.getStatus()) {
-    await orchestrator.stopAgent(status.key);
-  }
-  server.stop();
-  process.exit(0);
-});
+// Start polling for merged PRs
+const prCheckInterval = setInterval(() => {
+  checkMergedPRsAndUpdateLinear().catch((err) => {
+    console.error("[PR Check] Error during PR merge check:", err);
+  });
+}, PR_CHECK_INTERVAL_MS);
 
-process.on("SIGTERM", async () => {
+async function shutdown(): Promise<void> {
   console.log("\nShutting down...");
+  clearInterval(prCheckInterval);
   for (const status of orchestrator.getStatus()) {
     await orchestrator.stopAgent(status.key);
   }
   server.stop();
   process.exit(0);
-});
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 console.log(`🎼 Amadeus listening on http://localhost:${server.port}`);
 console.log(`   Webhook:   https://your-machine.ts.net/webhook`);
 console.log(`   Status:    http://localhost:${server.port}/status`);
 console.log(`   Dashboard: http://localhost:${server.port}/dashboard`);
+console.log(`   PR Check:  Every ${PR_CHECK_INTERVAL_MS / 1000 / 60} minutes`);

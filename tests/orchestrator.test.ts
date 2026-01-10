@@ -96,4 +96,10 @@ describe("ClaudeOrchestrator", () => {
       }).not.toThrow();
     });
   });
+
+  describe("getAgentsInReviewState", () => {
+    it("returns empty array when no agents running", () => {
+      expect(orchestrator.getAgentsInReviewState()).toEqual([]);
+    });
+  });
 });
