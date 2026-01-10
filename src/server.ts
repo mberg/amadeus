@@ -178,6 +178,25 @@ export const server = Bun.serve({
       }
     }
 
+    // Agent messages proxy endpoint
+    const messagesMatch = url.pathname.match(/^\/agents\/([^/]+)\/messages$/);
+    if (req.method === "GET" && messagesMatch) {
+      const agentKey = decodeURIComponent(messagesMatch[1]);
+      const agent = orchestrator.getStatus().find((a) => a.key === agentKey);
+
+      if (!agent) {
+        return new Response("Agent not found", { status: 404 });
+      }
+
+      try {
+        const res = await fetch(`http://localhost:${agent.port}/messages`);
+        const data = await res.json();
+        return Response.json(data);
+      } catch (err) {
+        return new Response("Failed to fetch agent messages", { status: 502 });
+      }
+    }
+
     return new Response("Not Found", { status: 404 });
   },
 });
