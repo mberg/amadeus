@@ -70,10 +70,10 @@
     }
 
     .agents-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 1.5rem;
-      max-width: 1400px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-width: 600px;
       margin: 0 auto;
     }
 
@@ -234,6 +234,152 @@
       0%, 90%, 100% { opacity: 1; }
       95% { opacity: 0.3; }
     }
+
+    .agent-card.clickable {
+      cursor: pointer;
+    }
+
+    /* Console Panel */
+    .console-panel {
+      position: fixed;
+      top: 0;
+      right: -50%;
+      width: 50%;
+      height: 100vh;
+      background: #0d1117;
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      transition: right 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+    }
+
+    .console-panel.open {
+      right: 0;
+    }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .console-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f4f4f5;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .console-title .agent-badge {
+      background: rgba(167, 139, 250, 0.2);
+      color: #a78bfa;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+
+    .console-close {
+      background: none;
+      border: none;
+      color: #71717a;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.25rem;
+      line-height: 1;
+    }
+
+    .console-close:hover {
+      color: #f4f4f5;
+    }
+
+    .console-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    .message {
+      margin-bottom: 1rem;
+      padding: 0.75rem;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message-user {
+      background: rgba(59, 130, 246, 0.15);
+      border-left: 3px solid #60a5fa;
+    }
+
+    .message-assistant {
+      background: rgba(34, 197, 94, 0.1);
+      border-left: 3px solid #4ade80;
+    }
+
+    .message-role {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #71717a;
+      margin-bottom: 0.5rem;
+    }
+
+    .message-content {
+      color: #d4d4d8;
+    }
+
+    .console-empty {
+      color: #52525b;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .console-loading {
+      color: #71717a;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .console-error {
+      color: #f87171;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    /* Overlay for mobile */
+    .console-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      z-index: 999;
+    }
+
+    .console-overlay.open {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    @media (max-width: 768px) {
+      .console-panel {
+        width: 100%;
+        right: -100%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -270,7 +416,28 @@
     Last updated: <span id="last-updated">-</span>
   </div>
 
+  <!-- Console Panel Overlay -->
+  <div class="console-overlay" id="console-overlay"></div>
+
+  <!-- Console Panel -->
+  <div class="console-panel" id="console-panel">
+    <div class="console-header">
+      <div class="console-title">
+        Messages <span class="agent-badge" id="console-agent-id">-</span>
+      </div>
+      <button class="console-close" id="console-close">&times;</button>
+    </div>
+    <div class="console-body" id="console-body">
+      <div class="console-empty">Select an agent to view messages</div>
+    </div>
+  </div>
+
   <script>
+    // State for console panel
+    let currentAgentKey = null;
+    let messagesInterval = null;
+    let agentsData = [];
+
     function formatUptime(ms) {
       const seconds = Math.floor(ms / 1000);
       const minutes = Math.floor(seconds / 60);
@@ -293,7 +460,14 @@
       return `https://linear.app/team-${teamKey}/issue/${identifier}`;
     }
 
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     function renderAgents(agents) {
+      agentsData = agents;
       const grid = document.getElementById('agents-grid');
       const totalEl = document.getElementById('total-agents');
       const workingEl = document.getElementById('working-agents');
@@ -315,10 +489,10 @@
       }
 
       grid.innerHTML = agents.map(agent => `
-        <div class="agent-card">
+        <div class="agent-card clickable" data-agent-key="${escapeHtml(agent.key)}" onclick="openConsole('${escapeHtml(agent.key)}')">
           <div class="agent-header">
             <div class="agent-identifier">
-              <a href="${getLinearUrl(agent.issueIdentifier)}" target="_blank" rel="noopener">
+              <a href="${getLinearUrl(agent.issueIdentifier)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
                 ${agent.issueIdentifier}
               </a>
             </div>
@@ -352,6 +526,99 @@
         console.error('Failed to fetch status:', error);
       }
     }
+
+    function renderMessages(messages) {
+      const body = document.getElementById('console-body');
+
+      if (!messages || messages.length === 0) {
+        body.innerHTML = '<div class="console-empty">No messages yet</div>';
+        return;
+      }
+
+      body.innerHTML = messages.map(msg => {
+        const role = msg.role || 'unknown';
+        const content = msg.content || '';
+        return `
+          <div class="message message-${role}">
+            <div class="message-role">${role}</div>
+            <div class="message-content">${escapeHtml(content)}</div>
+          </div>
+        `;
+      }).join('');
+
+      // Auto-scroll to bottom
+      body.scrollTop = body.scrollHeight;
+    }
+
+    async function fetchMessages(agentKey) {
+      const body = document.getElementById('console-body');
+
+      try {
+        const response = await fetch(`/agents/${encodeURIComponent(agentKey)}/messages`);
+        if (!response.ok) {
+          if (response.status === 404) {
+            body.innerHTML = '<div class="console-error">Agent not found</div>';
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        renderMessages(data.messages || []);
+      } catch (error) {
+        console.error('Failed to fetch messages:', error);
+        body.innerHTML = '<div class="console-error">Failed to load messages</div>';
+      }
+    }
+
+    function openConsole(agentKey) {
+      const agent = agentsData.find(a => a.key === agentKey);
+      if (!agent) return;
+
+      currentAgentKey = agentKey;
+
+      // Update header
+      document.getElementById('console-agent-id').textContent = agent.issueIdentifier;
+
+      // Show loading state
+      document.getElementById('console-body').innerHTML = '<div class="console-loading">Loading messages...</div>';
+
+      // Open panel
+      document.getElementById('console-panel').classList.add('open');
+      document.getElementById('console-overlay').classList.add('open');
+
+      // Fetch messages immediately
+      fetchMessages(agentKey);
+
+      // Start polling for updates
+      if (messagesInterval) clearInterval(messagesInterval);
+      messagesInterval = setInterval(() => fetchMessages(agentKey), 1500);
+    }
+
+    function closeConsole() {
+      currentAgentKey = null;
+
+      // Stop polling
+      if (messagesInterval) {
+        clearInterval(messagesInterval);
+        messagesInterval = null;
+      }
+
+      // Close panel
+      document.getElementById('console-panel').classList.remove('open');
+      document.getElementById('console-overlay').classList.remove('open');
+    }
+
+    // Event listeners for closing
+    document.getElementById('console-close').addEventListener('click', closeConsole);
+    document.getElementById('console-overlay').addEventListener('click', closeConsole);
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && currentAgentKey) {
+        closeConsole();
+      }
+    });
 
     // Initial fetch
     fetchStatus();
