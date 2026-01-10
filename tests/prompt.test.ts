@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { buildPrompt, buildCommentPrompt } from "../src/prompt";
-import type { LinearIssue, AgentProfile, LinearComment } from "../src/types";
+import type { LinearIssue, LinearComment, AgentProfile } from "../src/types";
 
 describe("buildPrompt", () => {
   it("includes issue identifier and title", () => {
@@ -118,7 +118,7 @@ describe("buildPrompt", () => {
     expect(prompt).not.toContain("Profile Capabilities");
   });
 
-  it("includes star command when setting Feedback Needed status", () => {
+  it("pairs initial Building state change with a comment", () => {
     const issue: LinearIssue = {
       id: "issue-123",
       identifier: "ENG-42",
@@ -127,31 +127,92 @@ describe("buildPrompt", () => {
 
     const prompt = buildPrompt(issue);
 
-    expect(prompt).toContain("star");
-    expect(prompt).toContain("favoriteCreate");
-    expect(prompt).toContain("ENG-42");
+    // The first state change to Building should be followed by a comment
+    // Check that after the Building state command, there's a comment command
+    const buildingStateRegex =
+      /linear-cli issues update.*--state "0aab3254.*"[\s\S]*?linear-cli comments create.*Starting work/;
+    expect(prompt).toMatch(buildingStateRegex);
+  });
+
+  it("pairs Feedback Needed state change with a comment instruction", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    // Instructions for Feedback Needed should mention posting a comment with the question
+    expect(prompt).toContain("Feedback Needed");
+    // The prompt should explicitly say to post a comment when setting Feedback Needed
+    expect(prompt).toMatch(
+      /post.*comment.*question.*Feedback Needed|Feedback Needed.*post.*comment/i
+    );
   });
 });
 
 describe("buildCommentPrompt", () => {
-  it("includes star command when setting Feedback Needed status", () => {
+  it("pairs Building state change with a comment about resuming work", () => {
     const comment: LinearComment = {
       id: "comment-123",
-      body: "Can you clarify this?",
+      body: "Please also add tests",
+      issueId: "issue-123",
       issue: {
         id: "issue-123",
         identifier: "ENG-42",
         title: "Test issue",
       },
-      user: {
-        name: "Matt",
-      },
+      user: { name: "Matt" },
     };
 
     const prompt = buildCommentPrompt(comment);
 
-    expect(prompt).toContain("star");
-    expect(prompt).toContain("favoriteCreate");
-    expect(prompt).toContain("ENG-42");
+    // The Building state command should be followed by a comment about resuming
+    const buildingStateRegex =
+      /linear-cli issues update.*--state "0aab3254.*"[\s\S]*?linear-cli comments create.*Resuming work/i;
+    expect(prompt).toMatch(buildingStateRegex);
+  });
+
+  it("pairs Review state change with a comment", () => {
+    const comment: LinearComment = {
+      id: "comment-123",
+      body: "Please also add tests",
+      issueId: "issue-123",
+      issue: {
+        id: "issue-123",
+        identifier: "ENG-42",
+        title: "Test issue",
+      },
+      user: { name: "Matt" },
+    };
+
+    const prompt = buildCommentPrompt(comment);
+
+    // Review state change should be paired with a comment
+    const reviewStateRegex =
+      /linear-cli issues update.*--state "e5708707.*"[\s\S]*?linear-cli comments create/;
+    expect(prompt).toMatch(reviewStateRegex);
+  });
+
+  it("pairs Feedback Needed state change with a comment instruction", () => {
+    const comment: LinearComment = {
+      id: "comment-123",
+      body: "Please also add tests",
+      issueId: "issue-123",
+      issue: {
+        id: "issue-123",
+        identifier: "ENG-42",
+        title: "Test issue",
+      },
+      user: { name: "Matt" },
+    };
+
+    const prompt = buildCommentPrompt(comment);
+
+    // Feedback Needed instruction should mention posting a comment
+    expect(prompt).toMatch(
+      /Feedback Needed[\s\S]*?linear-cli comments create|post.*comment.*Feedback Needed/i
+    );
   });
 });
