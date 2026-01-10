@@ -114,7 +114,24 @@ You need these installed on your machine:
 
    Without this, agents can work on code but **cannot post updates back to Linear**.
 
-4. **Tailscale** (optional) - For exposing webhooks to the internet via Funnel
+4. **linear-cli** - Command-line tool for agents to interact with Linear ([github.com/Finesssee/linear-cli](https://github.com/Finesssee/linear-cli))
+   ```bash
+   # Install via Cargo (requires Rust)
+   cargo install linear-cli
+
+   # Or download pre-built binary from GitHub releases
+   # https://github.com/Finesssee/linear-cli/releases
+
+   # Configure your Linear API key
+   linear-cli config set-key lin_api_xxxxxxxxxxxxx
+
+   # Verify installation
+   linear-cli --help
+   ```
+
+   Agents use linear-cli to post comments and update issue status. Without this, agents cannot communicate progress back to Linear.
+
+5. **Tailscale** (optional) - For exposing webhooks to the internet via Funnel
 
 ## Quick Start
 
