@@ -58,7 +58,98 @@ Amadeus uses Linear as a control plane to manage multiple Claude Code agents. Ea
 2. Claude Code uses the Linear MCP to update issue status, post comments, etc.
 3. Updates appear on the Linear issue that triggered the agent
 
-**Key insight:** Amadeus is a one-way orchestrator. It spawns agents and sends them work, but agents communicate back to Linear directly via MCP—not through Amadeus.
+**Key insight:** Amadeus is a one-way orchestrator. It spawns agents and sends them work, but agents communicate back to Linear directly via `linear-cli`—not through Amadeus.
+
+## Agent Workflow
+
+This section describes the complete lifecycle of an agent working on a Linear issue.
+
+### Lifecycle Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LINEAR ISSUE LIFECYCLE                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. TRIGGER                                                                 │
+│     User moves issue to "Scoping" or "Ready to Build"                       │
+│     ↓                                                                       │
+│  2. SPAWN                                                                   │
+│     Amadeus receives webhook → creates worktree → spawns agent              │
+│     ↓                                                                       │
+│  3. WORK                                                                    │
+│     Agent sets status → "Building"                                          │
+│     Agent posts plan → implements → commits                                 │
+│     ↓                                                                       │
+│  4. FEEDBACK LOOP (if needed)                                               │
+│     Agent has question → posts comment → sets "Feedback Needed"             │
+│     Human replies → Amadeus forwards → Agent resumes → "Building"           │
+│     ↓                                                                       │
+│  5. COMPLETION                                                              │
+│     Agent pushes branch → creates PR → sets "Review"                        │
+│     Human reviews → merges → sets "Done"                                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Status Updates
+
+Agents communicate their state by updating Linear issue status using `linear-cli`:
+
+| Status | When Set | What It Means |
+|--------|----------|---------------|
+| **Building** | Immediately when starting work | Agent is actively coding |
+| **Feedback Needed** | When agent has a question | Agent is blocked, waiting for human input |
+| **Review** | When PR is created | Work is complete, ready for human review |
+
+**Status commands agents use:**
+
+```bash
+# Set to Building (start working)
+linear-cli issues update ONA-123 --state "0aab3254-cc63-4979-84ab-eda800979c94"
+
+# Set to Feedback Needed (blocked on question)
+linear-cli issues update ONA-123 --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
+
+# Set to Review (PR ready)
+linear-cli issues update ONA-123 --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+```
+
+### Comment Format
+
+Agents post comments to Linear using `linear-cli`. All agent comments are prefixed with `**🤖 Claude:**` so humans can distinguish them:
+
+```bash
+linear-cli comments create --body "**🤖 Claude:** Starting implementation..." ONA-123
+```
+
+### Feedback Loop
+
+When an agent needs human input:
+
+1. **Agent posts question** with clear request for information
+2. **Agent sets status to "Feedback Needed"** — this signals the human
+3. **Human replies** via Linear comment
+4. **Amadeus receives webhook** and forwards the comment to the agent
+5. **Agent reads feedback**, sets status to "Building", and continues
+
+This loop can repeat as many times as needed until the agent completes the work.
+
+### PR Creation
+
+When work is complete, agents:
+
+1. Push the issue branch to origin
+2. Create a PR using `gh pr create`
+3. Post the PR URL as a Linear comment
+4. Set status to "Review"
+
+```bash
+git push -u origin issue/ONA-123
+gh pr create --title "ONA-123: Feature title" --body "Resolves ONA-123"
+linear-cli comments create --body "**🤖 Claude:** PR created: https://github.com/..." ONA-123
+linear-cli issues update ONA-123 --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+```
 
 ## Multi-Project Support
 
@@ -74,7 +165,18 @@ Each issue gets its own agent instance, even if multiple issues target the same 
 
 ## Git Worktrees
 
-By default, Amadeus creates a separate git worktree for each issue. This means each agent works in an isolated directory with its own branch, preventing agents from conflicting with each other when multiple issues target the same project.
+By default, Amadeus creates a separate git worktree for each issue. This enables multiple agents to work on the same project simultaneously without file conflicts.
+
+### Why Worktrees?
+
+Without worktrees, two agents working on the same project would overwrite each other's file changes. With worktrees:
+
+- Each agent gets its own complete working directory
+- Each agent works on its own branch (`issue/{identifier}`)
+- The main project directory stays clean
+- Multiple PRs can be prepared in parallel
+
+### Directory Structure
 
 ```
 /code/backend/                    ← Main project (stays clean)
@@ -89,14 +191,26 @@ By default, Amadeus creates a separate git worktree for each issue. This means e
 
 ### How It Works
 
-1. When an agent starts for issue `ONA-123`, Amadeus:
-   - Creates branch `issue/ONA-123` (or uses it if it exists)
-   - Creates a worktree at `../.amadeus-worktrees/ONA-123`
-   - Runs the agent in the worktree directory
+1. **Agent starts** for issue `ONA-123`:
+   - Amadeus checks if branch `issue/ONA-123` exists (reuses it if so)
+   - Creates branch `issue/ONA-123` from current HEAD if it doesn't exist
+   - Creates worktree at `../.amadeus-worktrees/ONA-123`
+   - Spawns agent process in the worktree directory
 
-2. Each agent works in complete isolation—no file conflicts between parallel agents
+2. **Agent works** in complete isolation:
+   - All file changes happen in the worktree
+   - Agent commits to `issue/ONA-123` branch
+   - Other agents on same project are unaffected
 
-3. When the agent stops, the worktree is cleaned up but the **branch is preserved** for review/merging
+3. **Agent completes** and pushes:
+   - Agent pushes `issue/ONA-123` to origin
+   - Agent creates PR from the issue branch
+   - Agent sets status to "Review"
+
+4. **Cleanup** happens when agent stops:
+   - Worktree directory is removed
+   - **Branch is preserved** on local and remote for PR review
+   - Human can review/merge the PR at their leisure
 
 ### Configuration
 

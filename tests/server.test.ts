@@ -9,6 +9,7 @@ let baseUrl: string;
 describe("HTTP Server", () => {
   beforeAll(async () => {
     // Set required env vars for test
+    process.env.PORT = "5679";
     process.env.LINEAR_WEBHOOK_SECRET = "test-secret";
 
     // Import and start server
@@ -49,7 +50,7 @@ describe("HTTP Server", () => {
 
       const html = await res.text();
       expect(html).toContain("<!DOCTYPE html>");
-      expect(html).toContain("AMADEUS");
+      expect(html).toContain("Amadeus");
     });
   });
 
@@ -122,6 +123,14 @@ describe("HTTP Server", () => {
     it("returns 404", async () => {
       const res = await fetch(`${baseUrl}/unknown`);
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe("GET /agents/:key/messages", () => {
+    it("returns 404 for non-existent agent", async () => {
+      const res = await fetch(`${baseUrl}/agents/nonexistent-key/messages`);
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe("Agent not found");
     });
   });
 });
