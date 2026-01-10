@@ -55,6 +55,10 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 - When implementation is complete → set status to "Review"
 - The user will see status changes in Linear, so always update status when your state changes
 
+### Git Branch
+
+You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
+
 ### Workflow
 
 **FIRST:** Set status to Building immediately:
@@ -67,9 +71,18 @@ Then:
 2. **Implement**: Write the code with tests. Commit your changes.
 3. **If you need input**: Post a comment with your question AND set status to "Feedback Needed".
 
-**LAST:** When done, set status to Review:
+**WHEN DONE:** Push branch and create PR:
+\`\`\`bash
+git push -u origin issue/${issue.identifier}
+gh pr create --title "${issue.identifier}: ${issue.title}" --body "Resolves ${issue.identifier}
+
+Linear: https://linear.app/ona/issue/${issue.identifier}"
+\`\`\`
+
+**LAST:** Set status to Review and post PR link:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+linear-cli comments create --body "**🤖 Claude:** PR created: <paste PR URL here>" ${issue.identifier}
 \`\`\`
 
 ### Important
@@ -122,7 +135,14 @@ Then:
    \`\`\`
 3. **Do the work** they requested
 
-**LAST:** When done, set status to Review:
+**WHEN DONE:** Push branch and create/update PR:
+\`\`\`bash
+git push -u origin issue/${comment.issue.identifier}
+# Create PR if not exists, or just push if PR already open
+gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --body "Resolves ${comment.issue.identifier}" 2>/dev/null || echo "PR already exists"
+\`\`\`
+
+**LAST:** Set status to Review:
 \`\`\`bash
 linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 \`\`\`
