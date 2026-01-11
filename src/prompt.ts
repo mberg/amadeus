@@ -2,6 +2,7 @@
 // ABOUTME: Formats issue details into actionable instructions for the agent.
 
 import type { LinearIssue, LinearComment, AgentProfile } from "./types";
+import type { PersistedAgentState } from "./persistence";
 
 export function isYoloMode(issue: LinearIssue): boolean {
   return issue.description?.toLowerCase().includes("yolo") ?? false;
@@ -272,4 +273,82 @@ linear-cli comments create --body "**🤖 Claude:** [Your updated plan or answer
 linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
 \`\`\`
 `.trim();
+}
+
+export function buildRecoveryPrompt(
+  issue: LinearIssue,
+  savedState: PersistedAgentState,
+  profile?: AgentProfile
+): string {
+  const profileSection = buildProfileSection(profile);
+
+  return `
+## Agent Recovery - Resuming Work on ${issue.identifier}
+
+**IMPORTANT:** You are recovering from a crash and resuming work on this issue.
+
+**Issue**: ${issue.identifier} - ${issue.title}
+**Issue ID**: ${issue.id}
+**Last Known Status**: ${savedState.linearState ?? "Unknown"}
+
+### Description
+${issue.description || "No description provided."}
+
+### Recovery Instructions
+
+You were previously working on this issue but your session crashed. Here's what you need to do:
+
+**Step 1:** Check the current state of your code:
+\`\`\`bash
+git status
+git log --oneline -10
+git diff HEAD~3..HEAD --stat
+\`\`\`
+
+**Step 2:** Fetch the full issue history from Linear (comments are your source of truth):
+\`\`\`bash
+linear-cli issues get ${issue.identifier}
+\`\`\`
+
+**Step 3:** Post a recovery comment to Linear:
+\`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** Recovering from a session restart. Reviewing the issue history and git state to resume work." ${issue.identifier}
+\`\`\`
+
+**Step 4:** Based on the Linear comments and git history, determine where you left off and continue.
+
+### How to Communicate with Linear
+
+Use the \`linear-cli\` command line tool for all Linear interactions.
+
+**Post a comment:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.identifier}
+\`\`\`
+
+**Update status:**
+\`\`\`bash
+linear-cli issues update ${issue.identifier} --state "<state-id>"
+\`\`\`
+
+**State IDs:**
+| Status | State ID |
+|--------|----------|
+| Planning | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
+| Feedback Needed | \`38ab3462-5550-4dcf-a1dd-6845e3a1e963\` |
+| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
+| Review | \`e5708707-32a0-4ede-9f24-fb525d92b3d4\` |
+| Done | \`edbec4af-dc30-4d27-a122-84395ac3b885\` |
+
+### Git Branch
+
+You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
+
+### Important
+
+- Linear comments are your source of truth for what was planned and discussed
+- Git history shows what code was actually written
+- Always communicate your progress via Linear comments
+- Always update the issue status to reflect your current state
+${profileSection}`.trim();
 }

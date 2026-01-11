@@ -8,6 +8,14 @@ import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 
+export interface AgentDeathInfo {
+  key: string;
+  issueId: string;
+  issueIdentifier: string;
+  exitCode: number | null;
+  reason: "exited" | "crashed" | "killed";
+}
+
 export interface OrchestratorConfig {
   projectPaths: Record<string, string>;
   triggerStates: string[];
@@ -17,11 +25,13 @@ export interface OrchestratorConfig {
   teamProfiles?: Record<string, string>;
   useWorktrees?: boolean;
   worktreesDir?: string;
+  onAgentDeath?: (info: AgentDeathInfo) => void;
   linearWorkspace?: string;
 }
 
 export class ClaudeOrchestrator {
   private agents = new Map<string, AgentInstance>();
+  private stoppingAgents = new Set<string>(); // Track agents being intentionally stopped
   private nextPort = 8001;
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
@@ -94,6 +104,10 @@ export class ClaudeOrchestrator {
     if (agent) {
       agent.linearState = state;
     }
+  }
+
+  getAgentDeathHandler(): ((info: AgentDeathInfo) => void) | undefined {
+    return this.config.onAgentDeath;
   }
 
   getAgentsInReviewState(): AgentStatus[] {
@@ -183,6 +197,9 @@ export class ClaudeOrchestrator {
       startedAt: new Date(),
     });
 
+    // Set up exit handler for unexpected deaths
+    this.setupExitHandler(key, proc, issue.id, issue.identifier);
+
     try {
       await this.waitForAgent(port);
       await this.waitForAgentReady(port);
@@ -201,6 +218,44 @@ export class ClaudeOrchestrator {
     agent.status = "idle";
 
     await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
+  }
+
+  private setupExitHandler(
+    key: string,
+    proc: Subprocess,
+    issueId: string,
+    issueIdentifier: string
+  ): void {
+    proc.exited.then((exitCode) => {
+      // Check if this was an intentional stop
+      if (this.stoppingAgents.has(key)) {
+        this.stoppingAgents.delete(key);
+        return;
+      }
+
+      // This is an unexpected death
+      const agent = this.agents.get(key);
+      if (!agent) return; // Already removed
+
+      console.log(`[Agent] Agent ${key} died unexpectedly with exit code ${exitCode}`);
+
+      // Remove from agents map
+      this.agents.delete(key);
+
+      // Call the death handler if configured
+      if (this.config.onAgentDeath) {
+        const reason: AgentDeathInfo["reason"] =
+          exitCode === 0 ? "exited" : exitCode === null ? "killed" : "crashed";
+
+        this.config.onAgentDeath({
+          key,
+          issueId,
+          issueIdentifier,
+          exitCode,
+          reason,
+        });
+      }
+    });
   }
 
   private async waitForAgent(port: number, maxAttempts = 30): Promise<void> {
@@ -280,6 +335,9 @@ export class ClaudeOrchestrator {
     if (!agent) return;
 
     console.log(`[Agent] Stopping agent: ${key}`);
+
+    // Mark as intentionally stopping so exit handler doesn't fire death callback
+    this.stoppingAgents.add(key);
     agent.process.kill();
 
     // Clean up worktree if one was created

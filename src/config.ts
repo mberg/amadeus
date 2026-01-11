@@ -54,4 +54,8 @@ export const CONFIG = {
   useWorktrees: process.env.USE_WORKTREES !== "false",
   worktreesDir: process.env.WORKTREES_DIR,
   linearWorkspace: process.env.LINEAR_WORKSPACE,
+  // Health monitoring and persistence
+  dbPath: process.env.DB_PATH ?? join(import.meta.dir, "..", "amadeus-agents.db"),
+  healthCheckIntervalMs: Number(process.env.HEALTH_CHECK_INTERVAL_MS) || 30000,
+  healthCheckTimeoutMs: Number(process.env.HEALTH_CHECK_TIMEOUT_MS) || 5000,
 };

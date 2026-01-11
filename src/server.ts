@@ -4,11 +4,24 @@
 import { $ } from "bun";
 import { CONFIG } from "./config";
 import { verifyLinearSignature } from "./signature";
-import { ClaudeOrchestrator } from "./orchestrator";
-import { buildPrompt, buildCommentPrompt } from "./prompt";
+import { ClaudeOrchestrator, type AgentDeathInfo } from "./orchestrator";
+import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
+import { AgentPersistence } from "./persistence";
+import { HealthMonitor } from "./health-monitor";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged } from "./github";
+
+// Initialize persistence layer
+const persistence = new AgentPersistence(CONFIG.dbPath);
+
+// Handle agent death - persist state for recovery
+function handleAgentDeath(info: AgentDeathInfo): void {
+  console.log(
+    `[AgentDeath] Agent ${info.key} died (${info.reason}, exit code: ${info.exitCode})`
+  );
+  persistence.markAgentDead(info.issueId);
+}
 
 const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
@@ -16,8 +29,36 @@ const orchestrator = new ClaudeOrchestrator({
   claudeBotUserId: CONFIG.claudeBotUserId,
   useWorktrees: CONFIG.useWorktrees,
   worktreesDir: CONFIG.worktreesDir,
+  onAgentDeath: handleAgentDeath,
   linearWorkspace: CONFIG.linearWorkspace,
 });
+
+// Initialize health monitor
+const healthMonitor = new HealthMonitor({
+  persistence,
+  getAgents: () =>
+    orchestrator.getStatus().map((status) => ({
+      key: status.key,
+      issueId: status.issueId,
+      issueIdentifier: status.issueIdentifier,
+      issueTitle: status.issueTitle,
+      projectPath: "", // Not exposed in status, health monitor doesn't need it
+      port: status.port,
+      linearState: status.linearState,
+      worktreePath: status.worktreePath,
+    })),
+  onAgentUnresponsive: (info) => {
+    console.log(
+      `[HealthMonitor] Agent ${info.key} unresponsive: ${info.error}`
+    );
+    persistence.markAgentDead(info.issueId);
+  },
+  checkIntervalMs: CONFIG.healthCheckIntervalMs,
+  timeoutMs: CONFIG.healthCheckTimeoutMs,
+});
+
+// Start health monitoring
+healthMonitor.start();
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
   return "body" in data && "issueId" in data;
@@ -93,17 +134,45 @@ async function handleCommentWebhook(
 
   // Spawn a new agent if one doesn't exist for this issue
   if (!agentKey) {
-    console.log(
-      `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
-    );
-    await orchestrator.startAgent(comment.issue);
-    agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+    // Check if we have saved state for this issue (recovering from crash)
+    const savedState = persistence.getAgentByIssueId(comment.issueId);
 
-    if (!agentKey) {
-      console.error(
-        `[${new Date().toISOString()}] Failed to spawn agent for ${comment.issue.identifier}`
+    if (savedState?.status === "dead") {
+      console.log(
+        `[${new Date().toISOString()}] Recovering agent for ${comment.issue.identifier} from saved state`
       );
-      return;
+
+      // Start a new agent
+      await orchestrator.startAgent(comment.issue);
+      agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+      if (!agentKey) {
+        console.error(
+          `[${new Date().toISOString()}] Failed to spawn recovery agent for ${comment.issue.identifier}`
+        );
+        return;
+      }
+
+      // Send recovery prompt with context, then the comment
+      const recoveryPrompt = buildRecoveryPrompt(comment.issue, savedState);
+      await orchestrator.sendMessage(agentKey, recoveryPrompt);
+
+      // Mark agent as alive again in persistence
+      persistence.markAgentAlive(comment.issueId);
+    } else {
+      // No saved state, spawn fresh agent
+      console.log(
+        `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
+      );
+      await orchestrator.startAgent(comment.issue);
+      agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+      if (!agentKey) {
+        console.error(
+          `[${new Date().toISOString()}] Failed to spawn agent for ${comment.issue.identifier}`
+        );
+        return;
+      }
     }
   }
 
@@ -277,10 +346,20 @@ const prCheckInterval = setInterval(() => {
 
 async function shutdown(): Promise<void> {
   console.log("\nShutting down...");
+
+  // Stop health monitoring
+  healthMonitor.stop();
+
   clearInterval(prCheckInterval);
+
+  // Stop all agents
   for (const status of orchestrator.getStatus()) {
     await orchestrator.stopAgent(status.key);
   }
+
+  // Close persistence connection
+  persistence.close();
+
   server.stop();
   process.exit(0);
 }
