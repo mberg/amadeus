@@ -17,6 +17,7 @@ export interface OrchestratorConfig {
   teamProfiles?: Record<string, string>;
   useWorktrees?: boolean;
   worktreesDir?: string;
+  linearWorkspace?: string;
 }
 
 export class ClaudeOrchestrator {
@@ -93,6 +94,10 @@ export class ClaudeOrchestrator {
     if (agent) {
       agent.linearState = state;
     }
+  }
+
+  getAgentsInReviewState(): AgentStatus[] {
+    return this.getStatus().filter((agent) => agent.linearState === "Review");
   }
 
   async startAgent(issue: LinearIssue): Promise<void> {
@@ -195,7 +200,7 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
-    await this.sendMessage(key, buildPrompt(issue, profile));
+    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
   }
 
   private async waitForAgent(port: number, maxAttempts = 30): Promise<void> {
