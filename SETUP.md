@@ -54,7 +54,7 @@ Amadeus transforms Linear into a control plane for AI-powered development. Inste
 │                                                                             │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                    │
 │   │   Backend   │    │  Frontend   │    │    API      │                    │
-│   │   ONA-101   │    │   ONA-102   │    │   ONA-103   │                    │
+│   │   RECODE-101   │    │   RECODE-102   │    │   RECODE-103   │                    │
 │   │  "Planning" │    │ "Building"  │    │  "Review"   │                    │
 │   └──────┬──────┘    └──────┬──────┘    └─────────────┘                    │
 │          │                  │                                               │
@@ -84,10 +84,10 @@ Amadeus transforms Linear into a control plane for AI-powered development. Inste
 │   Port 8001     │  │   Port 8002     │  │   Port 8003     │
 │                 │  │                 │  │                 │
 │  Worktree:      │  │  Worktree:      │  │  Worktree:      │
-│  ONA-101/       │  │  ONA-102/       │  │  ONA-103/       │
+│  RECODE-101/       │  │  RECODE-102/       │  │  RECODE-103/       │
 │                 │  │                 │  │                 │
 │  Branch:        │  │  Branch:        │  │  Branch:        │
-│  issue/ONA-101  │  │  issue/ONA-102  │  │  issue/ONA-103  │
+│  issue/RECODE-101  │  │  issue/RECODE-102  │  │  issue/RECODE-103  │
 └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
          │                    │                    │
          │  linear-cli        │                    │  (agents post updates)
@@ -255,7 +255,7 @@ Create a `.env` file in the project root. Here's a complete reference:
 |----------|-------------|---------|
 | `LINEAR_API_KEY` | Your Linear API key (for agents to use linear-cli) | `lin_api_xxxxxxxxxxxx` |
 | `PROJECT_PATHS` | Maps Linear projects/teams to local repos | See examples below |
-| `LINEAR_WORKSPACE` | Your Linear workspace slug for @mentions | `ona` |
+| `LINEAR_WORKSPACE` | Your Linear workspace slug for @mentions | `recode` |
 
 #### Optional
 
@@ -306,14 +306,14 @@ PROJECT_PATHS="Data Platform":/code/data-platform,Backend:/code/backend
 
 ```bash
 # If no project match, fall back to team key
-PROJECT_PATHS=ONA:/code/ona-default,DESIGN:/code/design-default
+PROJECT_PATHS=RECODE:/code/recode-default,DESIGN:/code/design-default
 ```
 
 #### Example 5: Mixed Project + Team Configuration
 
 ```bash
 # Projects take priority, teams are fallback
-PROJECT_PATHS=Amadeus:/code/amadeus,Frontend:/code/frontend,ONA:/code/ona-fallback
+PROJECT_PATHS=Amadeus:/code/amadeus,Frontend:/code/frontend,RECODE:/code/recode-fallback
 ```
 
 #### Example 6: Multi-Team Organization
@@ -328,7 +328,7 @@ PROJECT_PATHS=ENGINEERING:/code/main-app,PLATFORM:/code/platform,MOBILE:/code/mo
 When an issue triggers, Amadeus determines the repository path:
 
 1. **Project name** → Check if issue's project name is in PROJECT_PATHS
-2. **Team key** → If no project match, check if team key (e.g., `ONA`) is in PROJECT_PATHS
+2. **Team key** → If no project match, check if team key (e.g., `RECODE`) is in PROJECT_PATHS
 3. **DEFAULT** → Falls back to `PROJECT_PATHS=DEFAULT:/some/path` if configured
 
 ### Complete .env Example
@@ -343,7 +343,7 @@ LINEAR_WEBHOOK_SECRET=lin_wh_abc123xyz
 # Linear Integration
 # ============================================
 LINEAR_API_KEY=lin_api_abc123xyz
-LINEAR_WORKSPACE=ona
+LINEAR_WORKSPACE=recode
 
 # ============================================
 # Project Mappings
@@ -611,16 +611,16 @@ Each agent works in an isolated directory to prevent conflicts:
     └── ...
 
 /.amadeus-worktrees/
-    ├── ONA-101/                        ← Agent 1's workspace
+    ├── RECODE-101/                        ← Agent 1's workspace
     │   ├── .git (linked)               ← Points to main .git
     │   ├── src/                        ← Full checkout
-    │   └── ...                         ← On branch issue/ONA-101
+    │   └── ...                         ← On branch issue/RECODE-101
     │
-    ├── ONA-102/                        ← Agent 2's workspace
-    │   └── ...                         ← On branch issue/ONA-102
+    ├── RECODE-102/                        ← Agent 2's workspace
+    │   └── ...                         ← On branch issue/RECODE-102
     │
-    └── ONA-103/                        ← Agent 3's workspace
-        └── ...                         ← On branch issue/ONA-103
+    └── RECODE-103/                        ← Agent 3's workspace
+        └── ...                         ← On branch issue/RECODE-103
 ```
 
 **Benefits:**
@@ -764,7 +764,7 @@ The web dashboard at `/dashboard` shows:
    ```
 2. Ensure branch isn't checked out elsewhere:
    ```bash
-   git branch -a | grep issue/ONA-XXX
+   git branch -a | grep issue/RECODE-XXX
    ```
 
 #### AgentAPI Not Found
