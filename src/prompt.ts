@@ -218,54 +218,18 @@ export function buildCommentPrompt(comment: LinearComment): string {
   const authorName = comment.user?.name ?? "The user";
 
   return `
-## New Comment on ${comment.issue.identifier}
+## New Comment from ${authorName}
 
-**From**: ${authorName}
-**Issue**: ${comment.issue.identifier} - ${comment.issue.title}
-
-### Comment
 ${comment.body}
 
-### Instructions
+---
 
-${authorName} has provided feedback on your plan or work.
+Respond based on the feedback type:
+- **Approved** → Set status to Building, implement, then create PR and set to Review
+- **Changes requested** → Update plan, stay in Feedback Needed
+- **Question** → Answer it, stay in Feedback Needed
 
-**First, determine the nature of the feedback:**
-- If they **approved your plan** or said to proceed → Go to Building phase
-- If they **requested changes to the plan** → Update your plan and stay in Feedback Needed
-- If they **asked a question** → Answer it and stay in Feedback Needed
-
-**If approved to build:**
-
-1. Set status to Building:
-\`\`\`bash
-linear-cli issues update ${comment.issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
-linear-cli comments create --body "**🤖 Claude:** Starting implementation based on the approved plan." ${comment.issue.identifier}
-\`\`\`
-
-2. Implement the plan - write code, tests, commit changes
-
-3. When done, push and create PR:
-\`\`\`bash
-git push -u origin issue/${comment.issue.identifier}
-gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --body "Resolves ${comment.issue.identifier}
-
-Linear: https://linear.app/ona/issue/${comment.issue.identifier}" 2>/dev/null || echo "PR already exists, pushing updates"
-\`\`\`
-
-4. Set status to Review:
-\`\`\`bash
-linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
-linear-cli comments create --body "**🤖 Claude:** Implementation complete. PR created/updated and ready for review." ${comment.issue.identifier}
-\`\`\`
-
-**If plan changes requested or you have questions:**
-
-Post your response and keep status at Feedback Needed:
-\`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** [Your updated plan or answer to their question]" ${comment.issue.identifier}
-linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
-\`\`\`
+Use the state IDs and commands from your initial instructions.
 `.trim();
 }
 

@@ -58,6 +58,29 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+/**
+ * Strips ANSI escape sequences and terminal control characters from text.
+ * These appear in agentapi output from Claude Code's spinner/progress indicators.
+ */
+function stripTerminalSequences(text: string): string {
+  // ANSI escape sequences (colors, cursor movement, etc.)
+  // eslint-disable-next-line no-control-regex
+  const ansiPattern = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07/g;
+
+  // Spinner characters and cursor control sequences
+  const spinnerPattern = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+/g;
+
+  // Carriage return and other control characters
+  // eslint-disable-next-line no-control-regex
+  const controlPattern = /[\x00-\x09\x0b\x0c\x0e-\x1f]/g;
+
+  return text
+    .replace(ansiPattern, "")
+    .replace(spinnerPattern, "")
+    .replace(controlPattern, "")
+    .trim();
+}
+
 function getLinearStateClass(state: string | undefined): string {
   if (!state) return "";
   const lower = state.toLowerCase();
@@ -152,7 +175,10 @@ function renderMessages(messages: Message[]): void {
   body.innerHTML = messages
     .map((msg) => {
       const role = msg.role || "unknown";
-      const content = msg.content || "";
+      const rawContent = msg.content || "";
+      const content = stripTerminalSequences(rawContent);
+      // Skip empty messages (often just terminal sequences)
+      if (!content) return "";
       return `
         <div class="message message-${role}">
           <div class="message-role">${role}</div>
@@ -160,6 +186,7 @@ function renderMessages(messages: Message[]): void {
         </div>
       `;
     })
+    .filter(Boolean)
     .join("");
 
   body.scrollTop = body.scrollHeight;

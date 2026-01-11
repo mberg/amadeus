@@ -30,9 +30,31 @@ export interface OrchestratorConfig {
   linearWorkspace?: string;
 }
 
+// Simple hash function for message deduplication
+function hashMessage(message: string): string {
+  let hash = 0;
+  for (let i = 0; i < message.length; i++) {
+    const char = message.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
+// Cache entry with timestamp for TTL
+interface CacheEntry {
+  hash: string;
+  timestamp: number;
+}
+
+// Deduplication cache: agentKey -> recent message hashes
+const MESSAGE_CACHE_TTL_MS = 60000; // 1 minute TTL
+const MESSAGE_CACHE_MAX_SIZE = 20; // Max entries per agent
+
 export class ClaudeOrchestrator {
   private agents = new Map<string, AgentInstance>();
   private stoppingAgents = new Set<string>(); // Track agents being intentionally stopped
+  private messageCache = new Map<string, CacheEntry[]>(); // Deduplication cache
   private nextPort = 8001;
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
@@ -348,6 +370,12 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key);
     if (!agent) return;
 
+    // Check for duplicate message
+    if (this.isDuplicateMessage(key, message)) {
+      console.log(`[Agent] Skipping duplicate message to ${key}`);
+      return;
+    }
+
     // Wait for agent to be stable before sending
     await this.waitForStableStatus(agent.port);
 
@@ -366,6 +394,8 @@ export class ClaudeOrchestrator {
         console.error(`[Agent] Message send failed (${res.status}): ${text}`);
       } else {
         console.log(`[Agent] Message sent successfully to ${key}`);
+        // Cache the message hash after successful send
+        this.cacheMessage(key, message);
       }
 
       agent.status = "idle";
@@ -373,6 +403,34 @@ export class ClaudeOrchestrator {
       console.error(`[Agent] Failed to send message to ${key}:`, err);
       agent.status = "idle";
     }
+  }
+
+  private isDuplicateMessage(key: string, message: string): boolean {
+    const hash = hashMessage(message);
+    const now = Date.now();
+    const entries = this.messageCache.get(key) ?? [];
+
+    // Clean expired entries
+    const validEntries = entries.filter(
+      (e) => now - e.timestamp < MESSAGE_CACHE_TTL_MS
+    );
+
+    // Check for duplicate
+    return validEntries.some((e) => e.hash === hash);
+  }
+
+  private cacheMessage(key: string, message: string): void {
+    const hash = hashMessage(message);
+    const now = Date.now();
+    const entries = this.messageCache.get(key) ?? [];
+
+    // Clean expired and add new entry
+    const validEntries = entries
+      .filter((e) => now - e.timestamp < MESSAGE_CACHE_TTL_MS)
+      .slice(-MESSAGE_CACHE_MAX_SIZE + 1);
+
+    validEntries.push({ hash, timestamp: now });
+    this.messageCache.set(key, validEntries);
   }
 
   private async waitForStableStatus(port: number, maxAttempts = 60): Promise<void> {
@@ -414,6 +472,9 @@ export class ClaudeOrchestrator {
         console.warn(`[Agent] Failed to remove worktree: ${result.error}`);
       }
     }
+
+    // Clean up message cache for this agent
+    this.messageCache.delete(key);
 
     this.agents.delete(key);
   }
