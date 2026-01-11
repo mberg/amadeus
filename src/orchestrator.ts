@@ -256,9 +256,6 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
-    // Give Claude Code a moment to fully settle after startup
-    await Bun.sleep(2000);
-
     // Acknowledge the issue before starting the planning process
     await this.acknowledgeIssue(issue);
 
@@ -351,6 +348,9 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key);
     if (!agent) return;
 
+    // Wait for agent to be stable before sending
+    await this.waitForStableStatus(agent.port);
+
     agent.status = "working";
     console.log(`[Agent] Sending message to ${key} on port ${agent.port}`);
 
@@ -373,6 +373,24 @@ export class ClaudeOrchestrator {
       console.error(`[Agent] Failed to send message to ${key}:`, err);
       agent.status = "idle";
     }
+  }
+
+  private async waitForStableStatus(port: number, maxAttempts = 60): Promise<void> {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch(`http://localhost:${port}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "stable") {
+            return;
+          }
+        }
+      } catch {
+        // Not ready yet
+      }
+      await Bun.sleep(500);
+    }
+    console.warn(`[Agent] Agent on port ${port} never became stable, sending anyway`);
   }
 
   async stopAgent(key: string): Promise<void> {
