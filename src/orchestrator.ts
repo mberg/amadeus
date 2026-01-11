@@ -68,7 +68,8 @@ export class ClaudeOrchestrator {
   }
 
   getAgentKey(issue: LinearIssue): string {
-    const projectKey = issue.team?.key ?? "DEFAULT";
+    // Use project name if available, otherwise fall back to team key
+    const projectKey = issue.project?.name ?? issue.team?.key ?? "DEFAULT";
     return `${projectKey}-${issue.id}`;
   }
 
@@ -131,13 +132,27 @@ export class ClaudeOrchestrator {
 
   async startAgent(issue: LinearIssue): Promise<void> {
     const key = this.getAgentKey(issue);
-    const projectKey = issue.team?.key ?? "DEFAULT";
-    const projectPath = this.config.projectPaths[projectKey];
+
+    // Look up project path: try project name first, then team key, then DEFAULT
+    const projectName = issue.project?.name;
+    const teamKey = issue.team?.key;
+    const projectPath =
+      (projectName && this.config.projectPaths[projectName]) ||
+      (teamKey && this.config.projectPaths[teamKey]) ||
+      this.config.projectPaths["DEFAULT"];
 
     if (!projectPath) {
-      console.error(`[Agent] No project path configured for team: ${projectKey}`);
+      const tried = [projectName, teamKey, "DEFAULT"].filter(Boolean).join(", ");
+      console.error(`[Agent] No project path configured. Tried: ${tried}`);
       return;
     }
+
+    const routedBy = projectName && this.config.projectPaths[projectName]
+      ? `project "${projectName}"`
+      : teamKey && this.config.projectPaths[teamKey]
+        ? `team "${teamKey}"`
+        : "DEFAULT";
+    console.log(`[Agent] Routed ${issue.identifier} to ${projectPath} via ${routedBy}`);
 
     if (this.agents.has(key)) {
       console.log(`[Agent] Agent already exists: ${key}`);
