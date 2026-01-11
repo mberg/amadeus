@@ -131,4 +131,35 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.getAgentsInReviewState()).toEqual([]);
     });
   });
+
+  describe("buildAcknowledgmentCommand", () => {
+    it("builds correct linear-cli command for issue", () => {
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test Issue",
+        team: { key: "TEST" },
+      };
+
+      const command = orchestrator.buildAcknowledgmentCommand(issue);
+      expect(command).toContain("linear-cli");
+      expect(command).toContain("comments");
+      expect(command).toContain("create");
+      expect(command).toContain("TEST-1");
+      expect(command).toContain("I've received the issue");
+      expect(command).toContain("Beginning the planning process");
+    });
+
+    it("properly escapes issue identifier in command", () => {
+      const issue: LinearIssue = {
+        id: "issue-456",
+        identifier: "ONA-145",
+        title: "Another Issue",
+        team: { key: "ONA" },
+      };
+
+      const command = orchestrator.buildAcknowledgmentCommand(issue);
+      expect(command).toContain("ONA-145");
+    });
+  });
 });
