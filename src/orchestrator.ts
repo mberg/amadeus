@@ -114,6 +114,21 @@ export class ClaudeOrchestrator {
     return this.getStatus().filter((agent) => agent.linearState === "Review");
   }
 
+  buildAcknowledgmentCommand(issue: LinearIssue): string {
+    const message = `**🤖 Claude:** I've received the issue. Beginning the planning process.`;
+    return `linear-cli comments create --body "${message}" ${issue.identifier}`;
+  }
+
+  async acknowledgeIssue(issue: LinearIssue): Promise<void> {
+    const command = this.buildAcknowledgmentCommand(issue);
+    console.log(`[Agent] Acknowledging issue ${issue.identifier}`);
+    try {
+      await Bun.$`${{ raw: command }}`.quiet();
+    } catch (err) {
+      console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}:`, err);
+    }
+  }
+
   async startAgent(issue: LinearIssue): Promise<void> {
     const key = this.getAgentKey(issue);
     const projectKey = issue.team?.key ?? "DEFAULT";
@@ -216,6 +231,9 @@ export class ClaudeOrchestrator {
 
     const agent = this.agents.get(key)!;
     agent.status = "idle";
+
+    // Acknowledge the issue before starting the planning process
+    await this.acknowledgeIssue(issue);
 
     await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
   }
