@@ -176,7 +176,6 @@ export function buildRecoveryPrompt(
   savedState: PersistedAgentState,
   profile?: AgentProfile
 ): string {
-  const conversationSection = buildConversationSection(savedState.conversationSnapshot);
   const profileSection = buildProfileSection(profile);
 
   return `
@@ -195,19 +194,25 @@ ${issue.description || "No description provided."}
 
 You were previously working on this issue but your session crashed. Here's what you need to do:
 
-**Step 1:** Check the current state of your work:
+**Step 1:** Check the current state of your code:
 \`\`\`bash
 git status
-git log --oneline -5
+git log --oneline -10
+git diff HEAD~3..HEAD --stat
 \`\`\`
 
-**Step 2:** Post a recovery comment to Linear:
+**Step 2:** Fetch the full issue history from Linear (comments are your source of truth):
 \`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Recovering from a session restart. Checking the current state and resuming work." ${issue.identifier}
+linear-cli issues get ${issue.identifier}
 \`\`\`
 
-**Step 3:** Review what was done before and continue from where you left off.
-${conversationSection}
+**Step 3:** Post a recovery comment to Linear:
+\`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** Recovering from a session restart. Reviewing the issue history and git state to resume work." ${issue.identifier}
+\`\`\`
+
+**Step 4:** Based on the Linear comments and git history, determine where you left off and continue.
+
 ### How to Communicate with Linear
 
 Use the \`linear-cli\` command line tool for all Linear interactions.
@@ -237,37 +242,9 @@ You are working in branch \`issue/${issue.identifier}\`. All commits go to this 
 
 ### Important
 
+- Linear comments are your source of truth for what was planned and discussed
+- Git history shows what code was actually written
 - Always communicate your progress via Linear comments
 - Always update the issue status to reflect your current state
-- Review the previous conversation context before continuing
 ${profileSection}`.trim();
-}
-
-function buildConversationSection(messages: unknown[]): string {
-  if (!messages || messages.length === 0) {
-    return "";
-  }
-
-  // Summarize conversation - show last few messages
-  const recentMessages = messages.slice(-6); // Last 6 messages
-  const formatted = recentMessages
-    .map((msg) => {
-      const m = msg as { role?: string; content?: string };
-      const role = m.role === "assistant" ? "Claude" : "User";
-      const content = m.content ?? "";
-      // Truncate long messages
-      const truncated =
-        content.length > 500 ? content.substring(0, 500) + "..." : content;
-      return `**${role}:** ${truncated}`;
-    })
-    .join("\n\n");
-
-  return `
-### Previous Conversation
-
-Here's what was discussed before the crash:
-
-${formatted}
-
-`;
 }

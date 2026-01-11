@@ -1,5 +1,5 @@
-// ABOUTME: Monitors agent health via periodic HTTP checks and conversation snapshots.
-// ABOUTME: Detects unresponsive agents and persists state for recovery.
+// ABOUTME: Monitors agent health via periodic HTTP checks.
+// ABOUTME: Detects unresponsive agents and updates persistence state.
 
 import type { AgentPersistence } from "./persistence";
 
@@ -101,8 +101,8 @@ export class HealthMonitor {
       const health = await this.checkAgentHealth(agent.port);
 
       if (health.healthy) {
-        // Agent is responsive, save snapshot
-        await this.saveAgentSnapshot(agent);
+        // Agent is responsive, update heartbeat
+        this.updateAgentHeartbeat(agent);
       } else {
         // Agent is unresponsive
         console.log(
@@ -155,31 +155,7 @@ export class HealthMonitor {
     }
   }
 
-  async fetchConversation(port: number): Promise<unknown[]> {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-      const res = await fetch(`http://localhost:${port}/messages`, {
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        return [];
-      }
-
-      const data = await res.json();
-      return data.messages ?? [];
-    } catch {
-      return [];
-    }
-  }
-
-  async saveAgentSnapshot(agent: AgentInfo): Promise<void> {
-    const conversation = await this.fetchConversation(agent.port);
-
+  updateAgentHeartbeat(agent: AgentInfo): void {
     this.config.persistence.saveAgentState({
       key: agent.key,
       issueId: agent.issueId,
@@ -190,7 +166,6 @@ export class HealthMonitor {
       linearState: agent.linearState,
       port: agent.port,
       status: "alive",
-      conversationSnapshot: conversation,
       lastHeartbeat: new Date(),
     });
   }

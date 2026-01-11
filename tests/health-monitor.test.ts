@@ -1,8 +1,8 @@
 // ABOUTME: Tests for the health monitor that checks agent liveness.
-// ABOUTME: Verifies health checks, conversation snapshotting, and death detection.
+// ABOUTME: Verifies health checks and death detection.
 
-import { describe, expect, it, beforeEach, afterEach, mock, spyOn } from "bun:test";
-import { HealthMonitor, type HealthMonitorConfig } from "../src/health-monitor";
+import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
+import { HealthMonitor } from "../src/health-monitor";
 import { AgentPersistence } from "../src/persistence";
 import { unlink } from "node:fs/promises";
 
@@ -166,64 +166,15 @@ describe("HealthMonitor", () => {
     });
   });
 
-  describe("fetchConversation", () => {
-    it("returns messages from agent", async () => {
-      const mockMessages = {
-        messages: [
-          { role: "user", content: "Hello" },
-          { role: "assistant", content: "Hi there!" },
-        ],
-      };
-
-      const mockFetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify(mockMessages), { status: 200 }))
-      );
-      globalThis.fetch = mockFetch as typeof fetch;
-
+  describe("updateAgentHeartbeat", () => {
+    it("saves agent state to persistence", () => {
       monitor = new HealthMonitor({
         persistence,
         getAgents: () => [],
         onAgentUnresponsive: () => {},
       });
 
-      const result = await monitor.fetchConversation(8001);
-      expect(result).toEqual(mockMessages.messages);
-    });
-
-    it("returns empty array on error", async () => {
-      const mockFetch = mock(() => Promise.reject(new Error("Connection refused")));
-      globalThis.fetch = mockFetch as typeof fetch;
-
-      monitor = new HealthMonitor({
-        persistence,
-        getAgents: () => [],
-        onAgentUnresponsive: () => {},
-      });
-
-      const result = await monitor.fetchConversation(8001);
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe("saveAgentSnapshot", () => {
-    it("saves agent state and conversation to persistence", async () => {
-      const mockMessages = {
-        messages: [{ role: "user", content: "Test message" }],
-      };
-
-      // saveAgentSnapshot only calls /messages, not /status
-      const mockFetch = mock(() =>
-        Promise.resolve(new Response(JSON.stringify(mockMessages), { status: 200 }))
-      );
-      globalThis.fetch = mockFetch as typeof fetch;
-
-      monitor = new HealthMonitor({
-        persistence,
-        getAgents: () => [],
-        onAgentUnresponsive: () => {},
-      });
-
-      await monitor.saveAgentSnapshot({
+      monitor.updateAgentHeartbeat({
         key: "TEST-issue-123",
         issueId: "issue-123",
         issueIdentifier: "TEST-1",
@@ -236,7 +187,7 @@ describe("HealthMonitor", () => {
       const saved = persistence.getAgentByIssueId("issue-123");
       expect(saved).not.toBeNull();
       expect(saved!.issueIdentifier).toBe("TEST-1");
-      expect(saved!.conversationSnapshot).toEqual(mockMessages.messages);
+      expect(saved!.status).toBe("alive");
     });
   });
 

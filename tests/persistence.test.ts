@@ -40,7 +40,6 @@ describe("AgentPersistence", () => {
         linearState: "Building",
         port: 8001,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       };
 
@@ -62,7 +61,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test-project",
         port: 8001,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       };
 
@@ -89,7 +87,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test-project",
         port: 8002,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       };
 
@@ -111,7 +108,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test-project",
         port: 8001,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       };
 
@@ -142,7 +138,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test",
         port: 8001,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       });
 
@@ -154,41 +149,12 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test",
         port: 8002,
         status: "dead",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       });
 
       const dead = persistence.getDeadAgents();
       expect(dead.length).toBe(1);
       expect(dead[0].issueIdentifier).toBe("TEST-2");
-    });
-  });
-
-  describe("saveConversationSnapshot", () => {
-    it("saves conversation messages for an agent", () => {
-      const state: PersistedAgentState = {
-        key: "TEST-issue-123",
-        issueId: "issue-123",
-        issueIdentifier: "TEST-1",
-        issueTitle: "Test Issue",
-        projectPath: "/tmp/test-project",
-        port: 8001,
-        status: "alive",
-        conversationSnapshot: [],
-        lastHeartbeat: new Date(),
-      };
-
-      persistence.saveAgentState(state);
-
-      const messages = [
-        { role: "user", content: "Hello" },
-        { role: "assistant", content: "Hi there!" },
-      ];
-
-      persistence.saveConversationSnapshot("issue-123", messages);
-
-      const loaded = persistence.getAgentByIssueId("issue-123");
-      expect(loaded!.conversationSnapshot).toEqual(messages);
     });
   });
 
@@ -202,7 +168,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test",
         port: 8001,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       });
 
@@ -223,7 +188,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test",
         port: 8001,
         status: "alive",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       });
 
@@ -235,7 +199,6 @@ describe("AgentPersistence", () => {
         projectPath: "/tmp/test",
         port: 8002,
         status: "dead",
-        conversationSnapshot: [],
         lastHeartbeat: new Date(),
       });
 

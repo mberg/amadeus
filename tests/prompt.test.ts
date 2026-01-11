@@ -234,7 +234,6 @@ describe("buildRecoveryPrompt", () => {
     port: 8001,
     status: "dead",
     linearState: "Building",
-    conversationSnapshot: [],
     lastHeartbeat: new Date(),
     ...overrides,
   });
@@ -268,31 +267,14 @@ describe("buildRecoveryPrompt", () => {
     expect(prompt).toContain("Feedback Needed");
   });
 
-  it("includes conversation summary when messages exist", () => {
+  it("instructs agent to fetch issue history from Linear", () => {
     const issue = makeIssue();
-    const savedState = makeSavedState({
-      conversationSnapshot: [
-        { role: "user", content: "Initial task prompt" },
-        { role: "assistant", content: "I will implement the OAuth2 flow" },
-        { role: "user", content: "Please proceed" },
-      ],
-    });
+    const savedState = makeSavedState();
 
     const prompt = buildRecoveryPrompt(issue, savedState);
 
-    expect(prompt).toContain("Previous Conversation");
-    expect(prompt).toContain("OAuth2");
-  });
-
-  it("handles empty conversation snapshot", () => {
-    const issue = makeIssue();
-    const savedState = makeSavedState({ conversationSnapshot: [] });
-
-    const prompt = buildRecoveryPrompt(issue, savedState);
-
-    // Should still be valid prompt
-    expect(prompt).toContain("ENG-42");
-    expect(prompt).not.toContain("Previous Conversation");
+    expect(prompt).toContain("linear-cli issues get");
+    expect(prompt).toContain("source of truth");
   });
 
   it("instructs agent to check git status first", () => {

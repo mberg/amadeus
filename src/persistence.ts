@@ -1,5 +1,5 @@
-// ABOUTME: SQLite persistence layer for agent state and conversation snapshots.
-// ABOUTME: Enables agent recovery after crashes by persisting lifecycle state.
+// ABOUTME: SQLite persistence layer for agent lifecycle state.
+// ABOUTME: Tracks alive/dead status for agent recovery after crashes.
 
 import { Database } from "bun:sqlite";
 
@@ -13,7 +13,6 @@ export interface PersistedAgentState {
   linearState?: string;
   port: number;
   status: "alive" | "dead" | "restarting";
-  conversationSnapshot: unknown[];
   lastHeartbeat: Date;
 }
 
@@ -37,7 +36,6 @@ export class AgentPersistence {
         linear_state TEXT,
         port INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'alive',
-        conversation_snapshot TEXT NOT NULL DEFAULT '[]',
         last_heartbeat TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -50,8 +48,8 @@ export class AgentPersistence {
       `
       INSERT INTO agents (
         issue_id, key, issue_identifier, issue_title, project_path,
-        worktree_path, linear_state, port, status, conversation_snapshot, last_heartbeat
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        worktree_path, linear_state, port, status, last_heartbeat
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(issue_id) DO UPDATE SET
         key = excluded.key,
         issue_identifier = excluded.issue_identifier,
@@ -61,7 +59,6 @@ export class AgentPersistence {
         linear_state = excluded.linear_state,
         port = excluded.port,
         status = excluded.status,
-        conversation_snapshot = excluded.conversation_snapshot,
         last_heartbeat = excluded.last_heartbeat,
         updated_at = datetime('now')
       `,
@@ -75,7 +72,6 @@ export class AgentPersistence {
         state.linearState ?? null,
         state.port,
         state.status,
-        JSON.stringify(state.conversationSnapshot),
         state.lastHeartbeat.toISOString(),
       ]
     );
@@ -83,9 +79,7 @@ export class AgentPersistence {
 
   getAgentByIssueId(issueId: string): PersistedAgentState | null {
     const row = this.db
-      .query(
-        `SELECT * FROM agents WHERE issue_id = ?`
-      )
+      .query(`SELECT * FROM agents WHERE issue_id = ?`)
       .get(issueId) as Record<string, unknown> | null;
 
     if (!row) return null;
@@ -123,13 +117,6 @@ export class AgentPersistence {
     return rows.map((row) => this.rowToState(row));
   }
 
-  saveConversationSnapshot(issueId: string, messages: unknown[]): void {
-    this.db.run(
-      `UPDATE agents SET conversation_snapshot = ?, last_heartbeat = ?, updated_at = datetime('now') WHERE issue_id = ?`,
-      [JSON.stringify(messages), new Date().toISOString(), issueId]
-    );
-  }
-
   deleteAgent(issueId: string): void {
     this.db.run(`DELETE FROM agents WHERE issue_id = ?`, [issueId]);
   }
@@ -149,7 +136,6 @@ export class AgentPersistence {
       linearState: row.linear_state as string | undefined,
       port: row.port as number,
       status: row.status as "alive" | "dead" | "restarting",
-      conversationSnapshot: JSON.parse(row.conversation_snapshot as string),
       lastHeartbeat: new Date(row.last_heartbeat as string),
     };
   }
