@@ -6,6 +6,21 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 let server: { stop: () => void };
 let baseUrl: string;
 
+async function signPayload(payload: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 describe("HTTP Server", () => {
   beforeAll(async () => {
     // Set required env vars for test
@@ -68,7 +83,7 @@ describe("HTTP Server", () => {
       expect(res.status).toBe(401);
     });
 
-    it("accepts valid signature", async () => {
+    it("accepts valid signature with valid timestamp", async () => {
       const payload = JSON.stringify({
         action: "update",
         type: "Issue",
@@ -78,21 +93,10 @@ describe("HTTP Server", () => {
           title: "Test issue",
           state: { id: "s1", name: "Backlog" },
         },
+        webhookTimestamp: Date.now(),
       });
 
-      // Compute valid signature
-      const encoder = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        "raw",
-        encoder.encode("test-secret"),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"]
-      );
-      const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-      const signature = Array.from(new Uint8Array(sig))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+      const signature = await signPayload(payload, "test-secret");
 
       const res = await fetch(`${baseUrl}/webhook`, {
         method: "POST",
@@ -104,6 +108,88 @@ describe("HTTP Server", () => {
       });
 
       expect(res.status).toBe(200);
+    });
+
+    it("rejects webhook with missing timestamp", async () => {
+      const payload = JSON.stringify({
+        action: "update",
+        type: "Issue",
+        data: {
+          id: "test-id",
+          identifier: "TEST-1",
+          title: "Test issue",
+          state: { id: "s1", name: "Backlog" },
+        },
+      });
+
+      const signature = await signPayload(payload, "test-secret");
+
+      const res = await fetch(`${baseUrl}/webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "linear-signature": signature,
+        },
+        body: payload,
+      });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects webhook with stale timestamp", async () => {
+      const staleTimestamp = Date.now() - 120000; // 2 minutes ago
+      const payload = JSON.stringify({
+        action: "update",
+        type: "Issue",
+        data: {
+          id: "test-id",
+          identifier: "TEST-1",
+          title: "Test issue",
+          state: { id: "s1", name: "Backlog" },
+        },
+        webhookTimestamp: staleTimestamp,
+      });
+
+      const signature = await signPayload(payload, "test-secret");
+
+      const res = await fetch(`${baseUrl}/webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "linear-signature": signature,
+        },
+        body: payload,
+      });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects webhook with future timestamp", async () => {
+      const futureTimestamp = Date.now() + 120000; // 2 minutes in future
+      const payload = JSON.stringify({
+        action: "update",
+        type: "Issue",
+        data: {
+          id: "test-id",
+          identifier: "TEST-1",
+          title: "Test issue",
+          state: { id: "s1", name: "Backlog" },
+        },
+        webhookTimestamp: futureTimestamp,
+      });
+
+      const signature = await signPayload(payload, "test-secret");
+
+      const res = await fetch(`${baseUrl}/webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "linear-signature": signature,
+        },
+        body: payload,
+      });
+
+      expect(res.status).toBe(401);
     });
   });
 

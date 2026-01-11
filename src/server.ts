@@ -286,6 +286,16 @@ export const server = Bun.serve({
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
 
+      // Validate timestamp to prevent replay attacks
+      const MAX_AGE_MS = 60000; // 60 seconds tolerance
+      const now = Date.now();
+      const webhookTimestamp = data.webhookTimestamp;
+
+      if (!webhookTimestamp || Math.abs(now - webhookTimestamp) > MAX_AGE_MS) {
+        console.warn(`[Webhook] Timestamp validation failed: ${webhookTimestamp}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+
       // Process async, respond immediately
       handleWebhook(data).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
