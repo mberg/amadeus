@@ -2,6 +2,7 @@
   "name": "amadeus",
   "module": "src/server.ts",
   "type": "module",
+  "license": "Apache-2.0",
   "private": true,
   "scripts": {
     "start": "bun run src/server.ts",
