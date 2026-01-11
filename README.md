@@ -48,7 +48,7 @@ Amadeus uses Linear as a control plane to manage multiple Claude Code agents. Ea
 ### Communication Flow
 
 **Inbound (Linear → Agent):**
-1. Issue state changes in Linear (e.g., moved to "Scoping")
+1. Issue state changes in Linear (e.g., moved to "Planning")
 2. Linear sends webhook to Amadeus
 3. Amadeus spawns an agentapi instance for that issue (if not already running)
 4. Amadeus sends issue details to the agent via HTTP
@@ -72,20 +72,24 @@ This section describes the complete lifecycle of an agent working on a Linear is
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  1. TRIGGER                                                                 │
-│     User moves issue to "Scoping" or "Ready to Build"                       │
+│     User moves issue to "Planning"                                          │
 │     ↓                                                                       │
 │  2. SPAWN                                                                   │
 │     Amadeus receives webhook → creates worktree → spawns agent              │
 │     ↓                                                                       │
-│  3. WORK                                                                    │
+│  3. PLANNING                                                                │
+│     Agent analyzes requirements → posts implementation plan                 │
+│     Agent sets status → "Feedback Needed" and STOPS                         │
+│     ↓                                                                       │
+│  4. APPROVAL                                                                │
+│     Human reviews plan → replies with approval or changes                   │
+│     Amadeus forwards comment → Agent reads feedback                         │
+│     ↓                                                                       │
+│  5. BUILDING                                                                │
 │     Agent sets status → "Building"                                          │
-│     Agent posts plan → implements → commits                                 │
+│     Agent implements plan → commits changes                                 │
 │     ↓                                                                       │
-│  4. FEEDBACK LOOP (if needed)                                               │
-│     Agent has question → posts comment → sets "Feedback Needed"             │
-│     Human replies → Amadeus forwards → Agent resumes → "Building"           │
-│     ↓                                                                       │
-│  5. COMPLETION                                                              │
+│  6. COMPLETION                                                              │
 │     Agent pushes branch → creates PR → sets "Review"                        │
 │     Human reviews → merges → sets "Done"                                    │
 │                                                                             │
@@ -98,18 +102,18 @@ Agents communicate their state by updating Linear issue status using `linear-cli
 
 | Status | When Set | What It Means |
 |--------|----------|---------------|
-| **Building** | Immediately when starting work | Agent is actively coding |
-| **Feedback Needed** | When agent has a question | Agent is blocked, waiting for human input |
+| **Feedback Needed** | After posting implementation plan | Agent waiting for human approval |
+| **Building** | After human approves plan | Agent is actively implementing |
 | **Review** | When PR is created | Work is complete, ready for human review |
 
 **Status commands agents use:**
 
 ```bash
-# Set to Building (start working)
-linear-cli issues update ONA-123 --state "0aab3254-cc63-4979-84ab-eda800979c94"
-
-# Set to Feedback Needed (blocked on question)
+# Set to Feedback Needed (plan posted, waiting for approval)
 linear-cli issues update ONA-123 --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
+
+# Set to Building (human approved, start implementing)
+linear-cli issues update ONA-123 --state "0aab3254-cc63-4979-84ab-eda800979c94"
 
 # Set to Review (PR ready)
 linear-cli issues update ONA-123 --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
@@ -123,17 +127,19 @@ Agents post comments to Linear using `linear-cli`. All agent comments are prefix
 linear-cli comments create --body "**🤖 Claude:** Starting implementation..." ONA-123
 ```
 
-### Feedback Loop
+### Planning & Approval Loop
 
-When an agent needs human input:
+When an agent starts on a new issue:
 
-1. **Agent posts question** with clear request for information
-2. **Agent sets status to "Feedback Needed"** — this signals the human
-3. **Human replies** via Linear comment
-4. **Amadeus receives webhook** and forwards the comment to the agent
-5. **Agent reads feedback**, sets status to "Building", and continues
+1. **Agent analyzes** the issue and codebase
+2. **Agent posts implementation plan** as a Linear comment
+3. **Agent sets status to "Feedback Needed"** and STOPS
+4. **Human reviews plan** and replies via Linear comment
+5. **Amadeus forwards** the comment to the agent
+6. **If approved**: Agent sets status to "Building" and implements
+7. **If changes requested**: Agent updates plan and stays in "Feedback Needed"
 
-This loop can repeat as many times as needed until the agent completes the work.
+This ensures humans approve the approach before any code is written.
 
 ### PR Creation
 
@@ -451,8 +457,10 @@ Set these environment variables:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `LINEAR_WEBHOOK_SECRET` | Yes | Signing secret from Linear webhook settings |
+| `LINEAR_API_KEY` | No | API key for Linear (used by linear-cli) |
+| `LINEAR_WORKSPACE` | No | Workspace slug for @mentions (e.g., `ona` for linear.app/ona) |
 | `PROJECT_PATHS` | No | Project/team-to-path mappings: `ProjectName:/path1,TEAM:/path2` |
-| `TRIGGER_STATES` | No | States that spawn agents (default: `Scoping,Ready to Build`) |
+| `TRIGGER_STATES` | No | States that spawn agents (default: `Planning,Ready to Build`) |
 | `CLAUDE_BOT_USER_ID` | No | Linear user ID to trigger on assignment |
 | `PORT` | No | Server port (default: 5678) |
 | `USE_WORKTREES` | No | Enable git worktrees for issue isolation (default: `true`) |
@@ -460,6 +468,9 @@ Set these environment variables:
 | `PROFILES_DIR` | No | Directory containing profile JSON files (default: `./agent-profiles`) |
 | `DEFAULT_PROFILE` | No | Profile to use when no label matches (default: `base`) |
 | `TEAM_PROFILES` | No | Per-team default profiles: `TEAM1:profile1,TEAM2:profile2` |
+| `DB_PATH` | No | SQLite database for agent persistence (default: `./amadeus-agents.db`) |
+| `HEALTH_CHECK_INTERVAL_MS` | No | Health check interval in ms (default: `30000`) |
+| `HEALTH_CHECK_TIMEOUT_MS` | No | Health check timeout in ms (default: `5000`) |
 
 ### Project Path Mapping
 
@@ -499,12 +510,11 @@ Configure your Linear workflow with these states for best results:
 
 | State | What Happens |
 |-------|--------------|
-| **Scoping** | Agent spawns, analyzes requirements, creates plan |
-| **Ready to Build** | Agent spawns (if not running), begins implementation |
-| **Building** | Agent actively coding |
-| **Review** | Agent finished, awaiting human review |
-| **Feedback Needed** | Agent blocked, needs human input |
-| **Done** | Human approved |
+| **Planning** | Agent spawns, analyzes requirements, creates plan, then sets Feedback Needed |
+| **Feedback Needed** | Agent waiting for human approval of plan |
+| **Building** | Human approved plan, agent actively coding |
+| **Review** | Agent finished, PR created, awaiting human review |
+| **Done** | Human approved and merged |
 
 ## Tailscale Funnel Setup
 
