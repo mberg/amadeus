@@ -460,7 +460,7 @@ Set these environment variables:
 | `LINEAR_API_KEY` | No | API key for Linear (used by linear-cli) |
 | `LINEAR_WORKSPACE` | No | Workspace slug for @mentions (e.g., `ona` for linear.app/ona) |
 | `PROJECT_PATHS` | No | Project/team-to-path mappings: `ProjectName:/path1,TEAM:/path2` |
-| `TRIGGER_STATES` | No | States that spawn agents (default: `Planning,Ready to Build`) |
+| `TRIGGER_STATES` | No | States that spawn agents (default: `Planning`) |
 | `CLAUDE_BOT_USER_ID` | No | Linear user ID to trigger on assignment |
 | `PORT` | No | Server port (default: 5678) |
 | `USE_WORKTREES` | No | Enable git worktrees for issue isolation (default: `true`) |
