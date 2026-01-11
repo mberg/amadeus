@@ -2,7 +2,7 @@
 // ABOUTME: Ensures prompts include all relevant issue information.
 
 import { describe, expect, it } from "bun:test";
-import { buildPrompt, buildCommentPrompt } from "../src/prompt";
+import { buildPrompt, buildCommentPrompt, isYoloMode } from "../src/prompt";
 import type { LinearIssue, LinearComment, AgentProfile } from "../src/types";
 
 describe("buildPrompt", () => {
@@ -173,6 +173,107 @@ describe("buildPrompt", () => {
     // Should instruct agent to @mention the creator/assignee
     expect(prompt).toMatch(/mention|@|notify/i);
     expect(prompt).toMatch(/linear-cli issues get/i);
+  });
+});
+
+describe("isYoloMode", () => {
+  it("returns true when description contains 'yolo' lowercase", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Please implement this feature yolo",
+    };
+
+    expect(isYoloMode(issue)).toBe(true);
+  });
+
+  it("returns true when description contains 'YOLO' uppercase", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Do this YOLO style",
+    };
+
+    expect(isYoloMode(issue)).toBe(true);
+  });
+
+  it("returns true when description contains 'Yolo' mixed case", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Yolo - just do it",
+    };
+
+    expect(isYoloMode(issue)).toBe(true);
+  });
+
+  it("returns false when description does not contain yolo", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Normal description without the keyword",
+    };
+
+    expect(isYoloMode(issue)).toBe(false);
+  });
+
+  it("returns false when description is undefined", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    expect(isYoloMode(issue)).toBe(false);
+  });
+});
+
+describe("buildPrompt YOLO mode", () => {
+  it("skips Feedback Needed state when YOLO mode is active", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Implement this feature yolo",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    // Should NOT contain the Feedback Needed state ID in the workflow section
+    expect(prompt).not.toMatch(/Step 4.*Feedback Needed/i);
+    expect(prompt).not.toMatch(/STOP and wait for the user/i);
+  });
+
+  it("goes directly to Building state in YOLO mode", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "yolo mode please",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    // Should contain Building state in the workflow
+    expect(prompt).toContain("0aab3254-cc63-4979-84ab-eda800979c94");
+    expect(prompt).toMatch(/proceed.*implement|implement.*immediately/i);
+  });
+
+  it("mentions YOLO mode is active in the prompt", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Do this yolo",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt).toMatch(/yolo.*mode|YOLO.*mode/i);
   });
 });
 
