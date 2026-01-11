@@ -138,16 +138,11 @@ export class ClaudeOrchestrator {
     return this.getStatus().filter((agent) => agent.linearState === "Review");
   }
 
-  buildAcknowledgmentCommand(issue: LinearIssue): string {
-    const message = `**🤖 Claude:** I've received the issue. Beginning the planning process.`;
-    return `linear-cli comments create --body "${message}" ${issue.identifier}`;
-  }
-
   async acknowledgeIssue(issue: LinearIssue): Promise<void> {
-    const command = this.buildAcknowledgmentCommand(issue);
+    const message = `**🤖 Claude:** I've received the issue. Beginning the planning process.`;
     console.log(`[Agent] Acknowledging issue ${issue.identifier}`);
     try {
-      await Bun.$`${{ raw: command }}`.quiet();
+      await Bun.$`linear-cli comments create --body ${message} ${issue.identifier}`.quiet();
     } catch (err) {
       console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}:`, err);
     }
