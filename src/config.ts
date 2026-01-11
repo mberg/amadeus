@@ -44,6 +44,7 @@ function loadTeamProfiles(): Record<string, string> {
 
 export const CONFIG = {
   port: Number(process.env.PORT) || 5678,
+  apiToken: process.env.AMADEUS_API_TOKEN,
   linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
   claudeBotUserId: process.env.CLAUDE_BOT_USER_ID,
   projectPaths: loadProjectPaths(),
