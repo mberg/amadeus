@@ -2,8 +2,9 @@
 // ABOUTME: Ensures prompts include all relevant issue information.
 
 import { describe, expect, it } from "bun:test";
-import { buildPrompt, buildCommentPrompt } from "../src/prompt";
+import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "../src/prompt";
 import type { LinearIssue, LinearComment, AgentProfile } from "../src/types";
+import type { PersistedAgentState } from "../src/persistence";
 
 describe("buildPrompt", () => {
   it("includes issue identifier and title", () => {
@@ -210,5 +211,106 @@ describe("buildCommentPrompt", () => {
     expect(prompt).toMatch(
       /Feedback Needed[\s\S]*?linear-cli comments create|post.*comment.*Feedback Needed/i
     );
+  });
+});
+
+describe("buildRecoveryPrompt", () => {
+  const makeIssue = (overrides?: Partial<LinearIssue>): LinearIssue => ({
+    id: "issue-123",
+    identifier: "ENG-42",
+    title: "Add user authentication",
+    description: "Implement OAuth2 flow for user login",
+    ...overrides,
+  });
+
+  const makeSavedState = (
+    overrides?: Partial<PersistedAgentState>
+  ): PersistedAgentState => ({
+    key: "ENG-issue-123",
+    issueId: "issue-123",
+    issueIdentifier: "ENG-42",
+    issueTitle: "Add user authentication",
+    projectPath: "/tmp/test-project",
+    port: 8001,
+    status: "dead",
+    linearState: "Building",
+    conversationSnapshot: [],
+    lastHeartbeat: new Date(),
+    ...overrides,
+  });
+
+  it("indicates agent is recovering from a crash", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState();
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    expect(prompt).toContain("recovering");
+    expect(prompt).toMatch(/crash|restart|resume/i);
+  });
+
+  it("includes the issue details", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState();
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    expect(prompt).toContain("ENG-42");
+    expect(prompt).toContain("Add user authentication");
+  });
+
+  it("includes the last known Linear state", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState({ linearState: "Feedback Needed" });
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    expect(prompt).toContain("Feedback Needed");
+  });
+
+  it("includes conversation summary when messages exist", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState({
+      conversationSnapshot: [
+        { role: "user", content: "Initial task prompt" },
+        { role: "assistant", content: "I will implement the OAuth2 flow" },
+        { role: "user", content: "Please proceed" },
+      ],
+    });
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    expect(prompt).toContain("Previous Conversation");
+    expect(prompt).toContain("OAuth2");
+  });
+
+  it("handles empty conversation snapshot", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState({ conversationSnapshot: [] });
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    // Should still be valid prompt
+    expect(prompt).toContain("ENG-42");
+    expect(prompt).not.toContain("Previous Conversation");
+  });
+
+  it("instructs agent to check git status first", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState();
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    expect(prompt).toMatch(/git status|check.*changes/i);
+  });
+
+  it("instructs agent to post a recovery comment to Linear", () => {
+    const issue = makeIssue();
+    const savedState = makeSavedState();
+
+    const prompt = buildRecoveryPrompt(issue, savedState);
+
+    expect(prompt).toContain("linear-cli comments create");
+    expect(prompt).toMatch(/recover|restart|resume/i);
   });
 });

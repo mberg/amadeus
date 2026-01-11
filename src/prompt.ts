@@ -2,6 +2,7 @@
 // ABOUTME: Formats issue details into actionable instructions for the agent.
 
 import type { LinearIssue, LinearComment, AgentProfile } from "./types";
+import type { PersistedAgentState } from "./persistence";
 
 export function buildPrompt(issue: LinearIssue, profile?: AgentProfile): string {
   const profileSection = buildProfileSection(profile);
@@ -168,4 +169,105 @@ linear-cli comments create --body "**🤖 Claude:** [Your updated plan or answer
 linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
 \`\`\`
 `.trim();
+}
+
+export function buildRecoveryPrompt(
+  issue: LinearIssue,
+  savedState: PersistedAgentState,
+  profile?: AgentProfile
+): string {
+  const conversationSection = buildConversationSection(savedState.conversationSnapshot);
+  const profileSection = buildProfileSection(profile);
+
+  return `
+## Agent Recovery - Resuming Work on ${issue.identifier}
+
+**IMPORTANT:** You are recovering from a crash and resuming work on this issue.
+
+**Issue**: ${issue.identifier} - ${issue.title}
+**Issue ID**: ${issue.id}
+**Last Known Status**: ${savedState.linearState ?? "Unknown"}
+
+### Description
+${issue.description || "No description provided."}
+
+### Recovery Instructions
+
+You were previously working on this issue but your session crashed. Here's what you need to do:
+
+**Step 1:** Check the current state of your work:
+\`\`\`bash
+git status
+git log --oneline -5
+\`\`\`
+
+**Step 2:** Post a recovery comment to Linear:
+\`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** Recovering from a session restart. Checking the current state and resuming work." ${issue.identifier}
+\`\`\`
+
+**Step 3:** Review what was done before and continue from where you left off.
+${conversationSection}
+### How to Communicate with Linear
+
+Use the \`linear-cli\` command line tool for all Linear interactions.
+
+**Post a comment:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.identifier}
+\`\`\`
+
+**Update status:**
+\`\`\`bash
+linear-cli issues update ${issue.identifier} --state "<state-id>"
+\`\`\`
+
+**State IDs:**
+| Status | State ID |
+|--------|----------|
+| Planning | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
+| Feedback Needed | \`38ab3462-5550-4dcf-a1dd-6845e3a1e963\` |
+| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
+| Review | \`e5708707-32a0-4ede-9f24-fb525d92b3d4\` |
+| Done | \`edbec4af-dc30-4d27-a122-84395ac3b885\` |
+
+### Git Branch
+
+You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
+
+### Important
+
+- Always communicate your progress via Linear comments
+- Always update the issue status to reflect your current state
+- Review the previous conversation context before continuing
+${profileSection}`.trim();
+}
+
+function buildConversationSection(messages: unknown[]): string {
+  if (!messages || messages.length === 0) {
+    return "";
+  }
+
+  // Summarize conversation - show last few messages
+  const recentMessages = messages.slice(-6); // Last 6 messages
+  const formatted = recentMessages
+    .map((msg) => {
+      const m = msg as { role?: string; content?: string };
+      const role = m.role === "assistant" ? "Claude" : "User";
+      const content = m.content ?? "";
+      // Truncate long messages
+      const truncated =
+        content.length > 500 ? content.substring(0, 500) + "..." : content;
+      return `**${role}:** ${truncated}`;
+    })
+    .join("\n\n");
+
+  return `
+### Previous Conversation
+
+Here's what was discussed before the crash:
+
+${formatted}
+
+`;
 }
