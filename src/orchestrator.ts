@@ -26,6 +26,7 @@ export interface OrchestratorConfig {
   useWorktrees?: boolean;
   worktreesDir?: string;
   onAgentDeath?: (info: AgentDeathInfo) => void;
+  linearWorkspace?: string;
 }
 
 export class ClaudeOrchestrator {
@@ -107,6 +108,10 @@ export class ClaudeOrchestrator {
 
   getAgentDeathHandler(): ((info: AgentDeathInfo) => void) | undefined {
     return this.config.onAgentDeath;
+  }
+
+  getAgentsInReviewState(): AgentStatus[] {
+    return this.getStatus().filter((agent) => agent.linearState === "Review");
   }
 
   async startAgent(issue: LinearIssue): Promise<void> {
@@ -212,7 +217,7 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
-    await this.sendMessage(key, buildPrompt(issue, profile));
+    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
   }
 
   private setupExitHandler(
