@@ -1,9 +1,10 @@
 // ABOUTME: Tests for the Claude orchestrator agent management.
 // ABOUTME: Tests agent spawning, stopping, and status tracking.
 
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { ClaudeOrchestrator } from "../src/orchestrator";
 import type { LinearIssue } from "../src/types";
+import type { AgentDeathInfo } from "../src/orchestrator";
 
 describe("ClaudeOrchestrator", () => {
   let orchestrator: ClaudeOrchestrator;
@@ -94,6 +95,34 @@ describe("ClaudeOrchestrator", () => {
       expect(() => {
         orchestrator.updateIssueState("non-existent-key", "Building");
       }).not.toThrow();
+    });
+  });
+
+  describe("onAgentDeath callback", () => {
+    it("accepts onAgentDeath callback in config", () => {
+      const deathCallback = (_info: AgentDeathInfo) => {};
+      const orch = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Scoping"],
+        onAgentDeath: deathCallback,
+      });
+
+      expect(orch).toBeDefined();
+    });
+
+    it("getAgentDeathHandler returns the configured callback", () => {
+      const deathCallback = (_info: AgentDeathInfo) => {};
+      const orch = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Scoping"],
+        onAgentDeath: deathCallback,
+      });
+
+      expect(orch.getAgentDeathHandler()).toBe(deathCallback);
+    });
+
+    it("getAgentDeathHandler returns undefined when not configured", () => {
+      expect(orchestrator.getAgentDeathHandler()).toBeUndefined();
     });
   });
 });
