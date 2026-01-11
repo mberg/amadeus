@@ -278,6 +278,9 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
+    // Clear any stray characters in the input buffer (fixes agentapi "x" bug)
+    await this.clearInputBuffer(agent.port);
+
     // Acknowledge the issue before starting the planning process
     await this.acknowledgeIssue(issue);
 
@@ -449,6 +452,22 @@ export class ClaudeOrchestrator {
       await Bun.sleep(500);
     }
     console.warn(`[Agent] Agent on port ${port} never became stable, sending anyway`);
+  }
+
+  private async clearInputBuffer(port: number): Promise<void> {
+    // Send Ctrl+U (ASCII 21) to clear the terminal input line
+    // This fixes a bug where agentapi leaves stray characters (like "x") in the buffer
+    try {
+      await fetch(`http://localhost:${port}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "\x15", type: "user" }),
+      });
+      // Wait for agent to stabilize after the clear
+      await this.waitForStableStatus(port, 10);
+    } catch {
+      // Ignore errors - this is a best-effort cleanup
+    }
   }
 
   async stopAgent(key: string): Promise<void> {
