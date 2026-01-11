@@ -14,6 +14,7 @@ const orchestrator = new ClaudeOrchestrator({
   claudeBotUserId: CONFIG.claudeBotUserId,
   useWorktrees: CONFIG.useWorktrees,
   worktreesDir: CONFIG.worktreesDir,
+  linearWorkspace: CONFIG.linearWorkspace,
 });
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
@@ -57,7 +58,10 @@ async function handleIssueWebhook(
 
   if (orchestrator.shouldStartAgent(issue)) {
     if (orchestrator.hasAgent(agentKey)) {
-      await orchestrator.sendMessage(agentKey, buildPrompt(issue));
+      await orchestrator.sendMessage(
+        agentKey,
+        buildPrompt(issue, undefined, CONFIG.linearWorkspace)
+      );
     } else {
       await orchestrator.startAgent(issue);
     }

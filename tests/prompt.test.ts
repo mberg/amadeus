@@ -146,6 +146,34 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("Feedback Needed");
     expect(prompt).toMatch(/Feedback Needed.*STOP|STOP.*Feedback Needed/i);
   });
+
+  it("includes workspace name for constructing mention URLs", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue, undefined, "ona");
+
+    expect(prompt).toContain("ona");
+    expect(prompt).toContain("linear.app");
+    expect(prompt).toContain("profiles");
+  });
+
+  it("includes instructions to mention issue creator when requesting feedback", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue, undefined, "ona");
+
+    // Should instruct agent to @mention the creator/assignee
+    expect(prompt).toMatch(/mention|@|notify/i);
+    expect(prompt).toMatch(/linear-cli issues get/i);
+  });
 });
 
 describe("buildCommentPrompt", () => {

@@ -3,8 +3,13 @@
 
 import type { LinearIssue, LinearComment, AgentProfile } from "./types";
 
-export function buildPrompt(issue: LinearIssue, profile?: AgentProfile): string {
+export function buildPrompt(
+  issue: LinearIssue,
+  profile?: AgentProfile,
+  workspace?: string
+): string {
   const profileSection = buildProfileSection(profile);
+  const notificationSection = buildNotificationSection(workspace, issue.identifier);
 
   return `
 ## New Task from Linear
@@ -91,7 +96,7 @@ Please review and let me know if you'd like any changes to this plan." ${issue.i
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
 \`\`\`
-
+${notificationSection}
 **IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
 
 ### Important
@@ -112,6 +117,33 @@ function buildProfileSection(profile?: AgentProfile): string {
 ### Profile Capabilities
 
 ${profile.promptAdditions.join("\n\n")}
+`;
+}
+
+function buildNotificationSection(
+  workspace?: string,
+  issueIdentifier?: string
+): string {
+  if (!workspace) {
+    return "";
+  }
+
+  return `
+**Notify the issue creator:** Before setting the status, @mention the issue creator so they receive an inbox notification:
+
+1. Get the issue creator's info:
+\`\`\`bash
+linear-cli issues get ${issueIdentifier ?? "<identifier>"} -o json
+\`\`\`
+
+2. Find the creator/assignee email (e.g., \`mberg@ona.io\`) and extract the username prefix (e.g., \`mberg\`)
+
+3. Include a mention in your plan comment by adding the profile URL:
+\`\`\`
+https://linear.app/${workspace}/profiles/<username> please review this plan.
+\`\`\`
+
+Linear will convert this URL to an @mention, triggering an inbox notification for the user.
 `;
 }
 
