@@ -23,7 +23,7 @@ Amadeus uses Linear as a control plane to manage multiple Claude Code agents. Ea
 │  • Receives Linear webhooks                                                 │
 │  • Spawns/stops agents based on issue state                                 │
 │  • Routes messages to correct agent                                         │
-│  • Maps Linear teams to project directories                                 │
+│  • Maps Linear projects/teams to local repositories                         │
 └─────────────────────────────────────────────────────────────────────────────┘
         │            │            │
         │ spawns     │            │ (one agent per issue)
@@ -153,15 +153,41 @@ linear-cli issues update ONA-123 --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 
 ## Multi-Project Support
 
-Amadeus supports running agents across multiple projects simultaneously:
+Amadeus supports running agents across multiple projects simultaneously. You can map either **Linear Projects** or **Linear Teams** to GitHub repositories.
 
-| Linear Team | Project Path | Agent Port |
-|-------------|--------------|------------|
-| ENG | /code/backend | 8001 |
-| ENG | /code/backend | 8002 (different issue) |
-| DESIGN | /code/frontend | 8003 |
+### Project-Based Routing (Recommended)
 
-Each issue gets its own agent instance, even if multiple issues target the same project. Agents are isolated and don't interfere with each other.
+Map Linear Project names to repositories:
+
+```bash
+PROJECT_PATHS=Amadeus:/code/amadeus,Frontend:/code/frontend,"Data Platform":/code/data-platform
+```
+
+When an issue from project "Amadeus" triggers, Amadeus spawns Claude Code in `/code/amadeus`.
+
+### Team-Based Routing (Fallback)
+
+If no project mapping matches, Amadeus falls back to team-based routing:
+
+```bash
+PROJECT_PATHS=ONA:/code/ona-default,DESIGN:/code/design-default
+```
+
+### Lookup Order
+
+1. **Project name** - If the issue has a project and that project name is in `PROJECT_PATHS`
+2. **Team key** - If no project match, try the team key (e.g., `ONA`, `DESIGN`)
+3. **DEFAULT** - Falls back to `PROJECT_PATHS=DEFAULT:/some/path` if configured
+
+### Example Setup
+
+| Linear Project | GitHub Repo | Agent Port |
+|---------------|-------------|------------|
+| Amadeus | /code/amadeus | 8001 |
+| Amadeus | /code/amadeus | 8002 (different issue) |
+| Frontend | /code/frontend | 8003 |
+
+Each issue gets its own agent instance, even if multiple issues target the same project. Agents are isolated via git worktrees.
 
 ## Git Worktrees
 
@@ -425,7 +451,7 @@ Set these environment variables:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `LINEAR_WEBHOOK_SECRET` | Yes | Signing secret from Linear webhook settings |
-| `PROJECT_PATHS` | No | Team-to-path mappings: `TEAM1:/path1,TEAM2:/path2` |
+| `PROJECT_PATHS` | No | Project/team-to-path mappings: `ProjectName:/path1,TEAM:/path2` |
 | `TRIGGER_STATES` | No | States that spawn agents (default: `Scoping,Ready to Build`) |
 | `CLAUDE_BOT_USER_ID` | No | Linear user ID to trigger on assignment |
 | `PORT` | No | Server port (default: 5678) |
@@ -437,14 +463,20 @@ Set these environment variables:
 
 ### Project Path Mapping
 
-Map Linear team keys to local project directories:
+Map Linear Project names or team keys to local repositories:
 
 ```bash
-# .env
-PROJECT_PATHS=ENG:/Users/you/code/backend,DESIGN:/Users/you/code/frontend
+# .env - Map by Linear Project name (recommended)
+PROJECT_PATHS=Amadeus:/Users/you/code/amadeus,Frontend:/Users/you/code/frontend
+
+# Or map by team key as fallback
+PROJECT_PATHS=ONA:/Users/you/code/ona-default
+
+# Mix both - project names take priority over team keys
+PROJECT_PATHS=Amadeus:/code/amadeus,Frontend:/code/frontend,ONA:/code/ona-fallback
 ```
 
-When an issue from team "ENG" triggers, Amadeus spawns Claude Code in `/Users/you/code/backend`.
+When an issue triggers, Amadeus looks up the path using: project name → team key → DEFAULT.
 
 ## Endpoints
 

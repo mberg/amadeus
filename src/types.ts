@@ -13,6 +13,7 @@ export interface LinearIssue {
   assignee?: { id: string };
   labels?: { name: string }[];
   team?: { key: string };
+  project?: { id: string; name: string };
   trashed?: boolean;
 }
 
