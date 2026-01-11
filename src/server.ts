@@ -6,6 +6,7 @@ import { CONFIG } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator, type AgentDeathInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
+import { isBotComment } from "./comment-filter";
 import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
@@ -122,6 +123,14 @@ async function handleCommentWebhook(
   if (isDraft(comment.issue)) {
     console.log(
       `[${new Date().toISOString()}] Skipping comment on draft issue: ${comment.issue.identifier}`
+    );
+    return;
+  }
+
+  // Skip comments from the Claude bot itself to prevent self-responses
+  if (isBotComment(comment, CONFIG.claudeBotUserId)) {
+    console.log(
+      `[${new Date().toISOString()}] Skipping bot comment on ${comment.issue.identifier}`
     );
     return;
   }
