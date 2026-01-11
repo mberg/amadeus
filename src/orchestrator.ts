@@ -7,6 +7,7 @@ import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./ty
 import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
+import { applyProfileConfig } from "./profile-config";
 
 export interface AgentDeathInfo {
   key: string;
@@ -192,6 +193,14 @@ export class ClaudeOrchestrator {
         );
         console.log(`[Agent] Falling back to project root: ${projectPath}`);
       }
+    }
+
+    // Apply profile configuration (MCP servers, permissions, skills)
+    const configResult = await applyProfileConfig(workingDir, profile);
+    if (!configResult.success) {
+      console.warn(`[Agent] Failed to apply profile config: ${configResult.error}`);
+    } else if (configResult.filesWritten.length > 0) {
+      console.log(`[Agent] Applied profile config (${configResult.filesWritten.length} files)`);
     }
 
     const proc = spawn({
