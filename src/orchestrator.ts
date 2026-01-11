@@ -256,6 +256,9 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key)!;
     agent.status = "idle";
 
+    // Give Claude Code a moment to fully settle after startup
+    await Bun.sleep(2000);
+
     // Acknowledge the issue before starting the planning process
     await this.acknowledgeIssue(issue);
 
