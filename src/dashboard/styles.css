@@ -32,6 +32,11 @@
     --chart-3: 43 74% 49%;
     --chart-4: 220 70% 50%;
     --chart-5: 0 84% 60%;
+    --status-planning: 45 86% 62%;
+    --status-building: 189 69% 48%;
+    --status-feedback: 0 79% 63%;
+    --status-review: 150 43% 51%;
+    --status-done: 234 57% 60%;
   }
 
   .dark {
@@ -59,6 +64,11 @@
     --chart-3: 43 74% 49%;
     --chart-4: 220 70% 50%;
     --chart-5: 0 62% 50%;
+    --status-planning: 45 86% 62%;
+    --status-building: 189 69% 48%;
+    --status-feedback: 0 79% 63%;
+    --status-review: 150 43% 51%;
+    --status-done: 234 57% 60%;
   }
 
   * {

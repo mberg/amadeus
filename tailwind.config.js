@@ -61,6 +61,13 @@ module.exports = {
           4: "hsl(var(--chart-4))",
           5: "hsl(var(--chart-5))",
         },
+        status: {
+          planning: "hsl(var(--status-planning))",
+          building: "hsl(var(--status-building))",
+          feedback: "hsl(var(--status-feedback))",
+          review: "hsl(var(--status-review))",
+          done: "hsl(var(--status-done))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
