@@ -12,6 +12,21 @@ import { HealthMonitor } from "./health-monitor";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged } from "./github";
+import {
+  shouldNotify,
+  notifyFeedbackNeeded,
+  notifyReviewReady,
+} from "./notifications";
+
+function requireAuth(req: Request): Response | null {
+  if (!CONFIG.apiToken) return null;
+
+  const token = req.headers.get("X-Amadeus-Token");
+  if (token !== CONFIG.apiToken) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return null;
+}
 
 // Initialize persistence layer
 const persistence = new AgentPersistence(CONFIG.dbPath);
@@ -89,6 +104,45 @@ function shouldTerminateAgent(issue: LinearIssue): boolean {
   );
 }
 
+async function sendStateNotification(
+  previousState: string | undefined,
+  newState: string,
+  issue: LinearIssue
+): Promise<void> {
+  if (!CONFIG.notificationEmail || !CONFIG.resendApiKey) {
+    return;
+  }
+
+  if (!shouldNotify(previousState, newState)) {
+    return;
+  }
+
+  const options = {
+    issueIdentifier: issue.identifier,
+    issueTitle: issue.title,
+    to: CONFIG.notificationEmail,
+    apiKey: CONFIG.resendApiKey,
+    from: CONFIG.notificationFromEmail,
+  };
+
+  let result;
+  if (newState === "Feedback Needed") {
+    result = await notifyFeedbackNeeded(options);
+  } else if (newState === "Review") {
+    result = await notifyReviewReady(options);
+  }
+
+  if (result?.success) {
+    console.log(
+      `[Notification] Sent ${newState} notification for ${issue.identifier}`
+    );
+  } else if (result?.error) {
+    console.warn(
+      `[Notification] Failed to send for ${issue.identifier}: ${result.error}`
+    );
+  }
+}
+
 async function handleIssueWebhook(
   action: string,
   issue: LinearIssue
@@ -126,7 +180,13 @@ async function handleIssueWebhook(
 
   // Update Linear state if agent exists (for dashboard display)
   if (orchestrator.hasAgent(agentKey) && issue.state?.name) {
+    const previousState = orchestrator.getAgentState(agentKey);
     orchestrator.updateIssueState(agentKey, issue.state.name);
+
+    // Send notification on state transitions
+    sendStateNotification(previousState, issue.state.name, issue).catch(
+      (err) => console.error("[Notification] Error:", err)
+    );
   }
 
   if (orchestrator.shouldStartAgent(issue)) {
@@ -322,6 +382,16 @@ export const server = Bun.serve({
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
 
+      // Validate timestamp to prevent replay attacks
+      const MAX_AGE_MS = 60000; // 60 seconds tolerance
+      const now = Date.now();
+      const webhookTimestamp = data.webhookTimestamp;
+
+      if (!webhookTimestamp || Math.abs(now - webhookTimestamp) > MAX_AGE_MS) {
+        console.warn(`[Webhook] Timestamp validation failed: ${webhookTimestamp}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+
       // Process async, respond immediately
       handleWebhook(data).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
@@ -332,6 +402,9 @@ export const server = Bun.serve({
 
     // Status dashboard (JSON)
     if (req.method === "GET" && url.pathname === "/status") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       return Response.json({
         agents: orchestrator.getStatus(),
         timestamp: new Date().toISOString(),
@@ -340,6 +413,9 @@ export const server = Bun.serve({
 
     // Dashboard config
     if (req.method === "GET" && url.pathname === "/config") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
       });
@@ -347,6 +423,9 @@ export const server = Bun.serve({
 
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       try {
         const { agentKey, message } = await req.json();
         if (!agentKey || !message) {
@@ -362,6 +441,9 @@ export const server = Bun.serve({
     // Agent messages proxy endpoint
     const messagesMatch = url.pathname.match(/^\/agents\/([^/]+)\/messages$/);
     if (req.method === "GET" && messagesMatch) {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       const agentKey = decodeURIComponent(messagesMatch[1]);
       const agent = orchestrator.getStatus().find((a) => a.key === agentKey);
 
