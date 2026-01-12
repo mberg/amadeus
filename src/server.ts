@@ -2,7 +2,7 @@
 // ABOUTME: Entry point for the Bun server.
 
 import { $ } from "bun";
-import { CONFIG } from "./config";
+import { CONFIG, getAllWebhookSecrets } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator, type AgentDeathInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
@@ -47,6 +47,9 @@ const orchestrator = new ClaudeOrchestrator({
   worktreesDir: CONFIG.worktreesDir,
   onAgentDeath: handleAgentDeath,
   linearWorkspace: CONFIG.linearWorkspace,
+  profilesDir: CONFIG.profilesDir,
+  defaultProfile: CONFIG.defaultProfile,
+  teamProfiles: CONFIG.teamProfiles,
 });
 
 // Initialize health monitor
@@ -359,14 +362,21 @@ export const server = Bun.serve({
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
-      if (
-        !(await verifyLinearSignature(
-          payload,
-          signature,
-          CONFIG.linearWebhookSecret
-        ))
-      ) {
-        console.warn("[Webhook] Invalid signature");
+      // Try each realm's webhook secret for verification
+      const secrets = getAllWebhookSecrets();
+      let verified = false;
+      let verifiedRealm: string | null = null;
+
+      for (const { secret, realmName } of secrets) {
+        if (await verifyLinearSignature(payload, signature, secret)) {
+          verified = true;
+          verifiedRealm = realmName;
+          break;
+        }
+      }
+
+      if (!verified) {
+        console.warn("[Webhook] Invalid signature - no matching realm secret");
         return new Response("Unauthorized", { status: 401 });
       }
 
