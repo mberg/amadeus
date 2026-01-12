@@ -39,3 +39,22 @@ export function stripTerminalSequences(text: string): string {
     .replace(controlPattern, "")
     .trim();
 }
+
+export type StateVariant =
+  | "planning"
+  | "building"
+  | "feedback"
+  | "review"
+  | "done"
+  | "default";
+
+export function getStateVariant(state: string | undefined): StateVariant {
+  if (!state) return "default";
+  const lower = state.toLowerCase();
+  if (lower.includes("planning") || lower.includes("scoping")) return "planning";
+  if (lower.includes("build")) return "building";
+  if (lower.includes("feedback")) return "feedback";
+  if (lower.includes("review")) return "review";
+  if (lower.includes("done")) return "done";
+  return "default";
+}
