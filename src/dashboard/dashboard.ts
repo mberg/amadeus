@@ -16,6 +16,7 @@ interface Agent {
   issueIdentifier: string;
   issueTitle: string;
   linearState?: string;
+  activeSkills?: string[];
   status: string;
   uptime: number;
   worktreePath?: string;
@@ -121,6 +122,10 @@ function renderAgents(agents: Agent[]): void {
         ? `<a href="${linearUrl}" class="linear-link" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ Linear</a>`
         : "";
 
+      const skillBadgesHtml = agent.activeSkills?.length
+        ? `<div class="skill-badges">${agent.activeSkills.map((skill) => `<span class="skill-badge">${escapeHtml(skill)}</span>`).join("")}</div>`
+        : "";
+
       return `
         <div class="agent-card clickable" data-agent-key="${escapeHtml(agent.key)}" onclick="openConsole('${escapeHtml(agent.key)}')">
           <div class="agent-header">
@@ -130,6 +135,7 @@ function renderAgents(agents: Agent[]): void {
                 ${agent.linearState ? `<span class="linear-state-badge ${getLinearStateClass(agent.linearState)}">${escapeHtml(agent.linearState)}</span>` : ""}
               </div>
               <div class="agent-title">${escapeHtml(agent.issueTitle)}</div>
+              ${skillBadgesHtml}
               ${linearLinkHtml}
             </div>
             <div class="agent-actions">

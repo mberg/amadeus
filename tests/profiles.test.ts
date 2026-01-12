@@ -4,7 +4,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { loadProfiles, resolveProfile, mergeProfiles } from "../src/profiles";
+import { loadProfiles, resolveProfile, mergeProfiles, resolveSkillLabels } from "../src/profiles";
 import type { AgentProfile, LinearIssue } from "../src/types";
 
 const TEST_DIR = "/tmp/amadeus-profile-tests";
@@ -239,5 +239,119 @@ describe("Profile Merging", () => {
     expect(merged.skills?.install).toContain("base-skill");
     expect(merged.skills?.install).toContain("frontend-design");
     expect(merged.skills?.local).toContain("custom-skill");
+  });
+});
+
+describe("Skill Label Resolution", () => {
+  let skillProfiles: Record<string, AgentProfile>;
+
+  beforeEach(async () => {
+    await mkdir(PROFILES_DIR, { recursive: true });
+
+    await writeProfile("frontend-design", {
+      skills: {
+        marketplaces: ["anthropics/skills"],
+        install: ["frontend-design@anthropic-agent-skills"],
+      },
+      promptAdditions: ["You have the frontend-design skill enabled."],
+    });
+
+    await writeProfile("code-review", {
+      skills: {
+        install: ["code-review@anthropic-agent-skills"],
+      },
+      promptAdditions: ["You have the code-review skill enabled."],
+    });
+
+    skillProfiles = await loadProfiles(PROFILES_DIR);
+  });
+
+  afterEach(async () => {
+    await rm(TEST_DIR, { recursive: true, force: true });
+  });
+
+  test("resolves single skill from label", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "frontend-design" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual(["frontend-design"]);
+  });
+
+  test("resolves multiple skills from labels", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "frontend-design" }, { name: "code-review" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toContain("frontend-design");
+    expect(skills).toContain("code-review");
+    expect(skills).toHaveLength(2);
+  });
+
+  test("ignores labels that don't match skill profiles", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "frontend-design" }, { name: "bug" }, { name: "amadeus" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual(["frontend-design"]);
+  });
+
+  test("returns empty array when no skill labels match", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "bug" }, { name: "amadeus" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual([]);
+  });
+
+  test("handles issue with no labels", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual([]);
+  });
+
+  test("skill label matching is case-insensitive", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "Frontend-Design" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual(["frontend-design"]);
+  });
+
+  test("ignores profile: prefixed labels", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "profile:frontend-design" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual([]);
   });
 });
