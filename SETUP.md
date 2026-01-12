@@ -236,143 +236,175 @@ Dashboard: http://localhost:5678/dashboard
 
 ## Configuration
 
-### Environment Variables
+Amadeus uses two configuration files:
+- **`amadeus.config.yaml`** - Non-sensitive configuration (realms, projects, settings)
+- **`.env`** - Secrets (API keys, webhook secrets)
 
-Create a `.env` file in the project root. Here's a complete reference:
+### Configuration File (amadeus.config.yaml)
 
-#### Required
+Copy `amadeus.config.example.yaml` to `amadeus.config.yaml` and customize for your setup.
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `LINEAR_WEBHOOK_SECRET` | Signing secret from Linear webhook settings | `lin_wh_xxxxxxxxxxxx` |
+#### Complete Example
 
-#### Recommended
+```yaml
+realms:
+  # A realm groups a Linear workspace with its projects and credentials
+  ona:
+    # Linear workspace slug (e.g., "ona" for linear.app/ona)
+    linearWorkspace: ona
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `LINEAR_API_KEY` | Your Linear API key (for agents to use linear-cli) | `lin_api_xxxxxxxxxxxx` |
-| `PROJECT_PATHS` | Maps Linear projects/teams to local repos | See examples below |
-| `LINEAR_WORKSPACE` | Your Linear workspace slug for @mentions | `recode` |
+    # Environment variable names for secrets (actual values go in .env)
+    apiKeyEnvVar: LINEAR_API_KEY_ONA
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_ONA
 
-#### Optional
+    # Optional: User ID for assignment-based triggering
+    # claudeBotUserId: user-id-here
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `5678` | Server port |
-| `TRIGGER_STATES` | `Planning` | States that spawn agents (comma-separated) |
-| `USE_WORKTREES` | `true` | Enable git worktrees for isolation |
-| `WORKTREES_DIR` | `../.amadeus-worktrees` | Where to create worktrees |
-| `PROFILES_DIR` | `./agent-profiles` | Agent profile directory |
-| `DEFAULT_PROFILE` | `base` | Default profile when no label matches |
-| `TEAM_PROFILES` | - | Per-team defaults: `TEAM1:profile1,TEAM2:profile2` |
-| `DB_PATH` | `./amadeus-agents.db` | SQLite database path |
-| `HEALTH_CHECK_INTERVAL_MS` | `30000` | Health check frequency |
+    # Projects in this realm - map team keys to local repositories
+    projects:
+      - teamKey: ONA
+        path: /Users/matt/code/amadeus
+        profile: base  # optional, falls back to global.defaultProfile
 
-### Project Path Mapping (PROJECT_PATHS)
+      - teamKey: DESIGN
+        path: /Users/matt/code/design
+        profile: frontend
 
-This is the most important configuration. It tells Amadeus which local repository to use for each Linear project or team.
+  # Example of a second realm for a different Linear workspace
+  recode:
+    linearWorkspace: recode
+    apiKeyEnvVar: LINEAR_API_KEY_RECODE
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_RECODE
+    projects:
+      - teamKey: RECODE
+        path: /Users/matt/code/recode-app
 
-#### Format
+global:
+  # Server port
+  port: 5678
 
+  # Workflow states that trigger agent spawn
+  triggerStates:
+    - Planning
+
+  # Git worktrees for issue isolation
+  useWorktrees: true
+  worktreesDir: /Users/matt/.amadeus-worktrees
+
+  # Agent profiles directory and default
+  profilesDir: ./agent-profiles
+  defaultProfile: base
+
+  # SQLite database for agent state
+  dbPath: ./amadeus-agents.db
+
+  # Health monitoring intervals (milliseconds)
+  healthCheckIntervalMs: 30000
+  healthCheckTimeoutMs: 5000
 ```
-PROJECT_PATHS=Name1:/path/to/repo1,Name2:/path/to/repo2
-```
 
-#### Example 1: Single Project
+### Environment Variables (.env)
+
+Create a `.env` file in the project root with your secrets:
 
 ```bash
-# All issues from the "Amadeus" project go to /code/amadeus
-PROJECT_PATHS=Amadeus:/Users/matt/code/amadeus
+# Linear API keys (one per realm, referenced by apiKeyEnvVar in config)
+LINEAR_API_KEY_ONA=lin_api_xxxxxxxxxxxxx
+LINEAR_API_KEY_RECODE=lin_api_xxxxxxxxxxxxx
+
+# Linear webhook secrets (one per realm, referenced by webhookSecretEnvVar in config)
+LINEAR_WEBHOOK_SECRET_ONA=your_webhook_secret_here
+LINEAR_WEBHOOK_SECRET_RECODE=another_webhook_secret_here
+
+# Optional: Label-based agent triggering (see below)
+AGENT_NAME=Amadeus
+
+# Optional: API authentication for dashboard endpoints
+# AMADEUS_API_TOKEN=your_secure_token_here
+
+# Optional: Email notifications (if using Resend)
+# RESEND_API_KEY=re_xxxxxxxxxxxxx
+# NOTIFICATION_EMAIL=your_phone@carrier.net
+# NOTIFICATION_FROM_EMAIL=amadeus@yourdomain.com
 ```
 
-#### Example 2: Multiple Projects
+### Realms
+
+A **realm** groups a Linear workspace with its projects and credentials. This enables:
+- **Multi-workspace support**: Handle issues from multiple Linear workspaces
+- **Credential isolation**: Each workspace uses its own API key
+- **Project routing**: Map teams to different repositories
+
+#### Single Realm Example
+
+For a single Linear workspace:
+
+```yaml
+realms:
+  mycompany:
+    linearWorkspace: mycompany
+    apiKeyEnvVar: LINEAR_API_KEY
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET
+    projects:
+      - teamKey: ENGINEERING
+        path: /code/main-app
+      - teamKey: FRONTEND
+        path: /code/frontend
+```
+
+#### Multi-Realm Example
+
+For multiple Linear workspaces:
+
+```yaml
+realms:
+  company-a:
+    linearWorkspace: company-a
+    apiKeyEnvVar: LINEAR_API_KEY_A
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_A
+    projects:
+      - teamKey: ENG
+        path: /code/company-a
+
+  company-b:
+    linearWorkspace: company-b
+    apiKeyEnvVar: LINEAR_API_KEY_B
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_B
+    projects:
+      - teamKey: DEV
+        path: /code/company-b
+```
+
+### Label-Based Agent Triggering
+
+By default, Amadeus processes all issues that enter trigger states (like "Planning"). You can restrict this to only issues with a specific label.
+
+#### Enabling Label Filtering
+
+Set the `AGENT_NAME` environment variable:
 
 ```bash
-# Different Linear projects map to different repositories
-PROJECT_PATHS=Backend:/code/backend,Frontend:/code/frontend,Mobile:/code/mobile-app
+# In .env
+AGENT_NAME=Amadeus
 ```
 
-#### Example 3: Project Names with Spaces
+#### How It Works
 
-```bash
-# Quote names containing spaces
-PROJECT_PATHS="Data Platform":/code/data-platform,Backend:/code/backend
-```
+With `AGENT_NAME=Amadeus`:
+- Issues **with** the "Amadeus" label → agent spawns when moved to Planning
+- Issues **without** the "Amadeus" label → ignored by Amadeus
 
-#### Example 4: Team-Based Fallback
+The label matching is **case-insensitive** (both "Amadeus" and "amadeus" work).
 
-```bash
-# If no project match, fall back to team key
-PROJECT_PATHS=RECODE:/code/recode-default,DESIGN:/code/design-default
-```
+#### Use Cases
 
-#### Example 5: Mixed Project + Team Configuration
+1. **Selective automation**: Only AI-assisted issues get processed
+2. **Gradual rollout**: Start with specific issues before enabling for all
+3. **Team control**: Teams decide which issues get AI assistance
 
-```bash
-# Projects take priority, teams are fallback
-PROJECT_PATHS=Amadeus:/code/amadeus,Frontend:/code/frontend,RECODE:/code/recode-fallback
-```
+#### Without Label Filtering
 
-#### Example 6: Multi-Team Organization
-
-```bash
-# Different teams working on different codebases
-PROJECT_PATHS=ENGINEERING:/code/main-app,PLATFORM:/code/platform,MOBILE:/code/mobile,DESIGN:/code/design-system
-```
-
-#### Lookup Order
-
-When an issue triggers, Amadeus determines the repository path:
-
-1. **Project name** → Check if issue's project name is in PROJECT_PATHS
-2. **Team key** → If no project match, check if team key (e.g., `RECODE`) is in PROJECT_PATHS
-3. **DEFAULT** → Falls back to `PROJECT_PATHS=DEFAULT:/some/path` if configured
-
-### Complete .env Example
-
-```bash
-# ============================================
-# Required
-# ============================================
-LINEAR_WEBHOOK_SECRET=lin_wh_abc123xyz
-
-# ============================================
-# Linear Integration
-# ============================================
-LINEAR_API_KEY=lin_api_abc123xyz
-LINEAR_WORKSPACE=recode
-
-# ============================================
-# Project Mappings
-# ============================================
-# Map Linear projects to local repositories
-PROJECT_PATHS=Amadeus:/Users/matt/code/amadeus,Frontend:/Users/matt/code/frontend,"Data Platform":/Users/matt/code/data-platform
-
-# ============================================
-# Agent Behavior
-# ============================================
-# What states trigger agent spawn
-TRIGGER_STATES=Planning
-
-# ============================================
-# Git Worktrees
-# ============================================
-USE_WORKTREES=true
-WORKTREES_DIR=/Users/matt/.amadeus-worktrees
-
-# ============================================
-# Agent Profiles
-# ============================================
-PROFILES_DIR=./agent-profiles
-DEFAULT_PROFILE=base
-# Per-team profile defaults
-TEAM_PROFILES=DESIGN:frontend,PLATFORM:backend
-
-# ============================================
-# Server
-# ============================================
-PORT=5678
-```
+If `AGENT_NAME` is not set, all issues in trigger states are processed (original behavior).
 
 ### Agent Profiles
 
