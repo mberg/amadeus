@@ -1,5 +1,5 @@
 // ABOUTME: Statistics bar showing task counts.
-// ABOUTME: Displays total, working, and idle task counts.
+// ABOUTME: Displays total, working, and idle task counts in compact cards.
 
 import type { Task } from "../types";
 
@@ -10,20 +10,16 @@ interface StatsBarProps {
 interface StatCardProps {
   value: number;
   label: string;
-  description?: string;
 }
 
-function StatCard({ value, label, description }: StatCardProps) {
+function StatCard({ value, label }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
-      </div>
-      <div className="mt-2">
-        <p className="text-2xl font-bold text-foreground">{value}</p>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
+    <div className="rounded-md border border-border bg-card px-4 py-3">
+      <div className="flex items-baseline gap-2">
+        <span className="text-xl font-semibold tabular-nums text-foreground">
+          {value}
+        </span>
+        <span className="text-sm text-muted-foreground">{label}</span>
       </div>
     </div>
   );
@@ -35,22 +31,10 @@ export function StatsBar({ tasks }: StatsBarProps) {
   const idleTasks = tasks.filter((t) => t.status === "idle").length;
 
   return (
-    <div className="mb-6 grid gap-4 md:grid-cols-3">
-      <StatCard
-        value={totalTasks}
-        label="Total Tasks"
-        description="Active agent instances"
-      />
-      <StatCard
-        value={workingTasks}
-        label="Working"
-        description="Currently processing"
-      />
-      <StatCard
-        value={idleTasks}
-        label="Idle"
-        description="Waiting for input"
-      />
+    <div className="mb-6 flex gap-3">
+      <StatCard value={totalTasks} label="Total" />
+      <StatCard value={workingTasks} label="Working" />
+      <StatCard value={idleTasks} label="Idle" />
     </div>
   );
 }
