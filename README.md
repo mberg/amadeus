@@ -620,12 +620,95 @@ bun test --watch
 bun run chat
 ```
 
-## Security Note
+## Security
 
-Agents run with `--dangerously-skip-permissions` so they can work autonomously without prompting for approval. This means:
+Amadeus grants significant autonomy to AI agents. Understand these security implications before deploying.
 
-- Agents can read/write any files in the project directory
-- Agents can run shell commands
-- Always review agent output and PRs before merging
+### Trust Model
 
-Only run Amadeus in environments where you trust the Linear issues being sent to it.
+**Agent Permissions**
+
+Agents run with `--dangerously-skip-permissions`, granting them:
+- Full read/write access to the project directory and git worktree
+- Ability to execute arbitrary shell commands
+- Network access for API calls, package installation, etc.
+
+This is required for autonomous operation. There is no sandboxing beyond the git worktree boundary.
+
+**Localhost Access**
+
+Each agent runs an agentapi HTTP server on localhost (ports 8001+) without authentication. Any process on the machine can:
+- Send messages to agents
+- Read agent conversation history
+- Trigger agent actions
+
+This is acceptable for single-user development machines. For shared servers, consider additional isolation (containers, VMs, separate user accounts).
+
+**Webhook Verification**
+
+Linear webhooks are verified using HMAC-SHA256 signatures:
+- Each webhook includes a `linear-signature` header
+- Amadeus validates this against your `LINEAR_WEBHOOK_SECRET`
+- Invalid signatures are rejected with 401 Unauthorized
+
+Keep your webhook secret confidential. Rotate it if compromised.
+
+### Deployment Considerations
+
+**Network Exposure**
+
+Only the `/webhook` endpoint should be exposed to the internet. Keep these endpoints internal:
+- `/status` - Agent status information
+- `/dashboard` - Visual dashboard
+- `/trigger` - Manual agent control
+- `/config` - Server configuration
+
+If using a reverse proxy, allowlist only `/webhook` for external access.
+
+**Secrets Management**
+
+Required secrets:
+- `LINEAR_WEBHOOK_SECRET` - Validates incoming webhooks
+
+Recommended secrets:
+- `LINEAR_API_KEY` - For agents to update Linear via linear-cli
+- `ANTHROPIC_API_KEY` - For Claude Code (typically in user environment)
+
+Never commit `.env` files. The repository includes `.env` in `.gitignore`.
+
+**Suitable Environments**
+
+Amadeus is designed for:
+- Personal development machines
+- Dedicated CI/CD runners
+- Isolated cloud instances
+
+Not recommended for:
+- Shared multi-user servers (without containerization)
+- Production environments with sensitive data
+- Machines where untrusted users have local access
+
+### Process Isolation
+
+**Git Worktrees**
+
+Each agent operates in an isolated git worktree:
+- Agents cannot interfere with each other's file changes
+- Each worktree is on a dedicated branch (`issue/{identifier}`)
+- Worktrees are cleaned up when agents stop
+
+**Environment Variables**
+
+Agents inherit environment variables from the Amadeus process, plus:
+- `LINEAR_ISSUE_ID` - The Linear issue ID
+- `LINEAR_ISSUE_IDENTIFIER` - The issue identifier (e.g., ONA-123)
+
+Be mindful of sensitive variables in your environment.
+
+### Review Practices
+
+Always review agent output before merging:
+- Check PRs for unintended changes
+- Verify agents haven't modified files outside their scope
+- Review commit history for unexpected patterns
+- Test changes in a staging environment when possible
