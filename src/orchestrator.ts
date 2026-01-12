@@ -50,6 +50,12 @@ interface CacheEntry {
   timestamp: number;
 }
 
+// Pending message entry for buffering
+export interface PendingMessage {
+  message: string;
+  timestamp: number;
+}
+
 // Deduplication cache: agentKey -> recent message hashes
 const MESSAGE_CACHE_TTL_MS = 60000; // 1 minute TTL
 const MESSAGE_CACHE_MAX_SIZE = 20; // Max entries per agent
@@ -58,6 +64,8 @@ export class ClaudeOrchestrator {
   private agents = new Map<string, AgentInstance>();
   private stoppingAgents = new Set<string>(); // Track agents being intentionally stopped
   private messageCache = new Map<string, CacheEntry[]>(); // Deduplication cache
+  private pendingMessages = new Map<string, PendingMessage[]>(); // Buffered messages for busy agents
+  private pendingMessageTimer: ReturnType<typeof setInterval> | null = null;
   private nextPort = 8001;
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
@@ -154,6 +162,144 @@ export class ClaudeOrchestrator {
 
   getAgentsInReviewState(): AgentStatus[] {
     return this.getStatus().filter((agent) => agent.linearState === "Review");
+  }
+
+  // Pending message buffer methods
+  bufferMessage(key: string, message: string): void {
+    const pending = this.pendingMessages.get(key) ?? [];
+    pending.push({ message, timestamp: Date.now() });
+    this.pendingMessages.set(key, pending);
+    console.log(`[Agent] Buffered message for ${key} (${pending.length} pending)`);
+    this.startPendingMessageDelivery();
+  }
+
+  hasPendingMessages(key: string): boolean {
+    const pending = this.pendingMessages.get(key);
+    return pending !== undefined && pending.length > 0;
+  }
+
+  getPendingMessageCount(key: string): number {
+    return this.pendingMessages.get(key)?.length ?? 0;
+  }
+
+  getPendingMessages(key: string): PendingMessage[] {
+    return this.pendingMessages.get(key) ?? [];
+  }
+
+  clearPendingMessages(key: string): void {
+    this.pendingMessages.delete(key);
+  }
+
+  private startPendingMessageDelivery(): void {
+    if (this.pendingMessageTimer !== null) {
+      return; // Already running
+    }
+
+    const DELIVERY_CHECK_INTERVAL_MS = 2000; // Check every 2 seconds
+
+    this.pendingMessageTimer = setInterval(() => {
+      this.deliverPendingMessages().catch((err) => {
+        console.error("[Agent] Error delivering pending messages:", err);
+      });
+    }, DELIVERY_CHECK_INTERVAL_MS);
+
+    console.log("[Agent] Started pending message delivery timer");
+  }
+
+  private stopPendingMessageDelivery(): void {
+    if (this.pendingMessageTimer !== null) {
+      clearInterval(this.pendingMessageTimer);
+      this.pendingMessageTimer = null;
+      console.log("[Agent] Stopped pending message delivery timer");
+    }
+  }
+
+  private async deliverPendingMessages(): Promise<void> {
+    // Check if there are any pending messages
+    let hasPending = false;
+    for (const [key] of this.pendingMessages) {
+      if (this.hasPendingMessages(key)) {
+        hasPending = true;
+        break;
+      }
+    }
+
+    if (!hasPending) {
+      this.stopPendingMessageDelivery();
+      return;
+    }
+
+    // Try to deliver pending messages for each agent
+    for (const [key, pending] of this.pendingMessages) {
+      if (pending.length === 0) continue;
+
+      const agent = this.agents.get(key);
+      if (!agent) {
+        // Agent no longer exists, clear its pending messages
+        this.pendingMessages.delete(key);
+        continue;
+      }
+
+      // Check if agent is stable
+      const isStable = await this.checkAgentStable(agent.port);
+      if (!isStable) {
+        continue; // Agent is busy, try again later
+      }
+
+      // Agent is stable, deliver the first pending message
+      const message = pending.shift()!;
+      console.log(`[Agent] Delivering buffered message to ${key} (${pending.length} remaining)`);
+
+      try {
+        await this.deliverMessageDirect(key, message.message);
+      } catch (err) {
+        // Put the message back at the front of the queue
+        pending.unshift(message);
+        console.error(`[Agent] Failed to deliver buffered message to ${key}:`, err);
+      }
+    }
+  }
+
+  private async checkAgentStable(port: number): Promise<boolean> {
+    try {
+      const res = await fetch(`http://localhost:${port}/status`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.status === "stable";
+      }
+    } catch {
+      // Agent not reachable
+    }
+    return false;
+  }
+
+  private async deliverMessageDirect(key: string, message: string): Promise<void> {
+    const agent = this.agents.get(key);
+    if (!agent) return;
+
+    // Check for duplicate message
+    if (this.isDuplicateMessage(key, message)) {
+      console.log(`[Agent] Skipping duplicate buffered message to ${key}`);
+      return;
+    }
+
+    agent.status = "working";
+    console.log(`[Agent] Sending buffered message to ${key} on port ${agent.port}`);
+
+    const res = await fetch(`http://localhost:${agent.port}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message, type: "user" }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Message send failed (${res.status}): ${text}`);
+    }
+
+    console.log(`[Agent] Buffered message sent successfully to ${key}`);
+    this.cacheMessage(key, message);
+    agent.status = "idle";
   }
 
   async acknowledgeIssue(issue: LinearIssue): Promise<void> {
@@ -409,9 +555,16 @@ export class ClaudeOrchestrator {
       return;
     }
 
-    // Wait for agent to be stable before sending
-    await this.waitForStableStatus(agent.port);
+    // Check if agent is stable immediately (single check, no waiting)
+    const isStable = await this.checkAgentStable(agent.port);
 
+    if (!isStable) {
+      // Agent is busy, buffer the message for later delivery
+      this.bufferMessage(key, message);
+      return;
+    }
+
+    // Agent is stable, send immediately
     agent.status = "working";
     console.log(`[Agent] Sending message to ${key} on port ${agent.port}`);
 
@@ -524,6 +677,9 @@ export class ClaudeOrchestrator {
 
     // Clean up message cache for this agent
     this.messageCache.delete(key);
+
+    // Clean up pending messages for this agent
+    this.clearPendingMessages(key);
 
     this.agents.delete(key);
   }

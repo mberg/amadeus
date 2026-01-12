@@ -239,4 +239,54 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.getAgentsInReviewState()).toEqual([]);
     });
   });
+
+  describe("pending message buffer", () => {
+    it("hasPendingMessages returns false when no pending messages", () => {
+      expect(orchestrator.hasPendingMessages("test-key")).toBe(false);
+    });
+
+    it("getPendingMessageCount returns 0 when no pending messages", () => {
+      expect(orchestrator.getPendingMessageCount("test-key")).toBe(0);
+    });
+
+    it("bufferMessage adds message to pending queue", () => {
+      orchestrator.bufferMessage("test-key", "Hello world");
+      expect(orchestrator.hasPendingMessages("test-key")).toBe(true);
+      expect(orchestrator.getPendingMessageCount("test-key")).toBe(1);
+    });
+
+    it("bufferMessage maintains FIFO order", () => {
+      orchestrator.bufferMessage("test-key", "First message");
+      orchestrator.bufferMessage("test-key", "Second message");
+      orchestrator.bufferMessage("test-key", "Third message");
+      expect(orchestrator.getPendingMessageCount("test-key")).toBe(3);
+
+      const messages = orchestrator.getPendingMessages("test-key");
+      expect(messages[0].message).toBe("First message");
+      expect(messages[1].message).toBe("Second message");
+      expect(messages[2].message).toBe("Third message");
+    });
+
+    it("clearPendingMessages removes all pending messages for an agent", () => {
+      orchestrator.bufferMessage("test-key", "Message 1");
+      orchestrator.bufferMessage("test-key", "Message 2");
+      expect(orchestrator.getPendingMessageCount("test-key")).toBe(2);
+
+      orchestrator.clearPendingMessages("test-key");
+      expect(orchestrator.hasPendingMessages("test-key")).toBe(false);
+      expect(orchestrator.getPendingMessageCount("test-key")).toBe(0);
+    });
+
+    it("pending messages are isolated per agent key", () => {
+      orchestrator.bufferMessage("agent-1", "Message for agent 1");
+      orchestrator.bufferMessage("agent-2", "Message for agent 2");
+
+      expect(orchestrator.getPendingMessageCount("agent-1")).toBe(1);
+      expect(orchestrator.getPendingMessageCount("agent-2")).toBe(1);
+
+      orchestrator.clearPendingMessages("agent-1");
+      expect(orchestrator.hasPendingMessages("agent-1")).toBe(false);
+      expect(orchestrator.hasPendingMessages("agent-2")).toBe(true);
+    });
+  });
 });
