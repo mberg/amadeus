@@ -26,18 +26,27 @@ function createComment(
 
 describe("isBotComment", () => {
   describe("content-based detection", () => {
-    it("returns true when comment starts with bot prefix", () => {
+    it("returns true when comment starts with bot prefix (default agent name)", () => {
       const comment = createComment(
-        "**🤖 Claude:** Here is my plan...",
+        "**🤖 Amadeus:** Here is my plan...",
         "human-user-456",
         "Matt Berg"
       );
       expect(isBotComment(comment, undefined)).toBe(true);
     });
 
+    it("returns true when comment starts with bot prefix (custom agent name)", () => {
+      const comment = createComment(
+        "**🤖 Claude:** Here is my plan...",
+        "human-user-456",
+        "Matt Berg"
+      );
+      expect(isBotComment(comment, undefined, "Claude")).toBe(true);
+    });
+
     it("returns true for acknowledgment message", () => {
       const comment = createComment(
-        "**🤖 Claude:** I've received the issue. Beginning the planning process.",
+        "**🤖 Amadeus:** I've received the issue. Beginning the planning process.",
         "human-user-456",
         "Matt Berg"
       );
@@ -55,10 +64,20 @@ describe("isBotComment", () => {
 
     it("returns false when bot prefix is not at start", () => {
       const comment = createComment(
-        "I think **🤖 Claude:** should do this",
+        "I think **🤖 Amadeus:** should do this",
         "human-user-456",
         "Matt Berg"
       );
+      expect(isBotComment(comment, undefined)).toBe(false);
+    });
+
+    it("is case-sensitive for agent name", () => {
+      const comment = createComment(
+        "**🤖 AMADEUS:** uppercase",
+        "human-user-456",
+        "Matt Berg"
+      );
+      // Should not match because the pattern is case-sensitive
       expect(isBotComment(comment, undefined)).toBe(false);
     });
   });

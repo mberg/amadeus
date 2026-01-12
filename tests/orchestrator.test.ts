@@ -59,6 +59,102 @@ describe("ClaudeOrchestrator", () => {
 
       expect(orchestrator.shouldStartAgent(issue)).toBe(true);
     });
+
+    describe("with agentName label filtering", () => {
+      it("returns false when agentName is set but issue has no matching label", () => {
+        orchestrator = new ClaudeOrchestrator({
+          projectPaths: { TEST: "/tmp/test-project" },
+          triggerStates: ["Scoping"],
+          agentName: "amadeus",
+        });
+
+        const issue: LinearIssue = {
+          id: "issue-123",
+          identifier: "TEST-1",
+          title: "Test",
+          state: { id: "state-1", name: "Scoping" },
+          team: { key: "TEST" },
+          labels: [{ name: "bug" }, { name: "frontend" }],
+        };
+
+        expect(orchestrator.shouldStartAgent(issue)).toBe(false);
+      });
+
+      it("returns false when agentName is set and issue has no labels", () => {
+        orchestrator = new ClaudeOrchestrator({
+          projectPaths: { TEST: "/tmp/test-project" },
+          triggerStates: ["Scoping"],
+          agentName: "amadeus",
+        });
+
+        const issue: LinearIssue = {
+          id: "issue-123",
+          identifier: "TEST-1",
+          title: "Test",
+          state: { id: "state-1", name: "Scoping" },
+          team: { key: "TEST" },
+        };
+
+        expect(orchestrator.shouldStartAgent(issue)).toBe(false);
+      });
+
+      it("returns true when agentName matches label exactly", () => {
+        orchestrator = new ClaudeOrchestrator({
+          projectPaths: { TEST: "/tmp/test-project" },
+          triggerStates: ["Scoping"],
+          agentName: "amadeus",
+        });
+
+        const issue: LinearIssue = {
+          id: "issue-123",
+          identifier: "TEST-1",
+          title: "Test",
+          state: { id: "state-1", name: "Scoping" },
+          team: { key: "TEST" },
+          labels: [{ name: "bug" }, { name: "amadeus" }],
+        };
+
+        expect(orchestrator.shouldStartAgent(issue)).toBe(true);
+      });
+
+      it("returns true when agentName matches label case-insensitively", () => {
+        orchestrator = new ClaudeOrchestrator({
+          projectPaths: { TEST: "/tmp/test-project" },
+          triggerStates: ["Scoping"],
+          agentName: "Amadeus",
+        });
+
+        const issue: LinearIssue = {
+          id: "issue-123",
+          identifier: "TEST-1",
+          title: "Test",
+          state: { id: "state-1", name: "Scoping" },
+          team: { key: "TEST" },
+          labels: [{ name: "AMADEUS" }],
+        };
+
+        expect(orchestrator.shouldStartAgent(issue)).toBe(true);
+      });
+
+      it("still requires state match even with matching label", () => {
+        orchestrator = new ClaudeOrchestrator({
+          projectPaths: { TEST: "/tmp/test-project" },
+          triggerStates: ["Scoping"],
+          agentName: "amadeus",
+        });
+
+        const issue: LinearIssue = {
+          id: "issue-123",
+          identifier: "TEST-1",
+          title: "Test",
+          state: { id: "state-1", name: "Backlog" },
+          team: { key: "TEST" },
+          labels: [{ name: "amadeus" }],
+        };
+
+        expect(orchestrator.shouldStartAgent(issue)).toBe(false);
+      });
+    });
   });
 
   describe("getStatus", () => {

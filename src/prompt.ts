@@ -11,12 +11,13 @@ export function isYoloMode(issue: LinearIssue): boolean {
 export function buildPrompt(
   issue: LinearIssue,
   profile?: AgentProfile,
-  workspace?: string
+  workspace?: string,
+  agentName: string = "Amadeus"
 ): string {
   const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
-  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection);
+  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName);
 
   return `
 ## New Task from Linear
@@ -35,9 +36,9 @@ Use the \`linear-cli\` command line tool for all Linear interactions.
 
 **Post a comment:**
 \`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.identifier}
+linear-cli comments create --body "**🤖 ${agentName}:** Your message here" ${issue.identifier}
 \`\`\`
-**Important:** Always prefix your comments with \`**🤖 Claude:**\` so users know it's from the AI agent.
+**Important:** Always prefix your comments with \`**🤖 ${agentName}:**\` so users know it's from the AI agent.
 
 **Update status:**
 \`\`\`bash
@@ -71,7 +72,7 @@ ${workflowSection}
 ${profileSection}`.trim();
 }
 
-function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string): string {
+function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string): string {
   if (yolo) {
     return `
 ### Status Workflow (YOLO Mode)
@@ -95,7 +96,7 @@ The workflow phases:
 
 **Step 2:** Post your implementation plan as a comment:
 \`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Here's my implementation plan:
+linear-cli comments create --body "**🤖 ${agentName}:** Here's my implementation plan:
 
 [Your detailed plan here - include:
 - What files will be modified/created
@@ -124,7 +125,7 @@ Linear: https://linear.app/ona/issue/${issue.identifier}" 2>/dev/null || echo "P
 **Step 6:** Set status to Review:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
-linear-cli comments create --body "**🤖 Claude:** Implementation complete. PR created/updated and ready for review." ${issue.identifier}
+linear-cli comments create --body "**🤖 ${agentName}:** Implementation complete. PR created/updated and ready for review." ${issue.identifier}
 \`\`\`
 
 **NOTE:** If you encounter a situation where you genuinely need user input (unclear requirements, major architectural decision, etc.), you may set status to Feedback Needed and wait.
@@ -154,7 +155,7 @@ You are currently in the **Planning** phase. Do NOT start building yet.
 
 **Step 2:** Post your implementation plan as a comment:
 \`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Here's my implementation plan:
+linear-cli comments create --body "**🤖 ${agentName}:** Here's my implementation plan:
 
 [Your detailed plan here - include:
 - What files will be modified/created
@@ -236,7 +237,8 @@ Use the state IDs and commands from your initial instructions.
 export function buildRecoveryPrompt(
   issue: LinearIssue,
   savedState: PersistedAgentState,
-  profile?: AgentProfile
+  profile?: AgentProfile,
+  agentName: string = "Amadeus"
 ): string {
   const profileSection = buildProfileSection(profile);
 
@@ -270,7 +272,7 @@ linear-cli issues get ${issue.identifier}
 
 **Step 3:** Post a recovery comment to Linear:
 \`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Recovering from a session restart. Reviewing the issue history and git state to resume work." ${issue.identifier}
+linear-cli comments create --body "**🤖 ${agentName}:** Recovering from a session restart. Reviewing the issue history and git state to resume work." ${issue.identifier}
 \`\`\`
 
 **Step 4:** Based on the Linear comments and git history, determine where you left off and continue.
@@ -281,7 +283,7 @@ Use the \`linear-cli\` command line tool for all Linear interactions.
 
 **Post a comment:**
 \`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Your message here" ${issue.identifier}
+linear-cli comments create --body "**🤖 ${agentName}:** Your message here" ${issue.identifier}
 \`\`\`
 
 **Update status:**
