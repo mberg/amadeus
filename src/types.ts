@@ -42,6 +42,7 @@ export interface AgentInstance {
   issueIdentifier: string;
   issueTitle: string;
   linearState?: string;
+  activeSkills?: string[];
   status: "starting" | "idle" | "working";
   startedAt: Date;
 }
@@ -53,6 +54,7 @@ export interface AgentStatus {
   issueIdentifier: string;
   issueTitle: string;
   linearState?: string;
+  activeSkills?: string[];
   status: string;
   uptime: number;
   worktreePath?: string;

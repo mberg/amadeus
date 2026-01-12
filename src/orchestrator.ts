@@ -5,7 +5,7 @@ import { spawn, type Subprocess } from "bun";
 import { dirname, join } from "node:path";
 import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
 import { buildPrompt } from "./prompt";
-import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
+import { loadProfiles, resolveProfile, resolveAndMergeProfiles, resolveSkillLabels, mergeSkillProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 import { applyProfileConfig } from "./profile-config";
 import { getGitHubRepoUrl } from "./git-utils";
@@ -117,6 +117,7 @@ export class ClaudeOrchestrator {
       issueIdentifier: agent.issueIdentifier,
       issueTitle: agent.issueTitle,
       linearState: agent.linearState,
+      activeSkills: agent.activeSkills,
       status: agent.status,
       uptime: Date.now() - agent.startedAt.getTime(),
       worktreePath: agent.worktreePath,
@@ -196,7 +197,14 @@ export class ClaudeOrchestrator {
     }
 
     await this.loadProfiles();
-    const profile = this.getProfileForIssue(issue);
+    let profile = this.getProfileForIssue(issue);
+
+    // Resolve skill labels and merge skill profiles
+    const activeSkills = resolveSkillLabels(issue, this.profiles);
+    if (activeSkills.length > 0) {
+      profile = mergeSkillProfiles(profile, activeSkills, this.profiles);
+      console.log(`[Agent] Active skills: ${activeSkills.join(", ")}`);
+    }
 
     const port = this.nextPort++;
     console.log(`[Agent] Starting new agent on port ${port} for ${issue.identifier}`);
@@ -272,6 +280,7 @@ export class ClaudeOrchestrator {
       issueIdentifier: issue.identifier,
       issueTitle: issue.title,
       linearState: issue.state?.name,
+      activeSkills: activeSkills.length > 0 ? activeSkills : undefined,
       status: "starting",
       startedAt: new Date(),
     });

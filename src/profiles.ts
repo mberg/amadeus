@@ -49,6 +49,43 @@ export function resolveProfile(
   return profileLabels;
 }
 
+export function resolveSkillLabels(
+  issue: LinearIssue,
+  skillProfiles: Record<string, AgentProfile>
+): string[] {
+  if (!issue.labels) {
+    return [];
+  }
+
+  const skillProfileNames = Object.keys(skillProfiles).map((name) =>
+    name.toLowerCase()
+  );
+
+  const matchedSkills = issue.labels
+    .filter((l) => !l.name.startsWith("profile:"))
+    .map((l) => l.name.toLowerCase())
+    .filter((labelName) => skillProfileNames.includes(labelName));
+
+  return matchedSkills;
+}
+
+export function mergeSkillProfiles(
+  baseProfile: AgentProfile,
+  skillNames: string[],
+  skillProfiles: Record<string, AgentProfile>
+): AgentProfile {
+  let result = { ...baseProfile };
+
+  for (const skillName of skillNames) {
+    const skillProfile = skillProfiles[skillName];
+    if (skillProfile) {
+      result = mergeProfiles(result, skillProfile);
+    }
+  }
+
+  return result;
+}
+
 export function mergeProfiles(
   base: AgentProfile,
   child: AgentProfile

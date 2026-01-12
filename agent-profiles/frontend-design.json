@@ -1,0 +1,9 @@
+{
+  "skills": {
+    "marketplaces": ["anthropics/skills"],
+    "install": ["frontend-design@anthropic-agent-skills"]
+  },
+  "promptAdditions": [
+    "You have the frontend-design skill enabled. Use it to create distinctive, production-grade frontend interfaces that avoid generic AI aesthetics. Commit to bold aesthetic choices with distinctive typography, color palettes, and high-impact animations."
+  ]
+}
