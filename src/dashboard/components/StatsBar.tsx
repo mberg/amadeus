@@ -10,14 +10,20 @@ interface StatsBarProps {
 interface StatCardProps {
   value: number;
   label: string;
+  description?: string;
 }
 
-function StatCard({ value, label }: StatCardProps) {
+function StatCard({ value, label, description }: StatCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-secondary px-6 py-4 text-center">
-      <div className="text-3xl font-semibold text-primary">{value}</div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+      </div>
+      <div className="mt-2">
+        <p className="text-2xl font-bold text-foreground">{value}</p>
+        {description && (
+          <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        )}
       </div>
     </div>
   );
@@ -29,10 +35,22 @@ export function StatsBar({ tasks }: StatsBarProps) {
   const idleTasks = tasks.filter((t) => t.status === "idle").length;
 
   return (
-    <div className="mb-8 flex flex-wrap justify-center gap-4">
-      <StatCard value={totalTasks} label="Total Tasks" />
-      <StatCard value={workingTasks} label="Working" />
-      <StatCard value={idleTasks} label="Idle" />
+    <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <StatCard
+        value={totalTasks}
+        label="Total Tasks"
+        description="Active agent instances"
+      />
+      <StatCard
+        value={workingTasks}
+        label="Working"
+        description="Currently processing"
+      />
+      <StatCard
+        value={idleTasks}
+        label="Idle"
+        description="Waiting for input"
+      />
     </div>
   );
 }

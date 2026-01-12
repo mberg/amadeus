@@ -53,8 +53,8 @@ export function App() {
       />
 
       {/* Last updated indicator */}
-      <div className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-idle" />
+      <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/50" />
         Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : "-"}
       </div>
 
