@@ -1,6 +1,3 @@
-# ABOUTME: Comprehensive setup guide for Amadeus - Linear-to-Claude Code orchestrator
-# ABOUTME: Covers installation, configuration, workflow, and troubleshooting
-
 # Amadeus Setup Guide
 
 This guide walks you through setting up Amadeus from scratch, configuring it for your projects, and understanding the workflow for AI-powered development orchestration.

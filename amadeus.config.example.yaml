@@ -1,0 +1,62 @@
+# Amadeus Configuration
+# Copy this file to amadeus.config.yaml and customize for your setup.
+#
+# This file contains non-sensitive configuration. Secrets (API keys, webhook secrets)
+# should be defined in .env and referenced here by their environment variable names.
+
+realms:
+  # A realm groups a Linear workspace with its projects and credentials.
+  # Each realm has its own Linear API key and webhook secret.
+
+  ona:
+    # Linear workspace slug (e.g., "ona" for linear.app/ona)
+    linearWorkspace: ona
+
+    # Environment variable names for secrets (actual values go in .env)
+    apiKeyEnvVar: LINEAR_API_KEY_ONA
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_ONA
+
+    # Optional: User ID for assignment-based triggering
+    # claudeBotUserId: user-id-here
+
+    # Projects in this realm
+    projects:
+      - teamKey: ONA
+        path: /path/to/ona/project
+        profile: base  # optional, falls back to global.defaultProfile
+
+      - teamKey: DESIGN
+        path: /path/to/design/project
+        profile: frontend
+
+  # Example of a second realm for a different Linear workspace
+  # recode:
+  #   linearWorkspace: recode
+  #   apiKeyEnvVar: LINEAR_API_KEY_RECODE
+  #   webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_RECODE
+  #   projects:
+  #     - teamKey: RECODE
+  #       path: /path/to/recode/project
+
+global:
+  # Server port
+  port: 5678
+
+  # Workflow states that trigger agent spawn
+  triggerStates:
+    - Planning
+
+  # Git worktrees for issue isolation
+  useWorktrees: true
+  worktreesDir: /path/to/.amadeus-worktrees
+
+  # Agent profiles directory and default
+  profilesDir: ./agent-profiles
+  defaultProfile: base
+
+  # SQLite database for agent state
+  dbPath: ./amadeus-agents.db
+
+  # Health monitoring intervals (milliseconds)
+  healthCheckIntervalMs: 30000
+  healthCheckTimeoutMs: 5000

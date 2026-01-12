@@ -28,6 +28,7 @@ describe("HTTP Server", () => {
     process.env.PORT = "5679";
     process.env.LINEAR_WEBHOOK_SECRET = "test-secret";
     process.env.AMADEUS_API_TOKEN = TEST_TOKEN;
+    process.env.LINEAR_WORKSPACE = "test-workspace";
 
     // Import and start server
     const mod = await import("../src/server");
