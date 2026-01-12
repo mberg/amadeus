@@ -186,6 +186,35 @@ body {
   animation: pulse 1s ease-in-out infinite;
 }
 
+.agent-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stop-agent-btn {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 0.6;
+}
+
+.stop-agent-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  opacity: 1;
+}
+
 .linear-state-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;

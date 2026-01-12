@@ -132,9 +132,12 @@ function renderAgents(agents: Agent[]): void {
               <div class="agent-title">${escapeHtml(agent.issueTitle)}</div>
               ${linearLinkHtml}
             </div>
-            <div class="status-badge status-${agent.status}">
-              <span class="dot"></span>
-              ${agent.status}
+            <div class="agent-actions">
+              <button class="stop-agent-btn" onclick="event.stopPropagation(); stopAgent('${escapeHtml(agent.key)}')" title="Stop agent">×</button>
+              <div class="status-badge status-${agent.status}">
+                <span class="dot"></span>
+                ${agent.status}
+              </div>
             </div>
           </div>
           <div class="agent-details">
@@ -242,8 +245,36 @@ function closeConsole(): void {
   document.getElementById("console-overlay")!.classList.remove("open");
 }
 
-// Expose openConsole to global scope for onclick handlers
-(window as unknown as { openConsole: typeof openConsole }).openConsole = openConsole;
+async function stopAgent(agentKey: string): Promise<void> {
+  if (!confirm(`Stop agent for ${agentKey}? This will terminate the agent and remove the worktree.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/agents/${encodeURIComponent(agentKey)}/stop`, {
+      method: "POST",
+    });
+
+    if (response.ok) {
+      // Close console if we're viewing this agent
+      if (currentAgentKey === agentKey) {
+        closeConsole();
+      }
+      // Refresh the status immediately
+      await fetchStatus();
+    } else {
+      console.error("Failed to stop agent:", response.status);
+      alert("Failed to stop agent");
+    }
+  } catch (error) {
+    console.error("Failed to stop agent:", error);
+    alert("Failed to stop agent");
+  }
+}
+
+// Expose functions to global scope for onclick handlers
+(window as unknown as { openConsole: typeof openConsole; stopAgent: typeof stopAgent }).openConsole = openConsole;
+(window as unknown as { openConsole: typeof openConsole; stopAgent: typeof stopAgent }).stopAgent = stopAgent;
 
 // Event listeners
 document.getElementById("console-close")!.addEventListener("click", closeConsole);

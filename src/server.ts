@@ -72,6 +72,20 @@ function isDraft(issue: LinearIssue): boolean {
   return stateType === "triage" || stateName.includes("draft");
 }
 
+function shouldTerminateAgent(issue: LinearIssue): boolean {
+  const stateName = issue.state?.name?.toLowerCase() ?? "";
+  const stateType = issue.state?.type?.toLowerCase() ?? "";
+
+  // Terminate agents when issues move to backlog or canceled states
+  return (
+    stateName.includes("backlog") ||
+    stateType === "backlog" ||
+    stateType === "canceled" ||
+    stateName.includes("canceled") ||
+    stateName.includes("cancelled")
+  );
+}
+
 async function handleIssueWebhook(
   action: string,
   issue: LinearIssue
@@ -92,6 +106,18 @@ async function handleIssueWebhook(
 
   if (action === "remove") {
     await orchestrator.stopAgent(agentKey);
+    return;
+  }
+
+  // Terminate agent if issue moved to backlog or canceled
+  if (shouldTerminateAgent(issue)) {
+    const existingKey = orchestrator.findAgentByIssueId(issue.id);
+    if (existingKey) {
+      console.log(
+        `[${new Date().toISOString()}] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name}`
+      );
+      await orchestrator.stopAgent(existingKey);
+    }
     return;
   }
 
@@ -340,6 +366,15 @@ export const server = Bun.serve({
       } catch {
         return new Response("Failed to fetch agent messages", { status: 502 });
       }
+    }
+
+    // Stop agent endpoint (for dashboard)
+    const stopMatch = url.pathname.match(/^\/agents\/([^/]+)\/stop$/);
+    if (req.method === "POST" && stopMatch) {
+      const agentKey = decodeURIComponent(stopMatch[1]);
+      console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
+      await orchestrator.stopAgent(agentKey);
+      return Response.json({ success: true });
     }
 
     return new Response("Not Found", { status: 404 });
