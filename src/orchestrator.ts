@@ -8,6 +8,7 @@ import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 import { applyProfileConfig } from "./profile-config";
+import { getGitHubRepoUrl } from "./git-utils";
 
 export interface AgentDeathInfo {
   key: string;
@@ -295,7 +296,10 @@ export class ClaudeOrchestrator {
     // Acknowledge the issue before starting the planning process
     await this.acknowledgeIssue(issue);
 
-    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace, this.config.agentName));
+    // Get GitHub repo URL for file linking in comments
+    const githubRepoUrl = await getGitHubRepoUrl(workingDir);
+
+    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined));
   }
 
   private setupExitHandler(
