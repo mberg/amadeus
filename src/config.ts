@@ -59,4 +59,8 @@ export const CONFIG = {
   dbPath: process.env.DB_PATH ?? join(import.meta.dir, "..", "amadeus-agents.db"),
   healthCheckIntervalMs: Number(process.env.HEALTH_CHECK_INTERVAL_MS) || 30000,
   healthCheckTimeoutMs: Number(process.env.HEALTH_CHECK_TIMEOUT_MS) || 5000,
+  // Email notifications
+  notificationEmail: process.env.NOTIFICATION_EMAIL,
+  resendApiKey: process.env.RESEND_API_KEY,
+  notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL ?? "amadeus@resend.dev",
 };

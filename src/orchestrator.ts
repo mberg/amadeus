@@ -130,6 +130,10 @@ export class ClaudeOrchestrator {
     }
   }
 
+  getAgentState(key: string): string | undefined {
+    return this.agents.get(key)?.linearState;
+  }
+
   getAgentDeathHandler(): ((info: AgentDeathInfo) => void) | undefined {
     return this.config.onAgentDeath;
   }

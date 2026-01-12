@@ -12,6 +12,11 @@ import { HealthMonitor } from "./health-monitor";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged } from "./github";
+import {
+  shouldNotify,
+  notifyFeedbackNeeded,
+  notifyReviewReady,
+} from "./notifications";
 
 function requireAuth(req: Request): Response | null {
   if (!CONFIG.apiToken) return null;
@@ -96,6 +101,45 @@ function shouldTerminateAgent(issue: LinearIssue): boolean {
   );
 }
 
+async function sendStateNotification(
+  previousState: string | undefined,
+  newState: string,
+  issue: LinearIssue
+): Promise<void> {
+  if (!CONFIG.notificationEmail || !CONFIG.resendApiKey) {
+    return;
+  }
+
+  if (!shouldNotify(previousState, newState)) {
+    return;
+  }
+
+  const options = {
+    issueIdentifier: issue.identifier,
+    issueTitle: issue.title,
+    to: CONFIG.notificationEmail,
+    apiKey: CONFIG.resendApiKey,
+    from: CONFIG.notificationFromEmail,
+  };
+
+  let result;
+  if (newState === "Feedback Needed") {
+    result = await notifyFeedbackNeeded(options);
+  } else if (newState === "Review") {
+    result = await notifyReviewReady(options);
+  }
+
+  if (result?.success) {
+    console.log(
+      `[Notification] Sent ${newState} notification for ${issue.identifier}`
+    );
+  } else if (result?.error) {
+    console.warn(
+      `[Notification] Failed to send for ${issue.identifier}: ${result.error}`
+    );
+  }
+}
+
 async function handleIssueWebhook(
   action: string,
   issue: LinearIssue
@@ -133,7 +177,13 @@ async function handleIssueWebhook(
 
   // Update Linear state if agent exists (for dashboard display)
   if (orchestrator.hasAgent(agentKey) && issue.state?.name) {
+    const previousState = orchestrator.getAgentState(agentKey);
     orchestrator.updateIssueState(agentKey, issue.state.name);
+
+    // Send notification on state transitions
+    sendStateNotification(previousState, issue.state.name, issue).catch(
+      (err) => console.error("[Notification] Error:", err)
+    );
   }
 
   if (orchestrator.shouldStartAgent(issue)) {
