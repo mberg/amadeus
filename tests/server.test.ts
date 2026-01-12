@@ -1,10 +1,11 @@
 // ABOUTME: Integration tests for the HTTP server endpoints.
-// ABOUTME: Tests health, webhook, and status endpoints.
+// ABOUTME: Tests health, webhook, status, and authentication.
 
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 let server: { stop: () => void };
 let baseUrl: string;
+const TEST_TOKEN = "test-api-token-12345";
 
 async function signPayload(payload: string, secret: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -26,6 +27,7 @@ describe("HTTP Server", () => {
     // Set required env vars for test
     process.env.PORT = "5679";
     process.env.LINEAR_WEBHOOK_SECRET = "test-secret";
+    process.env.AMADEUS_API_TOKEN = TEST_TOKEN;
 
     // Import and start server
     const mod = await import("../src/server");
@@ -46,14 +48,21 @@ describe("HTTP Server", () => {
   });
 
   describe("GET /status", () => {
-    it("returns agent status as JSON", async () => {
-      const res = await fetch(`${baseUrl}/status`);
+    it("returns agent status as JSON with valid token", async () => {
+      const res = await fetch(`${baseUrl}/status`, {
+        headers: { "X-Amadeus-Token": TEST_TOKEN },
+      });
       expect(res.status).toBe(200);
 
       const data = await res.json();
       expect(data).toHaveProperty("agents");
       expect(data).toHaveProperty("timestamp");
       expect(Array.isArray(data.agents)).toBe(true);
+    });
+
+    it("returns 401 without token", async () => {
+      const res = await fetch(`${baseUrl}/status`);
+      expect(res.status).toBe(401);
     });
   });
 
@@ -194,14 +203,26 @@ describe("HTTP Server", () => {
   });
 
   describe("POST /trigger", () => {
-    it("returns Sent for valid request", async () => {
+    it("returns Sent for valid request with token", async () => {
+      const res = await fetch(`${baseUrl}/trigger`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Amadeus-Token": TEST_TOKEN,
+        },
+        body: JSON.stringify({ agentKey: "test-key", message: "hello" }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("Sent");
+    });
+
+    it("returns 401 without token", async () => {
       const res = await fetch(`${baseUrl}/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agentKey: "test-key", message: "hello" }),
       });
-      expect(res.status).toBe(200);
-      expect(await res.text()).toBe("Sent");
+      expect(res.status).toBe(401);
     });
   });
 
@@ -213,10 +234,33 @@ describe("HTTP Server", () => {
   });
 
   describe("GET /agents/:key/messages", () => {
-    it("returns 404 for non-existent agent", async () => {
-      const res = await fetch(`${baseUrl}/agents/nonexistent-key/messages`);
+    it("returns 404 for non-existent agent with valid token", async () => {
+      const res = await fetch(`${baseUrl}/agents/nonexistent-key/messages`, {
+        headers: { "X-Amadeus-Token": TEST_TOKEN },
+      });
       expect(res.status).toBe(404);
       expect(await res.text()).toBe("Agent not found");
+    });
+
+    it("returns 401 without token", async () => {
+      const res = await fetch(`${baseUrl}/agents/nonexistent-key/messages`);
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("GET /config", () => {
+    it("returns config with valid token", async () => {
+      const res = await fetch(`${baseUrl}/config`, {
+        headers: { "X-Amadeus-Token": TEST_TOKEN },
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data).toHaveProperty("linearWorkspace");
+    });
+
+    it("returns 401 without token", async () => {
+      const res = await fetch(`${baseUrl}/config`);
+      expect(res.status).toBe(401);
     });
   });
 });

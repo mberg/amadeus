@@ -13,6 +13,16 @@ import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged } from "./github";
 
+function requireAuth(req: Request): Response | null {
+  if (!CONFIG.apiToken) return null;
+
+  const token = req.headers.get("X-Amadeus-Token");
+  if (token !== CONFIG.apiToken) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return null;
+}
+
 // Initialize persistence layer
 const persistence = new AgentPersistence(CONFIG.dbPath);
 
@@ -332,6 +342,9 @@ export const server = Bun.serve({
 
     // Status dashboard (JSON)
     if (req.method === "GET" && url.pathname === "/status") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       return Response.json({
         agents: orchestrator.getStatus(),
         timestamp: new Date().toISOString(),
@@ -340,6 +353,9 @@ export const server = Bun.serve({
 
     // Dashboard config
     if (req.method === "GET" && url.pathname === "/config") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
       });
@@ -347,6 +363,9 @@ export const server = Bun.serve({
 
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       try {
         const { agentKey, message } = await req.json();
         if (!agentKey || !message) {
@@ -362,6 +381,9 @@ export const server = Bun.serve({
     // Agent messages proxy endpoint
     const messagesMatch = url.pathname.match(/^\/agents\/([^/]+)\/messages$/);
     if (req.method === "GET" && messagesMatch) {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       const agentKey = decodeURIComponent(messagesMatch[1]);
       const agent = orchestrator.getStatus().find((a) => a.key === agentKey);
 
