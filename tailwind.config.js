@@ -7,6 +7,19 @@ module.exports = {
   content: ["./src/dashboard/**/*.{ts,tsx,html}"],
   theme: {
     extend: {
+      fontFamily: {
+        mono: [
+          "SF Mono",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Monaco",
+          "Consolas",
+          "Liberation Mono",
+          "Courier New",
+          "monospace",
+        ],
+      },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
