@@ -6,6 +6,7 @@ import { CONFIG } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator, type AgentDeathInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
+import { isBotComment } from "./comment-filter";
 import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
@@ -16,6 +17,16 @@ import {
   notifyFeedbackNeeded,
   notifyReviewReady,
 } from "./notifications";
+
+function requireAuth(req: Request): Response | null {
+  if (!CONFIG.apiToken) return null;
+
+  const token = req.headers.get("X-Amadeus-Token");
+  if (token !== CONFIG.apiToken) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return null;
+}
 
 // Initialize persistence layer
 const persistence = new AgentPersistence(CONFIG.dbPath);
@@ -74,6 +85,20 @@ function isDraft(issue: LinearIssue): boolean {
   const stateType = issue.state?.type?.toLowerCase();
   const stateName = issue.state?.name?.toLowerCase() ?? "";
   return stateType === "triage" || stateName.includes("draft");
+}
+
+function shouldTerminateAgent(issue: LinearIssue): boolean {
+  const stateName = issue.state?.name?.toLowerCase() ?? "";
+  const stateType = issue.state?.type?.toLowerCase() ?? "";
+
+  // Terminate agents when issues move to backlog or canceled states
+  return (
+    stateName.includes("backlog") ||
+    stateType === "backlog" ||
+    stateType === "canceled" ||
+    stateName.includes("canceled") ||
+    stateName.includes("cancelled")
+  );
 }
 
 async function sendStateNotification(
@@ -138,6 +163,18 @@ async function handleIssueWebhook(
     return;
   }
 
+  // Terminate agent if issue moved to backlog or canceled
+  if (shouldTerminateAgent(issue)) {
+    const existingKey = orchestrator.findAgentByIssueId(issue.id);
+    if (existingKey) {
+      console.log(
+        `[${new Date().toISOString()}] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name}`
+      );
+      await orchestrator.stopAgent(existingKey);
+    }
+    return;
+  }
+
   // Update Linear state if agent exists (for dashboard display)
   if (orchestrator.hasAgent(agentKey) && issue.state?.name) {
     const previousState = orchestrator.getAgentState(agentKey);
@@ -172,6 +209,14 @@ async function handleCommentWebhook(
   if (isDraft(comment.issue)) {
     console.log(
       `[${new Date().toISOString()}] Skipping comment on draft issue: ${comment.issue.identifier}`
+    );
+    return;
+  }
+
+  // Skip comments from the Claude bot itself to prevent self-responses
+  if (isBotComment(comment, CONFIG.claudeBotUserId)) {
+    console.log(
+      `[${new Date().toISOString()}] Skipping bot comment on ${comment.issue.identifier}`
     );
     return;
   }
@@ -327,6 +372,16 @@ export const server = Bun.serve({
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
 
+      // Validate timestamp to prevent replay attacks
+      const MAX_AGE_MS = 60000; // 60 seconds tolerance
+      const now = Date.now();
+      const webhookTimestamp = data.webhookTimestamp;
+
+      if (!webhookTimestamp || Math.abs(now - webhookTimestamp) > MAX_AGE_MS) {
+        console.warn(`[Webhook] Timestamp validation failed: ${webhookTimestamp}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+
       // Process async, respond immediately
       handleWebhook(data).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
@@ -337,6 +392,9 @@ export const server = Bun.serve({
 
     // Status dashboard (JSON)
     if (req.method === "GET" && url.pathname === "/status") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       return Response.json({
         agents: orchestrator.getStatus(),
         timestamp: new Date().toISOString(),
@@ -345,6 +403,9 @@ export const server = Bun.serve({
 
     // Dashboard config
     if (req.method === "GET" && url.pathname === "/config") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
       });
@@ -352,6 +413,9 @@ export const server = Bun.serve({
 
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       try {
         const { agentKey, message } = await req.json();
         if (!agentKey || !message) {
@@ -367,6 +431,9 @@ export const server = Bun.serve({
     // Agent messages proxy endpoint
     const messagesMatch = url.pathname.match(/^\/agents\/([^/]+)\/messages$/);
     if (req.method === "GET" && messagesMatch) {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
       const agentKey = decodeURIComponent(messagesMatch[1]);
       const agent = orchestrator.getStatus().find((a) => a.key === agentKey);
 
@@ -381,6 +448,15 @@ export const server = Bun.serve({
       } catch {
         return new Response("Failed to fetch agent messages", { status: 502 });
       }
+    }
+
+    // Stop agent endpoint (for dashboard)
+    const stopMatch = url.pathname.match(/^\/agents\/([^/]+)\/stop$/);
+    if (req.method === "POST" && stopMatch) {
+      const agentKey = decodeURIComponent(stopMatch[1]);
+      console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
+      await orchestrator.stopAgent(agentKey);
+      return Response.json({ success: true });
     }
 
     return new Response("Not Found", { status: 404 });

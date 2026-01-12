@@ -85,18 +85,15 @@ The workflow phases:
 
 ### Workflow (YOLO Mode)
 
-**Step 1:** Announce you're starting:
-\`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Starting to analyze this issue. YOLO mode active - will proceed to implementation after planning." ${issue.identifier}
-\`\`\`
+**Note:** The issue has already been acknowledged automatically. Proceed with the workflow below.
 
-**Step 2:** Analyze the requirements thoroughly:
+**Step 1:** Analyze the requirements thoroughly:
 - Read and understand the issue description
 - Explore the codebase to understand the context
 - Identify files that need to be modified
 - Consider edge cases and potential challenges
 
-**Step 3:** Post your implementation plan as a comment:
+**Step 2:** Post your implementation plan as a comment:
 \`\`\`bash
 linear-cli comments create --body "**🤖 Claude:** Here's my implementation plan:
 
@@ -109,14 +106,14 @@ linear-cli comments create --body "**🤖 Claude:** Here's my implementation pla
 Proceeding to implementation (YOLO mode)." ${issue.identifier}
 \`\`\`
 
-**Step 4:** Set status to Building and proceed to implement immediately:
+**Step 3:** Set status to Building and proceed to implement immediately:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
 \`\`\`
 
-**Step 5:** Implement the plan - write code, tests, commit changes
+**Step 4:** Implement the plan - write code, tests, commit changes
 
-**Step 6:** When done, push and create PR:
+**Step 5:** When done, push and create PR:
 \`\`\`bash
 git push -u origin issue/${issue.identifier}
 gh pr create --title "${issue.identifier}: ${issue.title}" --body "Resolves ${issue.identifier}
@@ -124,7 +121,7 @@ gh pr create --title "${issue.identifier}: ${issue.title}" --body "Resolves ${is
 Linear: https://linear.app/ona/issue/${issue.identifier}" 2>/dev/null || echo "PR already exists, pushing updates"
 \`\`\`
 
-**Step 7:** Set status to Review:
+**Step 6:** Set status to Review:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 linear-cli comments create --body "**🤖 Claude:** Implementation complete. PR created/updated and ready for review." ${issue.identifier}
@@ -147,18 +144,15 @@ The workflow has distinct phases:
 
 You are currently in the **Planning** phase. Do NOT start building yet.
 
-**Step 1:** Announce you're starting planning:
-\`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** Starting to analyze this issue and create an implementation plan." ${issue.identifier}
-\`\`\`
+**Note:** The issue has already been acknowledged automatically. Proceed with the workflow below.
 
-**Step 2:** Analyze the requirements thoroughly:
+**Step 1:** Analyze the requirements thoroughly:
 - Read and understand the issue description
 - Explore the codebase to understand the context
 - Identify files that need to be modified
 - Consider edge cases and potential challenges
 
-**Step 3:** Post your implementation plan as a comment:
+**Step 2:** Post your implementation plan as a comment:
 \`\`\`bash
 linear-cli comments create --body "**🤖 Claude:** Here's my implementation plan:
 
@@ -171,7 +165,7 @@ linear-cli comments create --body "**🤖 Claude:** Here's my implementation pla
 Please review and let me know if you'd like any changes to this plan." ${issue.identifier}
 \`\`\`
 
-**Step 4:** Set status to Feedback Needed and STOP:
+**Step 3:** Set status to Feedback Needed and STOP:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
 \`\`\`
@@ -224,54 +218,18 @@ export function buildCommentPrompt(comment: LinearComment): string {
   const authorName = comment.user?.name ?? "The user";
 
   return `
-## New Comment on ${comment.issue.identifier}
+## New Comment from ${authorName}
 
-**From**: ${authorName}
-**Issue**: ${comment.issue.identifier} - ${comment.issue.title}
-
-### Comment
 ${comment.body}
 
-### Instructions
+---
 
-${authorName} has provided feedback on your plan or work.
+Respond based on the feedback type:
+- **Approved** → Set status to Building, implement, then create PR and set to Review
+- **Changes requested** → Update plan, stay in Feedback Needed
+- **Question** → Answer it, stay in Feedback Needed
 
-**First, determine the nature of the feedback:**
-- If they **approved your plan** or said to proceed → Go to Building phase
-- If they **requested changes to the plan** → Update your plan and stay in Feedback Needed
-- If they **asked a question** → Answer it and stay in Feedback Needed
-
-**If approved to build:**
-
-1. Set status to Building:
-\`\`\`bash
-linear-cli issues update ${comment.issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
-linear-cli comments create --body "**🤖 Claude:** Starting implementation based on the approved plan." ${comment.issue.identifier}
-\`\`\`
-
-2. Implement the plan - write code, tests, commit changes
-
-3. When done, push and create PR:
-\`\`\`bash
-git push -u origin issue/${comment.issue.identifier}
-gh pr create --title "${comment.issue.identifier}: ${comment.issue.title}" --body "Resolves ${comment.issue.identifier}
-
-Linear: https://linear.app/ona/issue/${comment.issue.identifier}" 2>/dev/null || echo "PR already exists, pushing updates"
-\`\`\`
-
-4. Set status to Review:
-\`\`\`bash
-linear-cli issues update ${comment.issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
-linear-cli comments create --body "**🤖 Claude:** Implementation complete. PR created/updated and ready for review." ${comment.issue.identifier}
-\`\`\`
-
-**If plan changes requested or you have questions:**
-
-Post your response and keep status at Feedback Needed:
-\`\`\`bash
-linear-cli comments create --body "**🤖 Claude:** [Your updated plan or answer to their question]" ${comment.issue.identifier}
-linear-cli issues update ${comment.issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
-\`\`\`
+Use the state IDs and commands from your initial instructions.
 `.trim();
 }
 

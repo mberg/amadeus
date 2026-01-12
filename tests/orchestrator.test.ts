@@ -68,7 +68,19 @@ describe("ClaudeOrchestrator", () => {
   });
 
   describe("getAgentKey", () => {
-    it("combines team key and issue id", () => {
+    it("uses project name when available", () => {
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        team: { key: "TEST" },
+        project: { id: "proj-1", name: "Amadeus" },
+      };
+
+      expect(orchestrator.getAgentKey(issue)).toBe("Amadeus-issue-123");
+    });
+
+    it("falls back to team key when no project", () => {
       const issue: LinearIssue = {
         id: "issue-123",
         identifier: "TEST-1",
@@ -79,7 +91,7 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.getAgentKey(issue)).toBe("TEST-issue-123");
     });
 
-    it("uses DEFAULT when no team", () => {
+    it("uses DEFAULT when no project or team", () => {
       const issue: LinearIssue = {
         id: "issue-123",
         identifier: "TEST-1",

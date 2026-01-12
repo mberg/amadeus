@@ -279,67 +279,50 @@ describe("buildPrompt YOLO mode", () => {
 });
 
 describe("buildCommentPrompt", () => {
-  it("pairs Building state change with a comment about starting implementation", () => {
-    const comment: LinearComment = {
-      id: "comment-123",
-      body: "Please also add tests",
-      issueId: "issue-123",
-      issue: {
-        id: "issue-123",
-        identifier: "ENG-42",
-        title: "Test issue",
-      },
-      user: { name: "Matt" },
-    };
-
-    const prompt = buildCommentPrompt(comment);
-
-    // The Building state command should be followed by a comment about starting implementation
-    const buildingStateRegex =
-      /linear-cli issues update.*--state "0aab3254.*"[\s\S]*?linear-cli comments create.*Starting implementation/i;
-    expect(prompt).toMatch(buildingStateRegex);
+  const makeComment = (body: string, userName: string = "Matt"): LinearComment => ({
+    id: "comment-123",
+    body,
+    issueId: "issue-123",
+    issue: {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    },
+    user: { name: userName },
   });
 
-  it("pairs Review state change with a comment", () => {
-    const comment: LinearComment = {
-      id: "comment-123",
-      body: "Please also add tests",
-      issueId: "issue-123",
-      issue: {
-        id: "issue-123",
-        identifier: "ENG-42",
-        title: "Test issue",
-      },
-      user: { name: "Matt" },
-    };
-
+  it("includes the comment body", () => {
+    const comment = makeComment("Please also add tests");
     const prompt = buildCommentPrompt(comment);
-
-    // Review state change should be paired with a comment
-    const reviewStateRegex =
-      /linear-cli issues update.*--state "e5708707.*"[\s\S]*?linear-cli comments create/;
-    expect(prompt).toMatch(reviewStateRegex);
+    expect(prompt).toContain("Please also add tests");
   });
 
-  it("pairs Feedback Needed state change with a comment instruction", () => {
-    const comment: LinearComment = {
-      id: "comment-123",
-      body: "Please also add tests",
-      issueId: "issue-123",
-      issue: {
-        id: "issue-123",
-        identifier: "ENG-42",
-        title: "Test issue",
-      },
-      user: { name: "Matt" },
-    };
-
+  it("includes the author name", () => {
+    const comment = makeComment("Looks good!", "Matt Berg");
     const prompt = buildCommentPrompt(comment);
+    expect(prompt).toContain("Matt Berg");
+  });
 
-    // Feedback Needed instruction should mention posting a comment
-    expect(prompt).toMatch(
-      /Feedback Needed[\s\S]*?linear-cli comments create|post.*comment.*Feedback Needed/i
-    );
+  it("references the three feedback types", () => {
+    const comment = makeComment("Approved");
+    const prompt = buildCommentPrompt(comment);
+    expect(prompt).toContain("Approved");
+    expect(prompt).toContain("Changes requested");
+    expect(prompt).toContain("Question");
+  });
+
+  it("references initial instructions for commands", () => {
+    const comment = makeComment("Go ahead");
+    const prompt = buildCommentPrompt(comment);
+    expect(prompt).toContain("initial instructions");
+  });
+
+  it("is concise (avoids redundant state IDs and commands)", () => {
+    const comment = makeComment("Proceed with the plan");
+    const prompt = buildCommentPrompt(comment);
+    // Should NOT include the full state ID UUIDs (they're in initial prompt)
+    expect(prompt).not.toContain("0aab3254-cc63-4979-84ab-eda800979c94");
+    expect(prompt).not.toContain("e5708707-32a0-4ede-9f24-fb525d92b3d4");
   });
 });
 

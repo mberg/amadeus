@@ -7,6 +7,7 @@ import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./ty
 import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
+import { applyProfileConfig } from "./profile-config";
 
 export interface AgentDeathInfo {
   key: string;
@@ -29,9 +30,31 @@ export interface OrchestratorConfig {
   linearWorkspace?: string;
 }
 
+// Simple hash function for message deduplication
+function hashMessage(message: string): string {
+  let hash = 0;
+  for (let i = 0; i < message.length; i++) {
+    const char = message.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
+// Cache entry with timestamp for TTL
+interface CacheEntry {
+  hash: string;
+  timestamp: number;
+}
+
+// Deduplication cache: agentKey -> recent message hashes
+const MESSAGE_CACHE_TTL_MS = 60000; // 1 minute TTL
+const MESSAGE_CACHE_MAX_SIZE = 20; // Max entries per agent
+
 export class ClaudeOrchestrator {
   private agents = new Map<string, AgentInstance>();
   private stoppingAgents = new Set<string>(); // Track agents being intentionally stopped
+  private messageCache = new Map<string, CacheEntry[]>(); // Deduplication cache
   private nextPort = 8001;
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
@@ -68,7 +91,8 @@ export class ClaudeOrchestrator {
   }
 
   getAgentKey(issue: LinearIssue): string {
-    const projectKey = issue.team?.key ?? "DEFAULT";
+    // Use project name if available, otherwise fall back to team key
+    const projectKey = issue.project?.name ?? issue.team?.key ?? "DEFAULT";
     return `${projectKey}-${issue.id}`;
   }
 
@@ -118,15 +142,39 @@ export class ClaudeOrchestrator {
     return this.getStatus().filter((agent) => agent.linearState === "Review");
   }
 
+  async acknowledgeIssue(issue: LinearIssue): Promise<void> {
+    const message = `**🤖 Claude:** I've received the issue. Beginning the planning process.`;
+    console.log(`[Agent] Acknowledging issue ${issue.identifier}`);
+    try {
+      await Bun.$`linear-cli comments create --body ${message} ${issue.identifier}`.quiet();
+    } catch (err) {
+      console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}:`, err);
+    }
+  }
+
   async startAgent(issue: LinearIssue): Promise<void> {
     const key = this.getAgentKey(issue);
-    const projectKey = issue.team?.key ?? "DEFAULT";
-    const projectPath = this.config.projectPaths[projectKey];
+
+    // Look up project path: try project name first, then team key, then DEFAULT
+    const projectName = issue.project?.name;
+    const teamKey = issue.team?.key;
+    const projectPath =
+      (projectName && this.config.projectPaths[projectName]) ||
+      (teamKey && this.config.projectPaths[teamKey]) ||
+      this.config.projectPaths["DEFAULT"];
 
     if (!projectPath) {
-      console.error(`[Agent] No project path configured for team: ${projectKey}`);
+      const tried = [projectName, teamKey, "DEFAULT"].filter(Boolean).join(", ");
+      console.error(`[Agent] No project path configured. Tried: ${tried}`);
       return;
     }
+
+    const routedBy = projectName && this.config.projectPaths[projectName]
+      ? `project "${projectName}"`
+      : teamKey && this.config.projectPaths[teamKey]
+        ? `team "${teamKey}"`
+        : "DEFAULT";
+    console.log(`[Agent] Routed ${issue.identifier} to ${projectPath} via ${routedBy}`);
 
     if (this.agents.has(key)) {
       console.log(`[Agent] Agent already exists: ${key}`);
@@ -166,6 +214,14 @@ export class ClaudeOrchestrator {
         );
         console.log(`[Agent] Falling back to project root: ${projectPath}`);
       }
+    }
+
+    // Apply profile configuration (MCP servers, permissions, skills)
+    const configResult = await applyProfileConfig(workingDir, profile);
+    if (!configResult.success) {
+      console.warn(`[Agent] Failed to apply profile config: ${configResult.error}`);
+    } else if (configResult.filesWritten.length > 0) {
+      console.log(`[Agent] Applied profile config (${configResult.filesWritten.length} files)`);
     }
 
     const proc = spawn({
@@ -220,6 +276,12 @@ export class ClaudeOrchestrator {
 
     const agent = this.agents.get(key)!;
     agent.status = "idle";
+
+    // Clear any stray characters in the input buffer (fixes agentapi "x" bug)
+    await this.clearInputBuffer(agent.port);
+
+    // Acknowledge the issue before starting the planning process
+    await this.acknowledgeIssue(issue);
 
     await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
   }
@@ -310,6 +372,15 @@ export class ClaudeOrchestrator {
     const agent = this.agents.get(key);
     if (!agent) return;
 
+    // Check for duplicate message
+    if (this.isDuplicateMessage(key, message)) {
+      console.log(`[Agent] Skipping duplicate message to ${key}`);
+      return;
+    }
+
+    // Wait for agent to be stable before sending
+    await this.waitForStableStatus(agent.port);
+
     agent.status = "working";
     console.log(`[Agent] Sending message to ${key} on port ${agent.port}`);
 
@@ -325,12 +396,76 @@ export class ClaudeOrchestrator {
         console.error(`[Agent] Message send failed (${res.status}): ${text}`);
       } else {
         console.log(`[Agent] Message sent successfully to ${key}`);
+        // Cache the message hash after successful send
+        this.cacheMessage(key, message);
       }
 
       agent.status = "idle";
     } catch (err) {
       console.error(`[Agent] Failed to send message to ${key}:`, err);
       agent.status = "idle";
+    }
+  }
+
+  private isDuplicateMessage(key: string, message: string): boolean {
+    const hash = hashMessage(message);
+    const now = Date.now();
+    const entries = this.messageCache.get(key) ?? [];
+
+    // Clean expired entries
+    const validEntries = entries.filter(
+      (e) => now - e.timestamp < MESSAGE_CACHE_TTL_MS
+    );
+
+    // Check for duplicate
+    return validEntries.some((e) => e.hash === hash);
+  }
+
+  private cacheMessage(key: string, message: string): void {
+    const hash = hashMessage(message);
+    const now = Date.now();
+    const entries = this.messageCache.get(key) ?? [];
+
+    // Clean expired and add new entry
+    const validEntries = entries
+      .filter((e) => now - e.timestamp < MESSAGE_CACHE_TTL_MS)
+      .slice(-MESSAGE_CACHE_MAX_SIZE + 1);
+
+    validEntries.push({ hash, timestamp: now });
+    this.messageCache.set(key, validEntries);
+  }
+
+  private async waitForStableStatus(port: number, maxAttempts = 60): Promise<void> {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch(`http://localhost:${port}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "stable") {
+            return;
+          }
+        }
+      } catch {
+        // Not ready yet
+      }
+      await Bun.sleep(500);
+    }
+    console.warn(`[Agent] Agent on port ${port} never became stable, sending anyway`);
+  }
+
+  private async clearInputBuffer(port: number): Promise<void> {
+    // Send Ctrl+U (ASCII 21) to clear the terminal input line
+    // This fixes a bug where agentapi leaves stray characters (like "x") in the buffer
+    try {
+      await fetch(`http://localhost:${port}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "\x15", type: "user" }),
+      });
+      // Wait for agent to stabilize after the clear
+      await this.waitForStableStatus(port, 10);
+    } catch {
+      // Ignore errors - this is a best-effort cleanup
     }
   }
 
@@ -355,6 +490,9 @@ export class ClaudeOrchestrator {
         console.warn(`[Agent] Failed to remove worktree: ${result.error}`);
       }
     }
+
+    // Clean up message cache for this agent
+    this.messageCache.delete(key);
 
     this.agents.delete(key);
   }

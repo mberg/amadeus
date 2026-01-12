@@ -13,6 +13,7 @@ export interface LinearIssue {
   assignee?: { id: string };
   labels?: { name: string }[];
   team?: { key: string };
+  project?: { id: string; name: string };
   trashed?: boolean;
 }
 
@@ -29,6 +30,7 @@ export interface LinearWebhookPayload {
   action: "create" | "update" | "remove";
   type: "Issue" | "Comment";
   data: LinearIssue | LinearComment;
+  webhookTimestamp?: number;
 }
 
 export interface AgentInstance {

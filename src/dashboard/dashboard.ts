@@ -58,6 +58,29 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+/**
+ * Strips ANSI escape sequences and terminal control characters from text.
+ * These appear in agentapi output from Claude Code's spinner/progress indicators.
+ */
+function stripTerminalSequences(text: string): string {
+  // ANSI escape sequences (colors, cursor movement, etc.)
+  // eslint-disable-next-line no-control-regex
+  const ansiPattern = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07/g;
+
+  // Spinner characters and cursor control sequences
+  const spinnerPattern = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+/g;
+
+  // Carriage return and other control characters
+  // eslint-disable-next-line no-control-regex
+  const controlPattern = /[\x00-\x09\x0b\x0c\x0e-\x1f]/g;
+
+  return text
+    .replace(ansiPattern, "")
+    .replace(spinnerPattern, "")
+    .replace(controlPattern, "")
+    .trim();
+}
+
 function getLinearStateClass(state: string | undefined): string {
   if (!state) return "";
   const lower = state.toLowerCase();
@@ -109,9 +132,12 @@ function renderAgents(agents: Agent[]): void {
               <div class="agent-title">${escapeHtml(agent.issueTitle)}</div>
               ${linearLinkHtml}
             </div>
-            <div class="status-badge status-${agent.status}">
-              <span class="dot"></span>
-              ${agent.status}
+            <div class="agent-actions">
+              <button class="stop-agent-btn" onclick="event.stopPropagation(); stopAgent('${escapeHtml(agent.key)}')" title="Stop agent">×</button>
+              <div class="status-badge status-${agent.status}">
+                <span class="dot"></span>
+                ${agent.status}
+              </div>
             </div>
           </div>
           <div class="agent-details">
@@ -152,7 +178,10 @@ function renderMessages(messages: Message[]): void {
   body.innerHTML = messages
     .map((msg) => {
       const role = msg.role || "unknown";
-      const content = msg.content || "";
+      const rawContent = msg.content || "";
+      const content = stripTerminalSequences(rawContent);
+      // Skip empty messages (often just terminal sequences)
+      if (!content) return "";
       return `
         <div class="message message-${role}">
           <div class="message-role">${role}</div>
@@ -160,6 +189,7 @@ function renderMessages(messages: Message[]): void {
         </div>
       `;
     })
+    .filter(Boolean)
     .join("");
 
   body.scrollTop = body.scrollHeight;
@@ -215,8 +245,36 @@ function closeConsole(): void {
   document.getElementById("console-overlay")!.classList.remove("open");
 }
 
-// Expose openConsole to global scope for onclick handlers
-(window as unknown as { openConsole: typeof openConsole }).openConsole = openConsole;
+async function stopAgent(agentKey: string): Promise<void> {
+  if (!confirm(`Stop agent for ${agentKey}? This will terminate the agent and remove the worktree.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/agents/${encodeURIComponent(agentKey)}/stop`, {
+      method: "POST",
+    });
+
+    if (response.ok) {
+      // Close console if we're viewing this agent
+      if (currentAgentKey === agentKey) {
+        closeConsole();
+      }
+      // Refresh the status immediately
+      await fetchStatus();
+    } else {
+      console.error("Failed to stop agent:", response.status);
+      alert("Failed to stop agent");
+    }
+  } catch (error) {
+    console.error("Failed to stop agent:", error);
+    alert("Failed to stop agent");
+  }
+}
+
+// Expose functions to global scope for onclick handlers
+(window as unknown as { openConsole: typeof openConsole; stopAgent: typeof stopAgent }).openConsole = openConsole;
+(window as unknown as { openConsole: typeof openConsole; stopAgent: typeof stopAgent }).stopAgent = stopAgent;
 
 // Event listeners
 document.getElementById("console-close")!.addEventListener("click", closeConsole);
