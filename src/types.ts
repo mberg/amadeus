@@ -30,6 +30,7 @@ export interface LinearWebhookPayload {
   action: "create" | "update" | "remove";
   type: "Issue" | "Comment";
   data: LinearIssue | LinearComment;
+  webhookTimestamp?: number;
 }
 
 export interface AgentInstance {
