@@ -12,12 +12,14 @@ export function buildPrompt(
   issue: LinearIssue,
   profile?: AgentProfile,
   workspace?: string,
-  agentName: string = "Amadeus"
+  agentName: string = "Amadeus",
+  githubRepoUrl?: string
 ): string {
   const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
   const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName);
+  const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
 
   return `
 ## New Task from Linear
@@ -63,7 +65,7 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 ### Git Branch
 
 You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
-${workflowSection}
+${fileLinkingSection}${workflowSection}
 ### Important
 
 - Always communicate your progress via Linear comments using \`linear-cli comments create\`
@@ -172,6 +174,25 @@ linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-68
 \`\`\`
 ${notificationSection}
 **IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
+`;
+}
+
+function buildFileLinkingSection(githubRepoUrl?: string, issueIdentifier?: string): string {
+  if (!githubRepoUrl || !issueIdentifier) {
+    return "";
+  }
+
+  const branch = `issue/${issueIdentifier}`;
+  const exampleUrl = `${githubRepoUrl}/blob/${branch}/README.md`;
+
+  return `
+### File References in Comments
+
+When referencing files in Linear comments, use full GitHub URLs so they are clickable:
+- Format: \`[filename](${githubRepoUrl}/blob/${branch}/path/to/file)\`
+- Example: \`[README.md](${exampleUrl})\`
+
+This ensures file references link directly to the code on GitHub.
 `;
 }
 

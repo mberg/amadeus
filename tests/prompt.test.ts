@@ -175,6 +175,34 @@ describe("buildPrompt", () => {
     expect(prompt).toMatch(/mention|@|notify/i);
     expect(prompt).toMatch(/linear-cli issues get/i);
   });
+
+  it("includes file linking instructions when githubRepoUrl is provided", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue, undefined, "ona", "Amadeus", "https://github.com/mberg/amadeus");
+
+    expect(prompt).toContain("https://github.com/mberg/amadeus");
+    expect(prompt).toContain("blob");
+    expect(prompt).toContain("issue/ENG-42");
+    expect(prompt).toMatch(/\[.*\]\(https:\/\/github\.com/);
+  });
+
+  it("excludes file linking section when githubRepoUrl is not provided", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt).not.toContain("File References");
+    expect(prompt).not.toContain("blob/issue/");
+  });
 });
 
 describe("isYoloMode", () => {
