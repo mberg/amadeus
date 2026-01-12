@@ -284,12 +284,8 @@ export function TaskTable({
           ) : (
             <TableRow>
               <TableCell colSpan={columns.length} className="h-24 text-center">
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <span className="text-4xl opacity-50">🎼</span>
-                  <span>No active tasks</span>
-                  <span className="text-sm">
-                    Tasks will appear here when Linear issues trigger them
-                  </span>
+                <div className="text-muted-foreground">
+                  <span className="text-sm">No active tasks</span>
                 </div>
               </TableCell>
             </TableRow>

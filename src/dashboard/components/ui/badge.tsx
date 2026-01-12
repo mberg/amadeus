@@ -1,27 +1,25 @@
 // ABOUTME: Badge component for status and state indicators.
-// ABOUTME: Uses neutral shadcn colors for visual distinction.
+// ABOUTME: Uses subtle colors for minimal visual noise.
 
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors",
+  "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-secondary text-secondary-foreground",
-        outline: "border-border text-foreground",
-        // Task status variants
-        idle: "border-transparent bg-secondary text-secondary-foreground",
-        working: "border-transparent bg-primary text-primary-foreground",
-        starting: "border-border bg-transparent text-muted-foreground",
-        // Linear state variants
-        planning: "border-border bg-transparent text-muted-foreground",
-        building: "border-transparent bg-primary text-primary-foreground",
-        feedback: "border-border bg-secondary text-secondary-foreground",
-        review: "border-border bg-secondary text-secondary-foreground",
-        done: "border-transparent bg-muted text-muted-foreground",
+        default: "bg-secondary text-secondary-foreground",
+        outline: "border border-border text-muted-foreground",
+        idle: "bg-secondary text-muted-foreground",
+        working: "bg-chart-1/15 text-chart-1",
+        starting: "bg-chart-3/15 text-chart-3",
+        planning: "bg-secondary text-muted-foreground",
+        building: "bg-chart-1/15 text-chart-1",
+        feedback: "bg-chart-3/15 text-chart-3",
+        review: "bg-chart-4/15 text-chart-4",
+        done: "bg-secondary text-muted-foreground",
       },
     },
     defaultVariants: {

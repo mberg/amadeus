@@ -41,7 +41,7 @@ export function App() {
   }, [selectedTask]);
 
   return (
-    <div className="mx-auto min-h-screen max-w-5xl p-8">
+    <div className="mx-auto min-h-screen max-w-4xl px-6 py-8">
       <Header />
       <StatsBar tasks={tasks} />
 
@@ -52,13 +52,10 @@ export function App() {
         onStopTask={handleStopTask}
       />
 
-      {/* Last updated indicator */}
-      <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/50" />
-        Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : "-"}
+      <div className="mt-4 text-xs text-muted-foreground/60">
+        {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : ""}
       </div>
 
-      {/* Message panel */}
       <MessagePanel task={selectedTask} onClose={handleClosePanel} />
     </div>
   );
