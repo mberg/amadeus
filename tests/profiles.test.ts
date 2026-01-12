@@ -263,6 +263,14 @@ describe("Skill Label Resolution", () => {
       promptAdditions: ["You have the code-review skill enabled."],
     });
 
+    await writeProfile("superpowers", {
+      skills: {
+        marketplaces: ["obra/superpowers-marketplace"],
+        install: ["superpowers@superpowers-marketplace"],
+      },
+      promptAdditions: ["You have the superpowers skill enabled."],
+    });
+
     skillProfiles = await loadProfiles(PROFILES_DIR);
   });
 
@@ -353,5 +361,17 @@ describe("Skill Label Resolution", () => {
 
     const skills = resolveSkillLabels(issue, skillProfiles);
     expect(skills).toEqual([]);
+  });
+
+  test("resolves superpowers skill from label", () => {
+    const issue: LinearIssue = {
+      id: "123",
+      identifier: "TEST-1",
+      title: "Test issue",
+      labels: [{ name: "superpowers" }],
+    };
+
+    const skills = resolveSkillLabels(issue, skillProfiles);
+    expect(skills).toEqual(["superpowers"]);
   });
 });

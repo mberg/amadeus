@@ -1,0 +1,9 @@
+{
+  "skills": {
+    "marketplaces": ["obra/superpowers-marketplace"],
+    "install": ["superpowers@superpowers-marketplace"]
+  },
+  "promptAdditions": [
+    "You have the superpowers skill enabled. Use it for structured software development workflows including brainstorming, plan writing, plan execution, TDD, systematic debugging, and code review."
+  ]
+}
