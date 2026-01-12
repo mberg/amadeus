@@ -95,13 +95,16 @@ function shouldTerminateAgent(issue: LinearIssue): boolean {
   const stateName = issue.state?.name?.toLowerCase() ?? "";
   const stateType = issue.state?.type?.toLowerCase() ?? "";
 
-  // Terminate agents when issues move to backlog or canceled states
+  // Terminate agents when issues move to done, backlog, or canceled states
   return (
-    stateName.includes("backlog") ||
-    stateType === "backlog" ||
+    stateType === "completed" ||
     stateType === "canceled" ||
+    stateType === "backlog" ||
+    stateName.includes("done") ||
+    stateName.includes("backlog") ||
     stateName.includes("canceled") ||
-    stateName.includes("cancelled")
+    stateName.includes("cancelled") ||
+    stateName.includes("todo")
   );
 }
 
