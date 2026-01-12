@@ -1,5 +1,5 @@
 // ABOUTME: Badge component for status and state indicators.
-// ABOUTME: Supports status (idle/working/starting) and Linear state variants.
+// ABOUTME: Uses shadcn chart colors for visual distinction.
 
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -11,16 +11,16 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-secondary text-secondary-foreground",
-        // Task status variants
-        idle: "bg-status-idle/15 text-status-idle",
-        working: "bg-status-working/15 text-status-working",
-        starting: "bg-status-starting/15 text-status-starting",
-        // Linear state variants
-        planning: "bg-state-planning/20 text-state-planning",
-        building: "bg-state-building/20 text-state-building",
-        feedback: "bg-state-feedback/20 text-state-feedback",
-        review: "bg-state-review/20 text-state-review",
-        done: "bg-state-done/20 text-state-done",
+        // Task status variants using chart colors
+        idle: "bg-chart-2/15 text-chart-2",
+        working: "bg-chart-1/15 text-chart-1",
+        starting: "bg-chart-3/15 text-chart-3",
+        // Linear state variants using muted colors
+        planning: "bg-muted text-muted-foreground",
+        building: "bg-chart-1/15 text-chart-1",
+        feedback: "bg-chart-3/15 text-chart-3",
+        review: "bg-muted text-muted-foreground",
+        done: "bg-chart-2/15 text-chart-2",
       },
     },
     defaultVariants: {

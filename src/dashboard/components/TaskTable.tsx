@@ -123,10 +123,10 @@ export function TaskTable({
             <span
               className={`h-2 w-2 rounded-full ${
                 status === "working"
-                  ? "bg-status-working animate-pulse-dot"
+                  ? "bg-chart-1 animate-pulse-dot"
                   : status === "starting"
-                    ? "bg-status-starting animate-pulse-dot"
-                    : "bg-status-idle"
+                    ? "bg-chart-3 animate-pulse-dot"
+                    : "bg-chart-2"
               }`}
             />
             {status}

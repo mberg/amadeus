@@ -1,10 +1,10 @@
 // ABOUTME: Dashboard header component with branding.
-// ABOUTME: Displays Amadeus title with gradient styling.
+// ABOUTME: Displays Amadeus title and subtitle.
 
 export function Header() {
   return (
     <header className="mb-8 text-center">
-      <h1 className="mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-4xl font-light tracking-widest text-transparent">
+      <h1 className="mb-2 text-4xl font-light tracking-widest text-foreground">
         Amadeus
       </h1>
       <p className="text-sm text-muted-foreground">

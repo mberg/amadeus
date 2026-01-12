@@ -1,67 +1,58 @@
 // ABOUTME: Tailwind CSS v3 configuration for the dashboard.
-// ABOUTME: Defines dark theme colors and custom utilities.
+// ABOUTME: Uses shadcn CSS variables for light/dark theme support.
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: ["class"],
   content: ["./src/dashboard/**/*.{ts,tsx,html}"],
   theme: {
     extend: {
       colors: {
-        background: "#0d1117",
-        foreground: "#e4e4e7",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
         card: {
-          DEFAULT: "rgba(255, 255, 255, 0.03)",
-          foreground: "#e4e4e7",
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
         },
         popover: {
-          DEFAULT: "#1a1a2e",
-          foreground: "#e4e4e7",
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
         },
         primary: {
-          DEFAULT: "#2dd4bf",
-          foreground: "#0d1117",
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: "rgba(255, 255, 255, 0.05)",
-          foreground: "#e4e4e7",
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
         },
         muted: {
-          DEFAULT: "rgba(255, 255, 255, 0.05)",
-          foreground: "#71717a",
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "#06b6d4",
-          foreground: "#0d1117",
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
         },
         destructive: {
-          DEFAULT: "#ef4444",
-          foreground: "#fef2f2",
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
         },
-        border: "rgba(255, 255, 255, 0.1)",
-        input: "rgba(255, 255, 255, 0.1)",
-        ring: "#2dd4bf",
-        // Status colors
-        status: {
-          idle: "#4ade80",
-          working: "#60a5fa",
-          starting: "#facc15",
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          5: "hsl(var(--chart-5))",
         },
-        // Linear state colors
-        state: {
-          planning: "#2dd4bf",
-          building: "#60a5fa",
-          feedback: "#fbbf24",
-          review: "#2dd4bf",
-          done: "#4ade80",
-        },
-      },
-      fontFamily: {
-        mono: ["SF Mono", "Monaco", "Menlo", "Inconsolata", "Consolas", "monospace"],
       },
       borderRadius: {
-        lg: "0.75rem",
-        md: "0.5rem",
-        sm: "0.25rem",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       animation: {
         "pulse-dot": "pulse-dot 1.5s ease-in-out infinite",
