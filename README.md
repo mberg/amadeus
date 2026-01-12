@@ -516,6 +516,54 @@ Configure your Linear workflow with these states for best results:
 | **Review** | Agent finished, PR created, awaiting human review |
 | **Done** | Human approved and merged |
 
+#### YOLO Mode
+
+For tasks where you trust the agent to proceed without approval, add "yolo" to the issue description. In YOLO mode, agents skip the "Feedback Needed" state and go directly from Planning to Building.
+
+Normal workflow: `Planning → Feedback Needed → Building → Review → Done`
+YOLO workflow: `Planning → Building → Review → Done`
+
+#### Termination States
+
+Agents automatically terminate when issues move to these states:
+
+| State | Effect |
+|-------|--------|
+| **Backlog** | Agent terminates (issue deprioritized) |
+| **Canceled** | Agent terminates (work stopped) |
+| **Draft** | Issue is skipped entirely (not ready for work) |
+
+This ensures agents don't continue working on abandoned or deprioritized issues.
+
+### Agent Runtime States
+
+Beyond Linear workflow states, Amadeus tracks internal agent states for process management.
+
+#### Process Status
+
+Each agent process has a runtime status:
+
+| Status | Meaning |
+|--------|---------|
+| **starting** | Agent process is spawning, waiting for readiness checks |
+| **idle** | Agent is ready and waiting for messages |
+| **working** | Agent is actively processing a message |
+
+Transitions: `starting` → `idle` (health check passes) → `working` (message sent) → `idle` (processing complete)
+
+The dashboard displays these statuses to show which agents are actively processing work.
+
+#### Health/Persistence Status
+
+Agents are monitored for crashes and can recover automatically:
+
+| Status | Meaning |
+|--------|---------|
+| **alive** | Agent is responsive and operational |
+| **dead** | Agent crashed or stopped responding |
+
+When an agent dies and a user posts a comment on the Linear issue, Amadeus automatically respawns the agent with context from the previous session, allowing work to continue.
+
 ## Tailscale Funnel Setup
 
 Tailscale Funnel exposes your local Amadeus server to the internet so Linear can send webhooks to it. This is the recommended approach for development and personal use.
