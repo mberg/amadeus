@@ -24,14 +24,14 @@ function MessageBubble({ message }: { message: Message }) {
       className={cn(
         "rounded-lg p-3 text-sm",
         isUser
-          ? "border-l-2 border-status-working bg-status-working/10"
-          : "border-l-2 border-status-idle bg-status-idle/5"
+          ? "border-l-2 border-chart-1 bg-chart-1/10"
+          : "border-l-2 border-muted-foreground bg-muted/50"
       )}
     >
       <div
         className={cn(
           "mb-1 text-xs font-medium uppercase tracking-wide",
-          isUser ? "text-status-working" : "text-muted-foreground"
+          isUser ? "text-chart-1" : "text-muted-foreground"
         )}
       >
         {message.role}
