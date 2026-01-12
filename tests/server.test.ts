@@ -29,6 +29,9 @@ describe("HTTP Server", () => {
     process.env.LINEAR_WEBHOOK_SECRET = "test-secret";
     process.env.AMADEUS_API_TOKEN = TEST_TOKEN;
     process.env.LINEAR_WORKSPACE = "test-workspace";
+    // For YAML config support
+    process.env.LINEAR_API_KEY_ONA = "test-api-key";
+    process.env.LINEAR_WEBHOOK_SECRET_ONA = "test-secret";
 
     // Import and start server
     const mod = await import("../src/server");

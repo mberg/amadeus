@@ -34,6 +34,7 @@ export type Realm = z.infer<typeof RealmSchema>;
  */
 export const GlobalConfigSchema = z.object({
   port: z.number().int().positive().default(5678),
+  agentName: z.string().default("Amadeus"),
   triggerStates: z.array(z.string()).default(["Planning"]),
   useWorktrees: z.boolean().default(true),
   worktreesDir: z.string().optional(),

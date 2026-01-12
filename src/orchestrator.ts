@@ -9,6 +9,7 @@ import { loadProfiles, resolveProfile, resolveAndMergeProfiles } from "./profile
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 import { applyProfileConfig } from "./profile-config";
 import { getGitHubRepoUrl } from "./git-utils";
+import { getRealmByTeamKey } from "./config";
 
 export interface AgentDeathInfo {
   key: string;
@@ -237,6 +238,9 @@ export class ClaudeOrchestrator {
       console.log(`[Agent] Applied profile config (${configResult.filesWritten.length} files)`);
     }
 
+    // Get realm-specific API key for Linear access
+    const realmInfo = teamKey ? getRealmByTeamKey(teamKey) : null;
+
     const proc = spawn({
       cmd: [
         "agentapi",
@@ -252,6 +256,8 @@ export class ClaudeOrchestrator {
         ...process.env,
         LINEAR_ISSUE_ID: issue.id,
         LINEAR_ISSUE_IDENTIFIER: issue.identifier,
+        // Pass realm's Linear API key for MCP server authentication
+        ...(realmInfo && { LINEAR_API_KEY: realmInfo.apiKey }),
       },
       stdout: "inherit",
       stderr: "inherit",

@@ -108,7 +108,7 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
   return {
     port: resolved.global.port,
     apiToken: process.env.AMADEUS_API_TOKEN,
-    agentName: process.env.AGENT_NAME ?? "Amadeus",
+    agentName: resolved.global.agentName,
     linearWebhookSecret: firstRealm.webhookSecret,
     claudeBotUserId: firstRealm.claudeBotUserId,
     projectPaths,
