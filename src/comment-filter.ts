@@ -3,20 +3,28 @@
 
 import type { LinearComment } from "./types";
 
-// Pattern that identifies Claude bot comments (prefix used when posting)
-const BOT_COMMENT_PATTERN = /^\*\*🤖 Claude:\*\*/;
+/**
+ * Creates a regex pattern to match bot comments with the given agent name.
+ */
+function getBotCommentPattern(agentName: string): RegExp {
+  // Escape special regex characters in the agent name
+  const escaped = agentName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^\\*\\*🤖 ${escaped}:\\*\\*`);
+}
 
 /**
- * Checks if a comment was posted by the Claude bot.
+ * Checks if a comment was posted by the bot.
  * Uses content-based detection since the API key owner is the comment author.
  * Bot comments should be skipped to prevent the agent from responding to its own messages.
  */
 export function isBotComment(
   comment: LinearComment,
-  botUserId: string | undefined
+  botUserId: string | undefined,
+  agentName: string = "Amadeus"
 ): boolean {
   // Primary detection: check comment body for bot prefix
-  if (BOT_COMMENT_PATTERN.test(comment.body)) {
+  const pattern = getBotCommentPattern(agentName);
+  if (pattern.test(comment.body)) {
     return true;
   }
 

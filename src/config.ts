@@ -47,6 +47,7 @@ export const CONFIG = {
   apiToken: process.env.AMADEUS_API_TOKEN,
   linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
   claudeBotUserId: process.env.CLAUDE_BOT_USER_ID,
+  agentName: process.env.AGENT_NAME ?? "Amadeus",
   projectPaths: loadProjectPaths(),
   triggerStates: (process.env.TRIGGER_STATES ?? "Planning").split(","),
   profilesDir: process.env.PROFILES_DIR ?? join(import.meta.dir, "..", "agent-profiles"),

@@ -28,6 +28,7 @@ export interface OrchestratorConfig {
   worktreesDir?: string;
   onAgentDeath?: (info: AgentDeathInfo) => void;
   linearWorkspace?: string;
+  agentName?: string;
 }
 
 // Simple hash function for message deduplication
@@ -81,6 +82,16 @@ export class ClaudeOrchestrator {
   }
 
   shouldStartAgent(issue: LinearIssue): boolean {
+    // Check if issue has the required agent label (case-insensitive)
+    const agentName = this.config.agentName?.toLowerCase();
+    const hasAgentLabel = agentName
+      ? issue.labels?.some((l) => l.name.toLowerCase() === agentName) ?? false
+      : true; // If no agent name configured, don't require label
+
+    if (!hasAgentLabel) {
+      return false;
+    }
+
     const stateMatch = this.config.triggerStates.includes(
       issue.state?.name ?? ""
     );
@@ -143,7 +154,8 @@ export class ClaudeOrchestrator {
   }
 
   async acknowledgeIssue(issue: LinearIssue): Promise<void> {
-    const message = `**🤖 Claude:** I've received the issue. Beginning the planning process.`;
+    const name = this.config.agentName ?? "Amadeus";
+    const message = `**🤖 ${name}:** I've received the issue. Beginning the planning process.`;
     console.log(`[Agent] Acknowledging issue ${issue.identifier}`);
     try {
       await Bun.$`linear-cli comments create --body ${message} ${issue.identifier}`.quiet();
@@ -283,7 +295,7 @@ export class ClaudeOrchestrator {
     // Acknowledge the issue before starting the planning process
     await this.acknowledgeIssue(issue);
 
-    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace));
+    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace, this.config.agentName));
   }
 
   private setupExitHandler(

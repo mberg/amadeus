@@ -47,6 +47,7 @@ const orchestrator = new ClaudeOrchestrator({
   worktreesDir: CONFIG.worktreesDir,
   onAgentDeath: handleAgentDeath,
   linearWorkspace: CONFIG.linearWorkspace,
+  agentName: CONFIG.agentName,
 });
 
 // Initialize health monitor
@@ -190,7 +191,7 @@ async function handleIssueWebhook(
     if (orchestrator.hasAgent(agentKey)) {
       await orchestrator.sendMessage(
         agentKey,
-        buildPrompt(issue, undefined, CONFIG.linearWorkspace)
+        buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName)
       );
     } else {
       await orchestrator.startAgent(issue);
@@ -213,8 +214,8 @@ async function handleCommentWebhook(
     return;
   }
 
-  // Skip comments from the Claude bot itself to prevent self-responses
-  if (isBotComment(comment, CONFIG.claudeBotUserId)) {
+  // Skip comments from the bot itself to prevent self-responses
+  if (isBotComment(comment, CONFIG.claudeBotUserId, CONFIG.agentName)) {
     console.log(
       `[${new Date().toISOString()}] Skipping bot comment on ${comment.issue.identifier}`
     );
@@ -249,7 +250,7 @@ async function handleCommentWebhook(
       }
 
       // Send recovery prompt with context, then the comment
-      const recoveryPrompt = buildRecoveryPrompt(comment.issue, savedState);
+      const recoveryPrompt = buildRecoveryPrompt(comment.issue, savedState, undefined, CONFIG.agentName);
       await orchestrator.sendMessage(agentKey, recoveryPrompt);
 
       // Mark agent as alive again in persistence
