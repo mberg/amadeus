@@ -133,6 +133,7 @@ export class ClaudeOrchestrator {
   getStatus(): AgentStatus[] {
     return Array.from(this.agents.entries()).map(([key, agent]) => ({
       key,
+      pid: agent.pid,
       port: agent.port,
       issueId: agent.linearIssueId,
       issueIdentifier: agent.issueIdentifier,
@@ -432,6 +433,7 @@ export class ClaudeOrchestrator {
 
     this.agents.set(key, {
       process: proc,
+      pid: proc.pid,
       port,
       projectPath,
       worktreePath,
