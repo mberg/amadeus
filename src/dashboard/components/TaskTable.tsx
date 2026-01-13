@@ -11,7 +11,8 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { StopTaskDialog } from "./StopTaskDialog";
 import {
   ArrowUpDown,
   ExternalLink,
@@ -99,6 +100,14 @@ export function TaskTable({
     { id: "uptime", desc: false }, // Newest (lowest uptime) on top
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [taskToStop, setTaskToStop] = useState<Task | null>(null);
+
+  const handleStopConfirm = useCallback(() => {
+    if (taskToStop) {
+      onStopTask(taskToStop.key);
+      setTaskToStop(null);
+    }
+  }, [taskToStop, onStopTask]);
 
   const columns: ColumnDef<Task>[] = [
     {
@@ -289,13 +298,7 @@ export function TaskTable({
               className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={(e) => {
                 e.stopPropagation();
-                if (
-                  window.confirm(
-                    `Stop task for ${task.issueIdentifier}? This will terminate the task and remove the worktree.`
-                  )
-                ) {
-                  onStopTask(task.key);
-                }
+                setTaskToStop(task);
               }}
               title="Stop Task"
             >
@@ -487,6 +490,13 @@ export function TaskTable({
           )}
         </div>
       )}
+
+      <StopTaskDialog
+        open={taskToStop !== null}
+        onOpenChange={(open) => !open && setTaskToStop(null)}
+        taskIdentifier={taskToStop?.issueIdentifier ?? ""}
+        onConfirm={handleStopConfirm}
+      />
     </div>
   );
 }
