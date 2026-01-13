@@ -121,7 +121,7 @@ export function TaskTable({
       accessorKey: "issueTitle",
       header: "Title",
       cell: ({ row }) => (
-        <span className="max-w-[300px] truncate text-muted-foreground">
+        <span className="max-w-[400px] truncate text-muted-foreground">
           {row.getValue("issueTitle")}
         </span>
       ),
@@ -395,7 +395,7 @@ export function TaskTable({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="max-w-[250px] truncate text-muted-foreground">
+                          <span className="max-w-[350px] truncate text-muted-foreground">
                             {task.issueTitle}
                           </span>
                         </TableCell>
