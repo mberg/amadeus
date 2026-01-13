@@ -11,6 +11,7 @@ import { applyProfileConfig } from "./profile-config";
 import { getGitHubRepoUrl } from "./git-utils";
 import { getRealmByTeamKey } from "./config";
 import { getProcessMemoryMB } from "./process-memory";
+import { processDescription } from "./image-downloader";
 
 export interface AgentDeathInfo {
   key: string;
@@ -487,7 +488,21 @@ export class ClaudeOrchestrator {
     // Get GitHub repo URL for file linking in comments
     const githubRepoUrl = await getGitHubRepoUrl(workingDir);
 
-    await this.sendMessage(key, buildPrompt(issue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined));
+    // Download any Linear images in the description so Claude can access them
+    let processedIssue = issue;
+    if (issue.description && realmInfo?.apiKey) {
+      const imagesDir = join(workingDir, ".amadeus-images");
+      const result = await processDescription(issue.description, realmInfo.apiKey, imagesDir);
+      if (result.downloadedCount > 0) {
+        console.log(`[Agent] Downloaded ${result.downloadedCount} images for ${issue.identifier}`);
+        processedIssue = { ...issue, description: result.processedDescription };
+      }
+      if (result.failedCount > 0) {
+        console.warn(`[Agent] Failed to download ${result.failedCount} images for ${issue.identifier}`);
+      }
+    }
+
+    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined));
   }
 
   private setupExitHandler(
