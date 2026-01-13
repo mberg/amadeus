@@ -95,7 +95,9 @@ export function TaskTable({
   onLoadMoreCompleted,
   hasMoreCompleted,
 }: TaskTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "uptime", desc: false }, // Newest (lowest uptime) on top
+  ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const columns: ColumnDef<Task>[] = [
