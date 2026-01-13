@@ -17,6 +17,7 @@ const mockTasks: Task[] = [
     issueId: "id-1",
     issueIdentifier: "ONA-100",
     issueTitle: "Add user authentication",
+    linearProject: "Amadeus",
     linearState: "Building",
     activeSkills: ["frontend-design", "playwright"],
     status: "working",
@@ -28,6 +29,7 @@ const mockTasks: Task[] = [
     issueId: "id-2",
     issueIdentifier: "ONA-101",
     issueTitle: "Fix login bug",
+    linearProject: "Mobile Data Collection",
     linearState: "Review",
     activeSkills: ["playwright"],
     status: "idle",
@@ -52,6 +54,7 @@ const mockCompletedTasks: CompletedTask[] = [
     issueId: "id-10",
     issueIdentifier: "ONA-50",
     issueTitle: "Setup CI pipeline",
+    linearProject: "DevOps",
     completedAt: "2024-01-01T12:00:00Z",
     completionReason: "done",
     finalLinearState: "Done",
@@ -62,6 +65,7 @@ const mockCompletedTasks: CompletedTask[] = [
     issueId: "id-11",
     issueIdentifier: "ONA-51",
     issueTitle: "Add authentication tests",
+    linearProject: "Amadeus",
     completedAt: "2024-01-02T12:00:00Z",
     completionReason: "stopped",
     finalLinearState: "Review",
@@ -89,6 +93,18 @@ describe("filterTasks", () => {
 
   it("filters by search query partial match", () => {
     const result = filterTasks(mockTasks, { searchQuery: "bug" });
+    expect(result).toHaveLength(1);
+    expect(result[0].issueIdentifier).toBe("ONA-101");
+  });
+
+  it("filters by search query matching linearProject", () => {
+    const result = filterTasks(mockTasks, { searchQuery: "Amadeus" });
+    expect(result).toHaveLength(1);
+    expect(result[0].issueIdentifier).toBe("ONA-100");
+  });
+
+  it("filters by search query partial match on linearProject", () => {
+    const result = filterTasks(mockTasks, { searchQuery: "mobile" });
     expect(result).toHaveLength(1);
     expect(result[0].issueIdentifier).toBe("ONA-101");
   });
@@ -179,6 +195,14 @@ describe("filterCompletedTasks", () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0].finalLinearState).toBe("Done");
+  });
+
+  it("filters by search query matching linearProject", () => {
+    const result = filterCompletedTasks(mockCompletedTasks, {
+      searchQuery: "DevOps",
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].issueIdentifier).toBe("ONA-50");
   });
 
   it("ignores skills filter (completed tasks have no skills)", () => {

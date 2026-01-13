@@ -42,6 +42,7 @@ export interface AgentInstance {
   linearIssueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   linearState?: string;
   activeSkills?: string[];
   status: "starting" | "idle" | "working";
@@ -55,6 +56,7 @@ export interface AgentStatus {
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   linearState?: string;
   activeSkills?: string[];
   status: string;
@@ -70,6 +72,7 @@ export interface CompletedTask {
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   completedAt: Date;
   completionReason: CompletionReason;
   finalLinearState?: string;

@@ -12,12 +12,14 @@ export interface FilterOptions {
 function matchesSearchQuery(
   searchQuery: string,
   issueIdentifier: string,
-  issueTitle: string
+  issueTitle: string,
+  linearProject?: string
 ): boolean {
   const query = searchQuery.toLowerCase();
   return (
     issueIdentifier.toLowerCase().includes(query) ||
-    issueTitle.toLowerCase().includes(query)
+    issueTitle.toLowerCase().includes(query) ||
+    (linearProject?.toLowerCase().includes(query) ?? false)
   );
 }
 
@@ -27,7 +29,7 @@ export function filterTasks(tasks: Task[], options: FilterOptions): Task[] {
   return tasks.filter((task) => {
     // Search query filter
     if (searchQuery && searchQuery.trim()) {
-      if (!matchesSearchQuery(searchQuery, task.issueIdentifier, task.issueTitle)) {
+      if (!matchesSearchQuery(searchQuery, task.issueIdentifier, task.issueTitle, task.linearProject)) {
         return false;
       }
     }
@@ -61,7 +63,7 @@ export function filterCompletedTasks(
   return tasks.filter((task) => {
     // Search query filter
     if (searchQuery && searchQuery.trim()) {
-      if (!matchesSearchQuery(searchQuery, task.issueIdentifier, task.issueTitle)) {
+      if (!matchesSearchQuery(searchQuery, task.issueIdentifier, task.issueTitle, task.linearProject)) {
         return false;
       }
     }

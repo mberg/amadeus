@@ -28,6 +28,7 @@ export interface AgentCompletionInfo {
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   completionReason: CompletionReason;
   finalLinearState?: string;
   duration: number;
@@ -140,6 +141,7 @@ export class ClaudeOrchestrator {
       issueId: agent.linearIssueId,
       issueIdentifier: agent.issueIdentifier,
       issueTitle: agent.issueTitle,
+      linearProject: agent.linearProject,
       linearState: agent.linearState,
       activeSkills: agent.activeSkills,
       status: agent.status,
@@ -457,6 +459,7 @@ export class ClaudeOrchestrator {
       linearIssueId: issue.id,
       issueIdentifier: issue.identifier,
       issueTitle: issue.title,
+      linearProject: issue.project?.name,
       linearState: issue.state?.name,
       activeSkills: activeSkills.length > 0 ? activeSkills : undefined,
       status: "starting",
@@ -713,6 +716,7 @@ export class ClaudeOrchestrator {
         issueId: agent.linearIssueId,
         issueIdentifier: agent.issueIdentifier,
         issueTitle: agent.issueTitle,
+        linearProject: agent.linearProject,
         completionReason,
         finalLinearState: agent.linearState,
         duration,

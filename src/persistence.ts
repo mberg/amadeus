@@ -10,6 +10,7 @@ export interface PersistedAgentState {
   issueTitle: string;
   projectPath: string;
   worktreePath?: string;
+  linearProject?: string;
   linearState?: string;
   port: number;
   status: "alive" | "dead" | "restarting";
@@ -23,6 +24,7 @@ export interface PersistedCompletedTask {
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   completedAt: Date;
   completionReason: CompletionReason;
   finalLinearState?: string;
@@ -46,6 +48,7 @@ export class AgentPersistence {
         issue_title TEXT NOT NULL,
         project_path TEXT NOT NULL,
         worktree_path TEXT,
+        linear_project TEXT,
         linear_state TEXT,
         port INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'alive',
@@ -62,6 +65,7 @@ export class AgentPersistence {
         issue_id TEXT NOT NULL,
         issue_identifier TEXT NOT NULL,
         issue_title TEXT NOT NULL,
+        linear_project TEXT,
         completed_at TEXT NOT NULL,
         completion_reason TEXT NOT NULL,
         final_linear_state TEXT,
@@ -73,6 +77,27 @@ export class AgentPersistence {
       CREATE INDEX IF NOT EXISTS idx_completed_tasks_completed_at
       ON completed_tasks (completed_at DESC)
     `);
+
+    // Migration: add linear_project column to existing tables
+    this.migrateAddLinearProject();
+  }
+
+  private migrateAddLinearProject(): void {
+    // Check if column exists in agents table
+    const agentColumns = this.db
+      .query("PRAGMA table_info(agents)")
+      .all() as { name: string }[];
+    if (!agentColumns.some((c) => c.name === "linear_project")) {
+      this.db.run("ALTER TABLE agents ADD COLUMN linear_project TEXT");
+    }
+
+    // Check if column exists in completed_tasks table
+    const taskColumns = this.db
+      .query("PRAGMA table_info(completed_tasks)")
+      .all() as { name: string }[];
+    if (!taskColumns.some((c) => c.name === "linear_project")) {
+      this.db.run("ALTER TABLE completed_tasks ADD COLUMN linear_project TEXT");
+    }
   }
 
   saveAgentState(state: PersistedAgentState): void {
@@ -80,14 +105,15 @@ export class AgentPersistence {
       `
       INSERT INTO agents (
         issue_id, key, issue_identifier, issue_title, project_path,
-        worktree_path, linear_state, port, status, last_heartbeat
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        worktree_path, linear_project, linear_state, port, status, last_heartbeat
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(issue_id) DO UPDATE SET
         key = excluded.key,
         issue_identifier = excluded.issue_identifier,
         issue_title = excluded.issue_title,
         project_path = excluded.project_path,
         worktree_path = excluded.worktree_path,
+        linear_project = excluded.linear_project,
         linear_state = excluded.linear_state,
         port = excluded.port,
         status = excluded.status,
@@ -101,6 +127,7 @@ export class AgentPersistence {
         state.issueTitle,
         state.projectPath,
         state.worktreePath ?? null,
+        state.linearProject ?? null,
         state.linearState ?? null,
         state.port,
         state.status,
@@ -157,15 +184,16 @@ export class AgentPersistence {
     this.db.run(
       `
       INSERT INTO completed_tasks (
-        key, issue_id, issue_identifier, issue_title,
+        key, issue_id, issue_identifier, issue_title, linear_project,
         completed_at, completion_reason, final_linear_state, duration
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         task.key,
         task.issueId,
         task.issueIdentifier,
         task.issueTitle,
+        task.linearProject ?? null,
         task.completedAt.toISOString(),
         task.completionReason,
         task.finalLinearState ?? null,
@@ -197,6 +225,7 @@ export class AgentPersistence {
       issueId: row.issue_id as string,
       issueIdentifier: row.issue_identifier as string,
       issueTitle: row.issue_title as string,
+      linearProject: (row.linear_project as string | null) ?? undefined,
       completedAt: new Date(row.completed_at as string),
       completionReason: row.completion_reason as CompletionReason,
       finalLinearState: (row.final_linear_state as string | null) ?? undefined,
@@ -216,6 +245,7 @@ export class AgentPersistence {
       issueTitle: row.issue_title as string,
       projectPath: row.project_path as string,
       worktreePath: row.worktree_path as string | undefined,
+      linearProject: (row.linear_project as string | null) ?? undefined,
       linearState: row.linear_state as string | undefined,
       port: row.port as number,
       status: row.status as "alive" | "dead" | "restarting",

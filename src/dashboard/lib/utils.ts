@@ -58,3 +58,9 @@ export function getStateVariant(state: string | undefined): StateVariant {
   if (lower.includes("done")) return "done";
   return "default";
 }
+
+export function abbreviateProjectName(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  if (name.length <= 15) return name;
+  return name.slice(0, 12) + "...";
+}
