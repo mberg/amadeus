@@ -1,0 +1,5 @@
+# ABOUTME: Bun configuration file.
+# ABOUTME: Configures test preload for environment setup.
+
+[test]
+preload = ["./tests/setup.ts"]

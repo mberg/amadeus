@@ -12,6 +12,9 @@ import {
   type Project,
 } from "./config-schema";
 
+// Re-export types for consumers
+export type { ResolvedConfig, ResolvedRealm, Project } from "./config-schema";
+
 const CONFIG_FILE_NAMES = ["amadeus.config.yaml", "amadeus.config.yml", "amadeus.config.json"];
 
 /**

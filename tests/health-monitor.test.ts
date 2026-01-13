@@ -121,7 +121,7 @@ describe("HealthMonitor", () => {
       const mockFetch = mock(() =>
         Promise.resolve(new Response(JSON.stringify({ status: "stable" }), { status: 200 }))
       );
-      globalThis.fetch = mockFetch as typeof fetch;
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
 
       monitor = new HealthMonitor({
         persistence,
@@ -136,7 +136,7 @@ describe("HealthMonitor", () => {
 
     it("returns unhealthy for unresponsive agent", async () => {
       const mockFetch = mock(() => Promise.reject(new Error("Connection refused")));
-      globalThis.fetch = mockFetch as typeof fetch;
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
 
       monitor = new HealthMonitor({
         persistence,
@@ -153,7 +153,7 @@ describe("HealthMonitor", () => {
       const mockFetch = mock(() =>
         Promise.resolve(new Response("Internal Server Error", { status: 500 }))
       );
-      globalThis.fetch = mockFetch as typeof fetch;
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
 
       monitor = new HealthMonitor({
         persistence,
@@ -194,7 +194,7 @@ describe("HealthMonitor", () => {
   describe("onAgentUnresponsive callback", () => {
     it("calls callback when agent becomes unresponsive", async () => {
       const mockFetch = mock(() => Promise.reject(new Error("Connection refused")));
-      globalThis.fetch = mockFetch as typeof fetch;
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
 
       let callbackCalled = false;
       let callbackIssueId: string | undefined;
