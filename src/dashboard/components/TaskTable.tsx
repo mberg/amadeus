@@ -32,7 +32,7 @@ import {
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import type { Task, CompletedTask } from "../types";
-import { formatUptime } from "../lib/utils";
+import { formatUptime, getStateVariant } from "../lib/utils";
 
 interface TaskTableProps {
   tasks: Task[];
@@ -51,19 +51,6 @@ function getStatusVariant(status: string): "idle" | "working" | "starting" {
   if (status === "working") return "working";
   if (status === "starting") return "starting";
   return "idle";
-}
-
-function getStateVariant(
-  state: string | undefined
-): "planning" | "building" | "feedback" | "review" | "done" | "default" {
-  if (!state) return "default";
-  const lower = state.toLowerCase();
-  if (lower.includes("planning") || lower.includes("scoping")) return "planning";
-  if (lower.includes("building")) return "building";
-  if (lower.includes("feedback")) return "feedback";
-  if (lower.includes("review")) return "review";
-  if (lower.includes("done")) return "done";
-  return "default";
 }
 
 function formatCompletionReason(reason: string): string {
@@ -95,6 +82,7 @@ function formatTimeAgo(dateString: string): string {
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString();
 }
+
 
 export function TaskTable({
   tasks,
