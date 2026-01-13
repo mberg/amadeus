@@ -4,6 +4,7 @@
     "install": ["superpowers@superpowers-marketplace"]
   },
   "promptAdditions": [
-    "You have the superpowers skill enabled. Use it for structured software development workflows including brainstorming, plan writing, plan execution, TDD, systematic debugging, and code review."
+    "You have the superpowers skill enabled. Use it for structured software development workflows including brainstorming, plan writing, plan execution, TDD, systematic debugging, and code review.",
+    "**CRITICAL - Linear Integration for Superpowers:** When using superpowers workflows (brainstorming, planning, etc.) that involve asking questions or gathering user input, you MUST post those questions to Linear using `linear-cli comments create`. The user cannot see your terminal output - only Linear comments reach them. After posting questions to Linear, set status to 'Feedback Needed' and STOP to wait for the user's response via Linear."
   ]
 }
