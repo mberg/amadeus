@@ -2,11 +2,21 @@
 // ABOUTME: Displays messages between user and assistant with real-time updates.
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { X, Copy, ChevronDown, User, Sparkles, Check } from "lucide-react";
+import {
+  X,
+  Copy,
+  ChevronDown,
+  User,
+  Sparkles,
+  Check,
+  Send,
+  Loader2,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { useMessages } from "../hooks/useMessages";
 import type { Task, Message } from "../types";
 import { cn, stripTerminalSequences } from "../lib/utils";
+import { sendMessage } from "../lib/send-message";
 
 interface MessagePanelProps {
   task: Task | null;
@@ -56,8 +66,11 @@ function MessageBubble({ message }: { message: Message }) {
 export function MessagePanel({ task, onClose }: MessagePanelProps) {
   const { messages, isLoading, error } = useMessages(task?.key ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   const checkIfAtBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -109,6 +122,35 @@ export function MessagePanel({ task, onClose }: MessagePanelProps) {
       console.error("Failed to copy:", err);
     }
   }, [messages]);
+
+  const handleSend = useCallback(async () => {
+    if (!task || !inputText.trim() || isSending) return;
+
+    setIsSending(true);
+    const result = await sendMessage(task.key, inputText);
+    setIsSending(false);
+
+    if (result.success) {
+      setInputText("");
+      // Focus back on textarea after sending
+      textareaRef.current?.focus();
+    } else {
+      console.error("Failed to send message:", result.error);
+    }
+  }, [task, inputText, isSending]);
+
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [handleSend]
+  );
+
+  // Agent is not running if we have an error (typically 404)
+  const isAgentRunning = !error;
 
   if (!task) return null;
 
@@ -188,9 +230,55 @@ export function MessagePanel({ task, onClose }: MessagePanelProps) {
           ))}
         </div>
 
+        {/* Input area */}
+        <div className="border-t border-border bg-card p-3">
+          <div className="flex gap-2">
+            <textarea
+              ref={textareaRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder={
+                isAgentRunning
+                  ? "Type a message... (Enter to send, Shift+Enter for newline)"
+                  : "Agent not running"
+              }
+              disabled={!isAgentRunning || isSending}
+              className={cn(
+                "flex-1 resize-none rounded border border-border bg-background px-3 py-2 font-mono text-sm",
+                "placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                "min-h-[40px] max-h-[120px]"
+              )}
+              rows={1}
+              style={{
+                height: "auto",
+                minHeight: "40px",
+              }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = "auto";
+                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+              }}
+            />
+            <Button
+              onClick={handleSend}
+              disabled={!isAgentRunning || isSending || !inputText.trim()}
+              size="icon"
+              className="h-10 w-10 shrink-0"
+            >
+              {isSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+
         {/* Scroll to bottom button */}
         {!isAtBottom && messages.length > 0 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
             <Button
               variant="secondary"
               size="sm"
