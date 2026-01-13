@@ -210,6 +210,10 @@ async function handleIssueWebhook(
   if (shouldTerminateAgent(issue)) {
     const existingKey = orchestrator.findAgentByIssueId(issue.id);
     if (existingKey) {
+      // Update state before stopping so it gets captured as finalLinearState
+      if (issue.state?.name) {
+        orchestrator.updateIssueState(existingKey, issue.state.name);
+      }
       const reason = getCompletionReason(issue);
       console.log(
         `[${new Date().toISOString()}] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name} (${reason})`
