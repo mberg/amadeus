@@ -1,18 +1,25 @@
 // ABOUTME: Main React application component for the dashboard.
 // ABOUTME: Manages task selection state and renders the main layout.
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Header } from "./components/Header";
 import { StatsBar } from "./components/StatsBar";
 import { TaskTable } from "./components/TaskTable";
 import { MessagePanel } from "./components/MessagePanel";
+import { SearchFilterBar } from "./components/SearchFilterBar";
 import { useStatus } from "./hooks/useStatus";
+import { collectUniqueSkills } from "./lib/filter";
 import type { Task } from "./types";
 
 export function App() {
   const { tasks, completedTasks, completedTotal, config, lastUpdated, loadMoreCompleted, hasMoreCompleted } = useStatus();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showCompleted, setShowCompleted] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+
+  const availableSkills = useMemo(() => collectUniqueSkills(tasks), [tasks]);
 
   const handleSelectTask = useCallback((task: Task) => {
     setSelectedTask(task);
@@ -50,6 +57,16 @@ export function App() {
       <Header />
       <StatsBar tasks={tasks} completedCount={completedTotal} />
 
+      <SearchFilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedStates={selectedStates}
+        onStatesChange={setSelectedStates}
+        selectedSkills={selectedSkills}
+        onSkillsChange={setSelectedSkills}
+        availableSkills={availableSkills}
+      />
+
       <TaskTable
         tasks={tasks}
         completedTasks={completedTasks}
@@ -60,6 +77,9 @@ export function App() {
         onStopTask={handleStopTask}
         onLoadMoreCompleted={loadMoreCompleted}
         hasMoreCompleted={hasMoreCompleted}
+        searchQuery={searchQuery}
+        selectedStates={selectedStates}
+        selectedSkills={selectedSkills}
       />
 
       <div className="mt-4 text-xs text-muted-foreground/60">

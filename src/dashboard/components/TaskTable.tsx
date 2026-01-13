@@ -34,6 +34,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import type { Task, CompletedTask } from "../types";
 import { formatUptime, getStateVariant } from "../lib/utils";
+import { filterTasks, filterCompletedTasks } from "../lib/filter";
 
 interface TaskTableProps {
   tasks: Task[];
@@ -45,6 +46,9 @@ interface TaskTableProps {
   onStopTask: (taskKey: string) => void;
   onLoadMoreCompleted: () => void;
   hasMoreCompleted: boolean;
+  searchQuery?: string;
+  selectedStates?: string[];
+  selectedSkills?: string[];
 }
 
 function getStatusVariant(status: string): "idle" | "working" | "starting" {
@@ -95,12 +99,24 @@ export function TaskTable({
   onStopTask,
   onLoadMoreCompleted,
   hasMoreCompleted,
+  searchQuery = "",
+  selectedStates = [],
+  selectedSkills = [],
 }: TaskTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "uptime", desc: false }, // Newest (lowest uptime) on top
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [taskToStop, setTaskToStop] = useState<Task | null>(null);
+
+  // Apply search and filter to tasks
+  const filterOptions = {
+    searchQuery,
+    states: selectedStates,
+    skills: selectedSkills,
+  };
+  const filteredTasks = filterTasks(tasks, filterOptions);
+  const filteredCompletedTasks = filterCompletedTasks(completedTasks, filterOptions);
 
   const handleStopConfirm = useCallback(() => {
     if (taskToStop) {
@@ -311,7 +327,7 @@ export function TaskTable({
   ];
 
   const table = useReactTable({
-    data: tasks,
+    data: filteredTasks,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -374,7 +390,7 @@ export function TaskTable({
       </div>
 
       {/* Completed Tasks Section */}
-      {completedTasks.length > 0 && (
+      {filteredCompletedTasks.length > 0 && (
         <div className="rounded-lg border border-border bg-card/50">
           {/* Collapsible Header */}
           <button
@@ -389,7 +405,7 @@ export function TaskTable({
             <CheckCircle2 className="h-4 w-4" />
             <span>Completed Tasks</span>
             <span className="text-xs text-muted-foreground/60">
-              ({completedTasks.length})
+              ({filteredCompletedTasks.length})
             </span>
           </button>
 
@@ -408,7 +424,7 @@ export function TaskTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {completedTasks.map((task) => {
+                  {filteredCompletedTasks.map((task) => {
                     const linearUrl = linearWorkspace
                       ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
                       : null;
