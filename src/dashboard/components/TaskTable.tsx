@@ -11,7 +11,7 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from "@tanstack/react-table";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { StopTaskDialog } from "./StopTaskDialog";
 import {
   ArrowUpDown,
@@ -109,14 +109,15 @@ export function TaskTable({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [taskToStop, setTaskToStop] = useState<Task | null>(null);
 
-  // Apply search and filter to tasks
-  const filterOptions = {
-    searchQuery,
-    states: selectedStates,
-    skills: selectedSkills,
-  };
-  const filteredTasks = filterTasks(tasks, filterOptions);
-  const filteredCompletedTasks = filterCompletedTasks(completedTasks, filterOptions);
+  // Apply search and filter to tasks (memoized to prevent excessive re-filtering)
+  const filteredTasks = useMemo(() =>
+    filterTasks(tasks, { searchQuery, states: selectedStates, skills: selectedSkills }),
+    [tasks, searchQuery, selectedStates, selectedSkills]
+  );
+  const filteredCompletedTasks = useMemo(() =>
+    filterCompletedTasks(completedTasks, { searchQuery, states: selectedStates }),
+    [completedTasks, searchQuery, selectedStates]
+  );
 
   const handleStopConfirm = useCallback(() => {
     if (taskToStop) {
@@ -432,7 +433,7 @@ export function TaskTable({
                     return (
                       <TableRow
                         key={`${task.issueId}-${task.completedAt}`}
-                        className="opacity-60 hover:opacity-80 transition-opacity"
+                        className="opacity-80 hover:opacity-100 transition-opacity"
                       >
                         <TableCell className="px-4">
                           <span className="font-medium text-foreground">
