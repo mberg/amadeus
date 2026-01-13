@@ -8,6 +8,7 @@ export interface Task {
   issueIdentifier: string;
   issueTitle: string;
   linearState?: string;
+  activeSkills?: string[];
   status: "idle" | "working" | "starting";
   uptime: number;
   worktreePath?: string;

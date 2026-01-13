@@ -127,6 +127,25 @@ export function TaskTable({
       ),
     },
     {
+      accessorKey: "activeSkills",
+      header: "Skills",
+      cell: ({ row }) => {
+        const skills = row.getValue("activeSkills") as string[] | undefined;
+        if (!skills || skills.length === 0) {
+          return <span className="text-muted-foreground">-</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {skills.map((skill) => (
+              <Badge key={skill} variant="outline" className="text-xs">
+                {skill}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: "status",
       header: ({ column }) => (
         <Button
