@@ -78,9 +78,12 @@ function buildResolvedConfig(config: AmadeusConfig): ResolvedConfig {
     realmByWorkspace.set(realm.linearWorkspace, resolvedRealm);
 
     for (const project of realm.projects) {
-      if (realmByTeamKey.has(project.teamKey)) {
+      // Only error if the same team key is used in a different realm
+      const existingRealm = realmByTeamKey.get(project.teamKey);
+      if (existingRealm && existingRealm.name !== resolvedRealm.name) {
         throw new Error(
-          `Team key "${project.teamKey}" is defined in multiple realms. Each team key must be unique.`
+          `Team key "${project.teamKey}" is defined in multiple realms (${existingRealm.name} and ${resolvedRealm.name}). ` +
+          `Use linearProject to distinguish projects within the same team.`
         );
       }
       realmByTeamKey.set(project.teamKey, resolvedRealm);

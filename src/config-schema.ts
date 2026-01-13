@@ -9,8 +9,10 @@ import { z } from "zod";
  */
 export const ProjectSchema = z.object({
   teamKey: z.string().min(1, "Team key cannot be empty"),
+  linearProject: z.string().optional(), // Linear project name for routing (takes priority over teamKey)
   path: z.string().min(1, "Project path cannot be empty"),
   profile: z.string().optional(),
+  githubRepoUrl: z.string().optional(),
 });
 
 export type Project = z.infer<typeof ProjectSchema>;

@@ -79,10 +79,17 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
   const firstRealm = resolved.realms[0];
 
   // Build project paths from all realms
+  // Linear project name takes priority over team key for routing
+  // Keys are stored lowercase for case-insensitive matching
   const projectPaths: Record<string, string> = {};
   for (const realm of resolved.realms) {
     for (const project of realm.projects) {
-      projectPaths[project.teamKey] = project.path;
+      // Add by Linear project name if specified (takes priority)
+      if (project.linearProject) {
+        projectPaths[project.linearProject.toLowerCase()] = project.path;
+      }
+      // Also add by team key as fallback
+      projectPaths[project.teamKey.toLowerCase()] = project.path;
     }
   }
 

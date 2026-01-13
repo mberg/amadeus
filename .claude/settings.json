@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(linear-cli:*)",
+      "Bash(git:*)",
+      "Bash(bun:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

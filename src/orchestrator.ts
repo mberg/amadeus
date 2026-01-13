@@ -344,11 +344,15 @@ export class ClaudeOrchestrator {
     const key = this.getAgentKey(issue);
 
     // Look up project path: try project name first, then team key, then DEFAULT
+    // Use lowercase for case-insensitive matching
     const projectName = issue.project?.name;
     const teamKey = issue.team?.key;
+    const projectNameLower = projectName?.toLowerCase();
+    const teamKeyLower = teamKey?.toLowerCase();
     const projectPath =
-      (projectName && this.config.projectPaths[projectName]) ||
-      (teamKey && this.config.projectPaths[teamKey]) ||
+      (projectNameLower && this.config.projectPaths[projectNameLower]) ||
+      (teamKeyLower && this.config.projectPaths[teamKeyLower]) ||
+      this.config.projectPaths["default"] ||
       this.config.projectPaths["DEFAULT"];
 
     if (!projectPath) {
@@ -357,9 +361,9 @@ export class ClaudeOrchestrator {
       return;
     }
 
-    const routedBy = projectName && this.config.projectPaths[projectName]
+    const routedBy = projectNameLower && this.config.projectPaths[projectNameLower]
       ? `project "${projectName}"`
-      : teamKey && this.config.projectPaths[teamKey]
+      : teamKeyLower && this.config.projectPaths[teamKeyLower]
         ? `team "${teamKey}"`
         : "DEFAULT";
     console.log(`[Agent] Routed ${issue.identifier} to ${projectPath} via ${routedBy}`);
