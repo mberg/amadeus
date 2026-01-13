@@ -132,6 +132,18 @@ export function TaskTable({
       },
     },
     {
+      accessorKey: "memoryMB",
+      header: "Memory",
+      cell: ({ row }) => {
+        const memoryMB = row.getValue("memoryMB") as number | undefined;
+        return (
+          <span className="text-muted-foreground tabular-nums text-sm">
+            {memoryMB !== undefined ? `${memoryMB} MB` : "-"}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "issueTitle",
       header: "Title",
       cell: ({ row }) => (
