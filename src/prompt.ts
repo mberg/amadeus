@@ -66,10 +66,19 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 
 You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
 ${fileLinkingSection}${workflowSection}
-### Important
+### Important - User Communication
 
-- Always communicate your progress via Linear comments using \`linear-cli comments create\`
-- Always update the issue status to reflect your current state using \`linear-cli issues update\`
+**The user can ONLY see messages you send via Linear comments.** Your internal thoughts, questions, and reasoning are invisible to them. If you need to:
+- Ask a clarifying question → Post it as a Linear comment
+- Share your analysis or findings → Post it as a Linear comment
+- Request feedback or approval → Post it as a Linear comment
+- Report progress or blockers → Post it as a Linear comment
+
+Any thoughts or questions you don't post to Linear will never reach the user. You can batch multiple updates into a single well-organized comment, but you MUST actually send it via \`linear-cli comments create\` for the user to see it.
+
+**Always:**
+- Communicate your progress via Linear comments using \`linear-cli comments create\`
+- Update the issue status to reflect your current state using \`linear-cli issues update\`
 - Keep the human in the loop—post meaningful updates, not just status changes
 ${profileSection}`.trim();
 }
@@ -325,7 +334,9 @@ linear-cli issues update ${issue.identifier} --state "<state-id>"
 
 You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
 
-### Important
+### Important - User Communication
+
+**The user can ONLY see messages you send via Linear comments.** Your internal thoughts, questions, and reasoning are invisible to them. If you need to ask questions, share findings, or report progress, you MUST post them as Linear comments via \`linear-cli comments create\`.
 
 - Linear comments are your source of truth for what was planned and discussed
 - Git history shows what code was actually written
