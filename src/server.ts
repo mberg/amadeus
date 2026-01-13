@@ -4,7 +4,7 @@
 import { $ } from "bun";
 import { CONFIG, getAllWebhookSecrets } from "./config";
 import { verifyLinearSignature } from "./signature";
-import { ClaudeOrchestrator, type AgentDeathInfo } from "./orchestrator";
+import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
 import { isBotComment } from "./comment-filter";
 import { AgentPersistence } from "./persistence";
@@ -39,6 +39,23 @@ function handleAgentDeath(info: AgentDeathInfo): void {
   persistence.markAgentDead(info.issueId);
 }
 
+// Handle agent completion - save to history
+function handleAgentComplete(info: AgentCompletionInfo): void {
+  console.log(
+    `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
+  );
+  persistence.saveCompletedTask({
+    key: info.key,
+    issueId: info.issueId,
+    issueIdentifier: info.issueIdentifier,
+    issueTitle: info.issueTitle,
+    completedAt: new Date(),
+    completionReason: info.completionReason,
+    finalLinearState: info.finalLinearState,
+    duration: info.duration,
+  });
+}
+
 const orchestrator = new ClaudeOrchestrator({
   projectPaths: CONFIG.projectPaths,
   triggerStates: CONFIG.triggerStates,
@@ -46,6 +63,7 @@ const orchestrator = new ClaudeOrchestrator({
   useWorktrees: CONFIG.useWorktrees,
   worktreesDir: CONFIG.worktreesDir,
   onAgentDeath: handleAgentDeath,
+  onAgentComplete: handleAgentComplete,
   linearWorkspace: CONFIG.linearWorkspace,
   agentName: CONFIG.agentName,
   profilesDir: CONFIG.profilesDir,
@@ -108,6 +126,24 @@ function shouldTerminateAgent(issue: LinearIssue): boolean {
   );
 }
 
+type CompletionReason = "done" | "stopped" | "canceled" | "backlog";
+
+function getCompletionReason(issue: LinearIssue): CompletionReason {
+  const stateName = issue.state?.name?.toLowerCase() ?? "";
+  const stateType = issue.state?.type?.toLowerCase() ?? "";
+
+  if (stateType === "completed" || stateName.includes("done")) {
+    return "done";
+  }
+  if (stateType === "canceled" || stateName.includes("cancel")) {
+    return "canceled";
+  }
+  if (stateType === "backlog" || stateName.includes("backlog") || stateName.includes("todo")) {
+    return "backlog";
+  }
+  return "stopped";
+}
+
 async function sendStateNotification(
   previousState: string | undefined,
   newState: string,
@@ -166,7 +202,7 @@ async function handleIssueWebhook(
   );
 
   if (action === "remove") {
-    await orchestrator.stopAgent(agentKey);
+    await orchestrator.stopAgent(agentKey, "canceled");
     return;
   }
 
@@ -174,10 +210,11 @@ async function handleIssueWebhook(
   if (shouldTerminateAgent(issue)) {
     const existingKey = orchestrator.findAgentByIssueId(issue.id);
     if (existingKey) {
+      const reason = getCompletionReason(issue);
       console.log(
-        `[${new Date().toISOString()}] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name}`
+        `[${new Date().toISOString()}] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name} (${reason})`
       );
-      await orchestrator.stopAgent(existingKey);
+      await orchestrator.stopAgent(existingKey, reason);
     }
     return;
   }
@@ -415,6 +452,28 @@ export const server = Bun.serve({
       });
     }
 
+    // Completed tasks history
+    if (req.method === "GET" && url.pathname === "/status/history") {
+      const authError = requireAuth(req);
+      if (authError) return authError;
+
+      const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
+      const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+
+      const completedTasks = persistence.getCompletedTasks(limit, offset);
+      const total = persistence.getCompletedTasksCount();
+
+      return Response.json({
+        completedTasks: completedTasks.map((task) => ({
+          ...task,
+          completedAt: task.completedAt.toISOString(),
+        })),
+        total,
+        limit,
+        offset,
+      });
+    }
+
     // Dashboard config
     if (req.method === "GET" && url.pathname === "/config") {
       const authError = requireAuth(req);
@@ -469,7 +528,7 @@ export const server = Bun.serve({
     if (req.method === "POST" && stopMatch) {
       const agentKey = decodeURIComponent(stopMatch[1]);
       console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
-      await orchestrator.stopAgent(agentKey);
+      await orchestrator.stopAgent(agentKey, "stopped");
       return Response.json({ success: true });
     }
 

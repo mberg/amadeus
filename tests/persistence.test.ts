@@ -2,7 +2,7 @@
 // ABOUTME: Verifies agent state persistence, recovery, and lifecycle tracking.
 
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import { AgentPersistence, type PersistedAgentState } from "../src/persistence";
+import { AgentPersistence, type PersistedAgentState, type PersistedCompletedTask } from "../src/persistence";
 import { unlink } from "node:fs/promises";
 
 describe("AgentPersistence", () => {
@@ -204,6 +204,141 @@ describe("AgentPersistence", () => {
 
       const all = persistence.getAllAgents();
       expect(all.length).toBe(2);
+    });
+  });
+
+  describe("saveCompletedTask", () => {
+    it("saves completed task to database", () => {
+      const task: PersistedCompletedTask = {
+        key: "TEST-issue-123",
+        issueId: "issue-123",
+        issueIdentifier: "TEST-1",
+        issueTitle: "Test Issue",
+        completedAt: new Date(),
+        completionReason: "done",
+        finalLinearState: "Done",
+        duration: 3600000,
+      };
+
+      persistence.saveCompletedTask(task);
+
+      const tasks = persistence.getCompletedTasks();
+      expect(tasks.length).toBe(1);
+      expect(tasks[0].issueIdentifier).toBe("TEST-1");
+      expect(tasks[0].completionReason).toBe("done");
+    });
+
+    it("saves task without final state", () => {
+      const task: PersistedCompletedTask = {
+        key: "TEST-issue-456",
+        issueId: "issue-456",
+        issueIdentifier: "TEST-2",
+        issueTitle: "Another Issue",
+        completedAt: new Date(),
+        completionReason: "stopped",
+        duration: 1800000,
+      };
+
+      persistence.saveCompletedTask(task);
+
+      const tasks = persistence.getCompletedTasks();
+      expect(tasks.length).toBe(1);
+      expect(tasks[0].finalLinearState).toBeUndefined();
+    });
+  });
+
+  describe("getCompletedTasks", () => {
+    it("returns empty array when no completed tasks", () => {
+      const tasks = persistence.getCompletedTasks();
+      expect(tasks).toEqual([]);
+    });
+
+    it("returns tasks ordered by completed_at descending", () => {
+      const now = new Date();
+      const earlier = new Date(now.getTime() - 60000);
+
+      persistence.saveCompletedTask({
+        key: "TEST-issue-1",
+        issueId: "issue-1",
+        issueIdentifier: "TEST-1",
+        issueTitle: "First Issue",
+        completedAt: earlier,
+        completionReason: "done",
+        duration: 1000,
+      });
+
+      persistence.saveCompletedTask({
+        key: "TEST-issue-2",
+        issueId: "issue-2",
+        issueIdentifier: "TEST-2",
+        issueTitle: "Second Issue",
+        completedAt: now,
+        completionReason: "stopped",
+        duration: 2000,
+      });
+
+      const tasks = persistence.getCompletedTasks();
+      expect(tasks.length).toBe(2);
+      expect(tasks[0].issueIdentifier).toBe("TEST-2"); // More recent first
+      expect(tasks[1].issueIdentifier).toBe("TEST-1");
+    });
+
+    it("respects limit parameter", () => {
+      for (let i = 0; i < 5; i++) {
+        persistence.saveCompletedTask({
+          key: `TEST-issue-${i}`,
+          issueId: `issue-${i}`,
+          issueIdentifier: `TEST-${i}`,
+          issueTitle: `Issue ${i}`,
+          completedAt: new Date(),
+          completionReason: "done",
+          duration: 1000,
+        });
+      }
+
+      const tasks = persistence.getCompletedTasks(3);
+      expect(tasks.length).toBe(3);
+    });
+
+    it("respects offset parameter", () => {
+      for (let i = 0; i < 5; i++) {
+        persistence.saveCompletedTask({
+          key: `TEST-issue-${i}`,
+          issueId: `issue-${i}`,
+          issueIdentifier: `TEST-${i}`,
+          issueTitle: `Issue ${i}`,
+          completedAt: new Date(Date.now() + i * 1000), // Different times for ordering
+          completionReason: "done",
+          duration: 1000,
+        });
+      }
+
+      const tasks = persistence.getCompletedTasks(2, 2);
+      expect(tasks.length).toBe(2);
+    });
+  });
+
+  describe("getCompletedTasksCount", () => {
+    it("returns 0 when no completed tasks", () => {
+      const count = persistence.getCompletedTasksCount();
+      expect(count).toBe(0);
+    });
+
+    it("returns correct count of completed tasks", () => {
+      for (let i = 0; i < 3; i++) {
+        persistence.saveCompletedTask({
+          key: `TEST-issue-${i}`,
+          issueId: `issue-${i}`,
+          issueIdentifier: `TEST-${i}`,
+          issueTitle: `Issue ${i}`,
+          completedAt: new Date(),
+          completionReason: "done",
+          duration: 1000,
+        });
+      }
+
+      const count = persistence.getCompletedTasksCount();
+      expect(count).toBe(3);
     });
   });
 });

@@ -60,6 +60,19 @@ export interface AgentStatus {
   worktreePath?: string;
 }
 
+export type CompletionReason = "done" | "stopped" | "canceled" | "backlog";
+
+export interface CompletedTask {
+  key: string;
+  issueId: string;
+  issueIdentifier: string;
+  issueTitle: string;
+  completedAt: Date;
+  completionReason: CompletionReason;
+  finalLinearState?: string;
+  duration: number; // milliseconds the task was active
+}
+
 export interface AgentProfileSkills {
   marketplaces?: string[];
   install?: string[];

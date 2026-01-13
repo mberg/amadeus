@@ -19,6 +19,18 @@ export interface AgentDeathInfo {
   reason: "exited" | "crashed" | "killed";
 }
 
+export type CompletionReason = "done" | "stopped" | "canceled" | "backlog";
+
+export interface AgentCompletionInfo {
+  key: string;
+  issueId: string;
+  issueIdentifier: string;
+  issueTitle: string;
+  completionReason: CompletionReason;
+  finalLinearState?: string;
+  duration: number;
+}
+
 export interface OrchestratorConfig {
   projectPaths: Record<string, string>;
   triggerStates: string[];
@@ -29,6 +41,7 @@ export interface OrchestratorConfig {
   useWorktrees?: boolean;
   worktreesDir?: string;
   onAgentDeath?: (info: AgentDeathInfo) => void;
+  onAgentComplete?: (info: AgentCompletionInfo) => void;
   linearWorkspace?: string;
   agentName?: string;
 }
@@ -500,11 +513,25 @@ export class ClaudeOrchestrator {
     }
   }
 
-  async stopAgent(key: string): Promise<void> {
+  async stopAgent(key: string, completionReason?: CompletionReason): Promise<void> {
     const agent = this.agents.get(key);
     if (!agent) return;
 
-    console.log(`[Agent] Stopping agent: ${key}`);
+    console.log(`[Agent] Stopping agent: ${key}${completionReason ? ` (reason: ${completionReason})` : ""}`);
+
+    // Call completion callback before removing agent (only if reason provided)
+    if (completionReason && this.config.onAgentComplete) {
+      const duration = Date.now() - agent.startedAt.getTime();
+      this.config.onAgentComplete({
+        key,
+        issueId: agent.linearIssueId,
+        issueIdentifier: agent.issueIdentifier,
+        issueTitle: agent.issueTitle,
+        completionReason,
+        finalLinearState: agent.linearState,
+        duration,
+      });
+    }
 
     // Mark as intentionally stopping so exit handler doesn't fire death callback
     this.stoppingAgents.add(key);

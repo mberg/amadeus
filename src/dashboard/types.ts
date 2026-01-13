@@ -31,6 +31,26 @@ export interface MessagesResponse {
   messages: Message[];
 }
 
+export type CompletionReason = "done" | "stopped" | "canceled" | "backlog";
+
+export interface CompletedTask {
+  key: string;
+  issueId: string;
+  issueIdentifier: string;
+  issueTitle: string;
+  completedAt: string;
+  completionReason: CompletionReason;
+  finalLinearState?: string;
+  duration: number;
+}
+
+export interface HistoryResponse {
+  completedTasks: CompletedTask[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type LinearState =
   | "Planning"
   | "Building"

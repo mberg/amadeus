@@ -14,10 +14,12 @@ import {
 import { useState } from "react";
 import {
   ArrowUpDown,
-  MoreHorizontal,
   ExternalLink,
   Square,
   MessageSquare,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Table,
@@ -29,22 +31,19 @@ import {
 } from "./ui/table";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import type { Task } from "../types";
+import type { Task, CompletedTask } from "../types";
 import { formatUptime } from "../lib/utils";
 
 interface TaskTableProps {
   tasks: Task[];
+  completedTasks: CompletedTask[];
+  showCompleted: boolean;
+  onToggleCompleted: () => void;
   linearWorkspace?: string;
   onSelectTask: (task: Task) => void;
   onStopTask: (taskKey: string) => void;
+  onLoadMoreCompleted: () => void;
+  hasMoreCompleted: boolean;
 }
 
 function getStatusVariant(status: string): "idle" | "working" | "starting" {
@@ -67,11 +66,46 @@ function getStateVariant(
   return "default";
 }
 
+function formatCompletionReason(reason: string): string {
+  switch (reason) {
+    case "done":
+      return "Completed";
+    case "stopped":
+      return "Stopped";
+    case "canceled":
+      return "Canceled";
+    case "backlog":
+      return "Backlogged";
+    default:
+      return reason;
+  }
+}
+
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
 export function TaskTable({
   tasks,
+  completedTasks,
+  showCompleted,
+  onToggleCompleted,
   linearWorkspace,
   onSelectTask,
   onStopTask,
+  onLoadMoreCompleted,
+  hasMoreCompleted,
 }: TaskTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -189,45 +223,52 @@ export function TaskTable({
           : null;
 
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => onSelectTask(task)}>
-                <MessageSquare className="mr-2 h-4 w-4" />
-                View Messages
-              </DropdownMenuItem>
-              {linearUrl && (
-                <DropdownMenuItem asChild>
-                  <a href={linearUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Open in Linear
-                  </a>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Stop task for ${task.issueIdentifier}? This will terminate the task and remove the worktree.`
-                    )
-                  ) {
-                    onStopTask(task.key);
-                  }
+          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectTask(task);
+              }}
+              title="View Messages"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+            {linearUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(linearUrl, "_blank", "noopener,noreferrer");
                 }}
-                className="text-destructive focus:text-destructive"
+                title="Open in Linear"
               >
-                <Square className="mr-2 h-4 w-4" />
-                Stop Task
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (
+                  window.confirm(
+                    `Stop task for ${task.issueIdentifier}? This will terminate the task and remove the worktree.`
+                  )
+                ) {
+                  onStopTask(task.key);
+                }
+              }}
+              title="Stop Task"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          </div>
         );
       },
     },
@@ -248,50 +289,171 @@ export function TaskTable({
   });
 
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                className="cursor-pointer"
-                onClick={() => onSelectTask(row.original)}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
+    <div className="space-y-4">
+      {/* Active Tasks */}
+      <div className="rounded-lg border border-border bg-card">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
                 ))}
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
-                <div className="text-muted-foreground">
-                  <span className="text-sm">No active tasks</span>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer group"
+                  onClick={() => onSelectTask(row.original)}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  <div className="text-muted-foreground">
+                    <span className="text-sm">No active tasks</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Completed Tasks Section */}
+      {completedTasks.length > 0 && (
+        <div className="rounded-lg border border-border bg-card/50">
+          {/* Collapsible Header */}
+          <button
+            onClick={onToggleCompleted}
+            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showCompleted ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Completed Tasks</span>
+            <span className="text-xs text-muted-foreground/60">
+              ({completedTasks.length})
+            </span>
+          </button>
+
+          {showCompleted && (
+            <div className="border-t border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-4">ID</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Result</TableHead>
+                    <TableHead>Final State</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Completed</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {completedTasks.map((task) => {
+                    const linearUrl = linearWorkspace
+                      ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
+                      : null;
+
+                    return (
+                      <TableRow
+                        key={`${task.issueId}-${task.completedAt}`}
+                        className="opacity-60 hover:opacity-80 transition-opacity"
+                      >
+                        <TableCell className="px-4">
+                          <span className="font-medium text-foreground">
+                            {task.issueIdentifier}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="max-w-[250px] truncate text-muted-foreground">
+                            {task.issueTitle}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={task.completionReason === "done" ? "done" : "default"}
+                            className="text-xs"
+                          >
+                            {formatCompletionReason(task.completionReason)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {task.finalLinearState ? (
+                            <Badge variant={getStateVariant(task.finalLinearState)} className="text-xs">
+                              {task.finalLinearState}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-muted-foreground tabular-nums text-sm">
+                            {formatUptime(task.duration)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-muted-foreground text-sm">
+                            {formatTimeAgo(task.completedAt)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {linearUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
+                              onClick={() => window.open(linearUrl, "_blank", "noopener,noreferrer")}
+                              title="Open in Linear"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+
+              {hasMoreCompleted && (
+                <div className="flex justify-center py-3 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onLoadMoreCompleted}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Load more
+                  </Button>
                 </div>
-              </TableCell>
-            </TableRow>
+              )}
+            </div>
           )}
-        </TableBody>
-      </Table>
+        </div>
+      )}
     </div>
   );
 }
