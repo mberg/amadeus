@@ -3,6 +3,7 @@
 
 export interface Task {
   key: string;
+  pid?: number;
   port: number;
   issueId: string;
   issueIdentifier: string;

@@ -35,6 +35,7 @@ export interface LinearWebhookPayload {
 
 export interface AgentInstance {
   process: Subprocess;
+  pid?: number;
   port: number;
   projectPath: string;
   worktreePath?: string;
@@ -49,6 +50,7 @@ export interface AgentInstance {
 
 export interface AgentStatus {
   key: string;
+  pid?: number;
   port: number;
   issueId: string;
   issueIdentifier: string;

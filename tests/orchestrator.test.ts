@@ -3,7 +3,7 @@
 
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { ClaudeOrchestrator } from "../src/orchestrator";
-import type { LinearIssue } from "../src/types";
+import type { LinearIssue, AgentStatus } from "../src/types";
 import type { AgentDeathInfo } from "../src/orchestrator";
 
 describe("ClaudeOrchestrator", () => {
@@ -160,6 +160,22 @@ describe("ClaudeOrchestrator", () => {
   describe("getStatus", () => {
     it("returns empty array when no agents running", () => {
       expect(orchestrator.getStatus()).toEqual([]);
+    });
+
+    it("AgentStatus includes pid field", () => {
+      // Type-level test: verify AgentStatus has pid field
+      const mockStatus: AgentStatus = {
+        key: "test-key",
+        port: 5000,
+        issueId: "issue-123",
+        issueIdentifier: "TEST-1",
+        issueTitle: "Test Issue",
+        status: "idle",
+        uptime: 1000,
+        pid: 12345,
+      };
+
+      expect(mockStatus.pid).toBe(12345);
     });
   });
 

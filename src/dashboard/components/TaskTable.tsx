@@ -120,6 +120,18 @@ export function TaskTable({
       ),
     },
     {
+      accessorKey: "pid",
+      header: "PID",
+      cell: ({ row }) => {
+        const pid = row.getValue("pid") as number | undefined;
+        return (
+          <span className="text-muted-foreground tabular-nums text-sm">
+            {pid ?? "-"}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "issueTitle",
       header: "Title",
       cell: ({ row }) => (
