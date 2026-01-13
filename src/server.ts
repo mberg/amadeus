@@ -446,8 +446,9 @@ export const server = Bun.serve({
       const authError = requireAuth(req);
       if (authError) return authError;
 
+      const agents = await orchestrator.getStatusWithMemory();
       return Response.json({
-        agents: orchestrator.getStatus(),
+        agents,
         timestamp: new Date().toISOString(),
       });
     }

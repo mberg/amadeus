@@ -177,6 +177,23 @@ describe("ClaudeOrchestrator", () => {
 
       expect(mockStatus.pid).toBe(12345);
     });
+
+    it("AgentStatus includes memoryMB field", () => {
+      // Type-level test: verify AgentStatus has memoryMB field
+      const mockStatus: AgentStatus = {
+        key: "test-key",
+        port: 5000,
+        issueId: "issue-123",
+        issueIdentifier: "TEST-1",
+        issueTitle: "Test Issue",
+        status: "idle",
+        uptime: 1000,
+        pid: 12345,
+        memoryMB: 128.5,
+      };
+
+      expect(mockStatus.memoryMB).toBe(128.5);
+    });
   });
 
   describe("getAgentKey", () => {

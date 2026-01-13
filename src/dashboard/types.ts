@@ -13,6 +13,7 @@ export interface Task {
   status: "idle" | "working" | "starting";
   uptime: number;
   worktreePath?: string;
+  memoryMB?: number;
 }
 
 export interface Message {

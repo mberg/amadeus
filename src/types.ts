@@ -60,6 +60,7 @@ export interface AgentStatus {
   status: string;
   uptime: number;
   worktreePath?: string;
+  memoryMB?: number;
 }
 
 export type CompletionReason = "done" | "stopped" | "canceled" | "backlog";

@@ -10,6 +10,7 @@ import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 import { applyProfileConfig } from "./profile-config";
 import { getGitHubRepoUrl } from "./git-utils";
 import { getRealmByTeamKey } from "./config";
+import { getProcessMemoryMB } from "./process-memory";
 
 export interface AgentDeathInfo {
   key: string;
@@ -143,6 +144,17 @@ export class ClaudeOrchestrator {
       status: agent.status,
       uptime: Date.now() - agent.startedAt.getTime(),
       worktreePath: agent.worktreePath,
+    }));
+  }
+
+  async getStatusWithMemory(): Promise<AgentStatus[]> {
+    const statuses = this.getStatus();
+    const memoryPromises = statuses.map((status) => getProcessMemoryMB(status.pid));
+    const memories = await Promise.all(memoryPromises);
+
+    return statuses.map((status, i) => ({
+      ...status,
+      memoryMB: memories[i],
     }));
   }
 

@@ -9,7 +9,7 @@ interface StatsBarProps {
 }
 
 interface StatCardProps {
-  value: number;
+  value: number | string;
   label: string;
 }
 
@@ -26,10 +26,18 @@ function StatCard({ value, label }: StatCardProps) {
   );
 }
 
+function formatMemory(mb: number): string {
+  if (mb >= 1024) {
+    return `${(mb / 1024).toFixed(1)} GB`;
+  }
+  return `${Math.round(mb)} MB`;
+}
+
 export function StatsBar({ tasks, completedCount = 0 }: StatsBarProps) {
   const totalTasks = tasks.length;
   const workingTasks = tasks.filter((t) => t.status === "working").length;
   const idleTasks = tasks.filter((t) => t.status === "idle").length;
+  const totalMemoryMB = tasks.reduce((sum, t) => sum + (t.memoryMB ?? 0), 0);
 
   return (
     <div className="mb-6 flex gap-3">
@@ -37,6 +45,9 @@ export function StatsBar({ tasks, completedCount = 0 }: StatsBarProps) {
       <StatCard value={workingTasks} label="Working" />
       <StatCard value={idleTasks} label="Idle" />
       <StatCard value={completedCount} label="Completed" />
+      {totalMemoryMB > 0 && (
+        <StatCard value={formatMemory(totalMemoryMB)} label="Memory" />
+      )}
     </div>
   );
 }
