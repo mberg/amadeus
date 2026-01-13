@@ -10,8 +10,9 @@ import { useStatus } from "./hooks/useStatus";
 import type { Task } from "./types";
 
 export function App() {
-  const { tasks, config, lastUpdated } = useStatus();
+  const { tasks, completedTasks, completedTotal, config, lastUpdated, loadMoreCompleted, hasMoreCompleted } = useStatus();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [showCompleted, setShowCompleted] = useState(true);
 
   const handleSelectTask = useCallback((task: Task) => {
     setSelectedTask(task);
@@ -40,16 +41,25 @@ export function App() {
     }
   }, [selectedTask]);
 
+  const handleToggleCompleted = useCallback(() => {
+    setShowCompleted((prev) => !prev);
+  }, []);
+
   return (
     <div className="mx-auto min-h-screen max-w-4xl px-6 py-8">
       <Header />
-      <StatsBar tasks={tasks} />
+      <StatsBar tasks={tasks} completedCount={completedTotal} />
 
       <TaskTable
         tasks={tasks}
+        completedTasks={completedTasks}
+        showCompleted={showCompleted}
+        onToggleCompleted={handleToggleCompleted}
         linearWorkspace={config.linearWorkspace}
         onSelectTask={handleSelectTask}
         onStopTask={handleStopTask}
+        onLoadMoreCompleted={loadMoreCompleted}
+        hasMoreCompleted={hasMoreCompleted}
       />
 
       <div className="mt-4 text-xs text-muted-foreground/60">

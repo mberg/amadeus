@@ -5,6 +5,7 @@ import type { Task } from "../types";
 
 interface StatsBarProps {
   tasks: Task[];
+  completedCount?: number;
 }
 
 interface StatCardProps {
@@ -25,16 +26,17 @@ function StatCard({ value, label }: StatCardProps) {
   );
 }
 
-export function StatsBar({ tasks }: StatsBarProps) {
+export function StatsBar({ tasks, completedCount = 0 }: StatsBarProps) {
   const totalTasks = tasks.length;
   const workingTasks = tasks.filter((t) => t.status === "working").length;
   const idleTasks = tasks.filter((t) => t.status === "idle").length;
 
   return (
     <div className="mb-6 flex gap-3">
-      <StatCard value={totalTasks} label="Total" />
+      <StatCard value={totalTasks} label="Active" />
       <StatCard value={workingTasks} label="Working" />
       <StatCard value={idleTasks} label="Idle" />
+      <StatCard value={completedCount} label="Completed" />
     </div>
   );
 }
