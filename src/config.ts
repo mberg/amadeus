@@ -6,6 +6,7 @@ import {
   loadConfig,
   hasNewStyleConfig,
   type ResolvedConfig,
+  type ResolvedRealm,
 } from "./config-loader";
 
 /**
@@ -202,7 +203,7 @@ export function isMultiRealmConfig(): boolean {
  */
 export function getAllWebhookSecrets(): Array<{ secret: string; realmName: string }> {
   if (REALM_CONFIG) {
-    return REALM_CONFIG.realms.map((r) => ({
+    return REALM_CONFIG.realms.map((r: ResolvedRealm) => ({
       secret: r.webhookSecret,
       realmName: r.name,
     }));

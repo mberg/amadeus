@@ -25,7 +25,7 @@ async function signPayload(payload: string, secret: string): Promise<string> {
 describe("HTTP Server", () => {
   beforeAll(async () => {
     // Set required env vars for test
-    process.env.PORT = "5679";
+    // Note: PORT is set in orchestrator.test.ts which loads config first
     process.env.LINEAR_WEBHOOK_SECRET = "test-secret";
     process.env.AMADEUS_API_TOKEN = TEST_TOKEN;
     process.env.LINEAR_WORKSPACE = "test-workspace";
@@ -33,7 +33,7 @@ describe("HTTP Server", () => {
     process.env.LINEAR_API_KEY_ONA = "test-api-key";
     process.env.LINEAR_WEBHOOK_SECRET_ONA = "test-secret";
 
-    // Import and start server
+    // Import and start server (uses port from config, set by orchestrator.test.ts)
     const mod = await import("../src/server");
     server = mod.server;
     baseUrl = `http://localhost:${mod.server.port}`;

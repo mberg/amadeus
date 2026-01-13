@@ -18,7 +18,7 @@ describe("notifications", () => {
     mockFetch = mock(() =>
       Promise.resolve(new Response(JSON.stringify({ id: "test-id" }), { status: 200 }))
     );
-    global.fetch = mockFetch;
+    global.fetch = mockFetch as unknown as typeof fetch;
   });
 
   afterEach(() => {

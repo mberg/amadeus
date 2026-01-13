@@ -316,7 +316,8 @@ describe("buildCommentPrompt", () => {
       identifier: "ENG-42",
       title: "Test issue",
     },
-    user: { name: userName },
+    user: { id: "user-123", name: userName },
+    createdAt: new Date().toISOString(),
   });
 
   it("includes the comment body", () => {

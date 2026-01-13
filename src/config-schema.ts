@@ -55,7 +55,7 @@ export const AmadeusConfigSchema = z.object({
     (realms) => Object.keys(realms).length > 0,
     "At least one realm must be defined"
   ),
-  global: GlobalConfigSchema.default({}),
+  global: GlobalConfigSchema,
 });
 
 export type AmadeusConfig = z.infer<typeof AmadeusConfigSchema>;
