@@ -4,7 +4,6 @@
 import { useClerk, useUser } from "@clerk/clerk-react";
 import { LogOut, User, Shield, Eye, Wrench } from "lucide-react";
 import { useAuth, type UserRole } from "./AuthProvider";
-import { Badge } from "./ui/badge";
 import { cn } from "../lib/utils";
 
 interface UserMenuProps {
@@ -23,12 +22,11 @@ const roleLabels: Record<UserRole, string> = {
   viewer: "Viewer",
 };
 
-export function UserMenu({ collapsed }: UserMenuProps) {
-  const { mode, role } = useAuth();
+function ClerkUserMenu({ collapsed, role }: { collapsed: boolean; role: UserRole }) {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
 
-  if (mode !== "clerk" || !isLoaded || !user) {
+  if (!isLoaded || !user) {
     return null;
   }
 
@@ -97,4 +95,14 @@ export function UserMenu({ collapsed }: UserMenuProps) {
       </button>
     </div>
   );
+}
+
+export function UserMenu({ collapsed }: UserMenuProps) {
+  const { mode, role } = useAuth();
+
+  if (mode !== "clerk") {
+    return null;
+  }
+
+  return <ClerkUserMenu collapsed={collapsed} role={role} />;
 }
