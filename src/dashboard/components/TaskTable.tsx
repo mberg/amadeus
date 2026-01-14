@@ -446,10 +446,7 @@ export function TaskTable({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={task.completionReason === "done" ? "done" : "default"}
-                            className="text-xs"
-                          >
+                          <Badge variant="default" className="text-xs">
                             {formatCompletionReason(task.completionReason)}
                           </Badge>
                         </TableCell>
