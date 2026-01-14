@@ -478,12 +478,12 @@ export function TaskTable({
                           )}
                         </TableCell>
                         <TableCell>
-                          <span className="text-foreground tabular-nums text-sm">
+                          <span className="text-muted-foreground tabular-nums text-sm">
                             {formatUptime(task.duration)}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-foreground text-sm">
+                          <span className="text-muted-foreground text-sm">
                             {formatTimeAgo(task.completedAt)}
                           </span>
                         </TableCell>
