@@ -27,9 +27,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
           onClick={onToggleCollapse}
           className="flex h-14 items-center gap-2.5 px-4 hover:bg-muted/50 transition-colors"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-            <Activity className="h-4 w-4 text-primary" />
-          </div>
+          <Activity className="h-5 w-5 text-foreground shrink-0" />
           {!collapsed && (
             <span className="text-base font-semibold tracking-tight">Amadeus</span>
           )}
@@ -56,8 +54,8 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 activeItem === "tasks"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? "bg-muted/50 text-foreground"
+                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
                 collapsed && "justify-center px-2"
               )}
             >
@@ -70,8 +68,8 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 activeItem === "setup"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? "bg-muted/50 text-foreground"
+                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
                 collapsed && "justify-center px-2"
               )}
             >
