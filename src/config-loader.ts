@@ -1,7 +1,7 @@
 // ABOUTME: Loads and validates Amadeus configuration from YAML files.
 // ABOUTME: Resolves environment variable references and builds lookup maps.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import yaml from "js-yaml";
 import {
@@ -171,4 +171,75 @@ export function getRealmForWorkspace(config: ResolvedConfig, workspace: string):
 export function getProfileForTeam(config: ResolvedConfig, teamKey: string): string {
   const entry = config.projectByTeamKey.get(teamKey);
   return entry?.project.profile ?? config.global.defaultProfile;
+}
+
+/**
+ * Get the path to the config file.
+ */
+export function getConfigFilePath(baseDir?: string): string | null {
+  const dir = baseDir ?? resolve(import.meta.dir, "..");
+  return findConfigFile(dir);
+}
+
+/**
+ * Get the raw YAML content of the config file.
+ */
+export function getConfigYaml(baseDir?: string): string | null {
+  const configPath = getConfigFilePath(baseDir);
+  if (!configPath) return null;
+  return readFileSync(configPath, "utf-8");
+}
+
+export type ConfigValidationResult =
+  | { valid: true; config: ResolvedConfig }
+  | { valid: false; errors: string[] };
+
+/**
+ * Validate YAML content without writing to disk.
+ */
+export function validateConfigYaml(yamlContent: string): ConfigValidationResult {
+  try {
+    const rawConfig = yaml.load(yamlContent) as Record<string, unknown> | null;
+
+    if (rawConfig && rawConfig.global === undefined) {
+      rawConfig.global = {};
+    }
+
+    const parseResult = AmadeusConfigSchema.safeParse(rawConfig);
+
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues.map(
+        (e) => `${e.path.join(".")}: ${e.message}`
+      );
+      return { valid: false, errors };
+    }
+
+    const resolved = buildResolvedConfig(parseResult.data);
+    return { valid: true, config: resolved };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { valid: false, errors: [message] };
+  }
+}
+
+/**
+ * Write new config content and return the resolved config.
+ * Does not modify existing config - caller must update CONFIG/REALM_CONFIG.
+ */
+export function writeConfig(
+  yamlContent: string,
+  baseDir?: string
+): ConfigValidationResult {
+  const validation = validateConfigYaml(yamlContent);
+  if (!validation.valid) {
+    return validation;
+  }
+
+  const configPath = getConfigFilePath(baseDir);
+  if (!configPath) {
+    return { valid: false, errors: ["No config file found to update"] };
+  }
+
+  writeFileSync(configPath, yamlContent, "utf-8");
+  return validation;
 }

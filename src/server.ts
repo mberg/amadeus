@@ -2,8 +2,18 @@
 // ABOUTME: Entry point for the Bun server.
 
 import { $ } from "bun";
-import { CONFIG, REALM_CONFIG, getAllWebhookSecrets, getRealmByTeamKey } from "./config";
+import {
+  CONFIG,
+  REALM_CONFIG,
+  getAllWebhookSecrets,
+  getRealmByTeamKey,
+  getSecurityConfig,
+  getConfigYaml,
+  validateConfigYaml,
+  reloadConfig,
+} from "./config";
 import { verifyLinearSignature } from "./signature";
+import { requireAuth as checkAuth, getAuthInfo, isClerkEnabled } from "./auth";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
 import { isBotComment } from "./comment-filter";
@@ -18,14 +28,31 @@ import {
   notifyReviewReady,
 } from "./notifications";
 
-function requireAuth(req: Request): Response | null {
-  if (!CONFIG.apiToken) return null;
+async function requireViewer(req: Request): Promise<Response | null> {
+  const security = getSecurityConfig();
+  const result = await checkAuth(req, "viewer", {
+    apiToken: CONFIG.apiToken,
+    enableAgentMessaging: security.enableAgentMessaging,
+  });
+  return result.authorized ? null : result.response;
+}
 
-  const token = req.headers.get("X-Amadeus-Token");
-  if (token !== CONFIG.apiToken) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  return null;
+async function requireOperator(req: Request): Promise<Response | null> {
+  const security = getSecurityConfig();
+  const result = await checkAuth(req, "operator", {
+    apiToken: CONFIG.apiToken,
+    enableAgentMessaging: security.enableAgentMessaging,
+  });
+  return result.authorized ? null : result.response;
+}
+
+async function requireAdmin(req: Request): Promise<Response | null> {
+  const security = getSecurityConfig();
+  const result = await checkAuth(req, "admin", {
+    apiToken: CONFIG.apiToken,
+    enableAgentMessaging: security.enableAgentMessaging,
+  });
+  return result.authorized ? null : result.response;
 }
 
 // Initialize persistence layer
@@ -450,9 +477,14 @@ export const server = Bun.serve({
       return new Response("OK", { status: 200 });
     }
 
+    // Auth info endpoint (for frontend to know auth mode)
+    if (req.method === "GET" && url.pathname === "/auth/info") {
+      return Response.json(getAuthInfo());
+    }
+
     // Status dashboard (JSON)
     if (req.method === "GET" && url.pathname === "/status") {
-      const authError = requireAuth(req);
+      const authError = await requireViewer(req);
       if (authError) return authError;
 
       const agents = await orchestrator.getStatusWithMemory();
@@ -464,7 +496,7 @@ export const server = Bun.serve({
 
     // Completed tasks history
     if (req.method === "GET" && url.pathname === "/status/history") {
-      const authError = requireAuth(req);
+      const authError = await requireViewer(req);
       if (authError) return authError;
 
       const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
@@ -484,9 +516,9 @@ export const server = Bun.serve({
       });
     }
 
-    // Dashboard config
+    // Dashboard config (read)
     if (req.method === "GET" && url.pathname === "/config") {
-      const authError = requireAuth(req);
+      const authError = await requireViewer(req);
       if (authError) return authError;
 
       // Build setup data from REALM_CONFIG, filtering out sensitive fields
@@ -509,6 +541,7 @@ export const server = Bun.serve({
               triggerStates: REALM_CONFIG.global.triggerStates,
               useWorktrees: REALM_CONFIG.global.useWorktrees,
               defaultProfile: REALM_CONFIG.global.defaultProfile,
+              security: REALM_CONFIG.global.security,
             },
           }
         : null;
@@ -519,9 +552,52 @@ export const server = Bun.serve({
       });
     }
 
+    // Config YAML (read raw)
+    if (req.method === "GET" && url.pathname === "/config/yaml") {
+      const authError = await requireViewer(req);
+      if (authError) return authError;
+
+      const yaml = getConfigYaml();
+      if (!yaml) {
+        return new Response("No config file found", { status: 404 });
+      }
+
+      return new Response(yaml, {
+        headers: { "Content-Type": "text/yaml" },
+      });
+    }
+
+    // Config YAML (validate without saving)
+    if (req.method === "POST" && url.pathname === "/config/validate") {
+      const authError = await requireAdmin(req);
+      if (authError) return authError;
+
+      const yamlContent = await req.text();
+      const result = validateConfigYaml(yamlContent);
+
+      if (result.valid) {
+        return Response.json({ valid: true });
+      }
+      return Response.json({ valid: false, errors: result.errors }, { status: 400 });
+    }
+
+    // Config YAML (save and reload)
+    if (req.method === "POST" && url.pathname === "/config") {
+      const authError = await requireAdmin(req);
+      if (authError) return authError;
+
+      const yamlContent = await req.text();
+      const result = reloadConfig(yamlContent);
+
+      if (result.success) {
+        return Response.json({ success: true });
+      }
+      return Response.json({ success: false, errors: result.errors }, { status: 400 });
+    }
+
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
-      const authError = requireAuth(req);
+      const authError = await requireOperator(req);
       if (authError) return authError;
 
       try {
@@ -539,7 +615,7 @@ export const server = Bun.serve({
     // Agent messages proxy endpoint
     const messagesMatch = url.pathname.match(/^\/agents\/([^/]+)\/messages$/);
     if (req.method === "GET" && messagesMatch) {
-      const authError = requireAuth(req);
+      const authError = await requireViewer(req);
       if (authError) return authError;
 
       const agentKey = decodeURIComponent(messagesMatch[1]);
@@ -561,6 +637,9 @@ export const server = Bun.serve({
     // Stop agent endpoint (for dashboard)
     const stopMatch = url.pathname.match(/^\/agents\/([^/]+)\/stop$/);
     if (req.method === "POST" && stopMatch) {
+      const authError = await requireOperator(req);
+      if (authError) return authError;
+
       const agentKey = decodeURIComponent(stopMatch[1]);
       console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
       await orchestrator.stopAgent(agentKey, "stopped");

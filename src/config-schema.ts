@@ -32,6 +32,15 @@ export const RealmSchema = z.object({
 export type Realm = z.infer<typeof RealmSchema>;
 
 /**
+ * Schema for security settings.
+ */
+export const SecurityConfigSchema = z.object({
+  enableAgentMessaging: z.boolean().default(false),
+});
+
+export type SecurityConfig = z.infer<typeof SecurityConfigSchema>;
+
+/**
  * Schema for global configuration settings.
  */
 export const GlobalConfigSchema = z.object({
@@ -45,6 +54,7 @@ export const GlobalConfigSchema = z.object({
   dbPath: z.string().default("./amadeus-agents.db"),
   healthCheckIntervalMs: z.number().int().positive().default(30000),
   healthCheckTimeoutMs: z.number().int().positive().default(5000),
+  security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false }),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;

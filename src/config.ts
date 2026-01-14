@@ -5,9 +5,14 @@ import { join, resolve } from "node:path";
 import {
   loadConfig,
   hasNewStyleConfig,
+  writeConfig,
+  getConfigYaml,
+  validateConfigYaml,
   type ResolvedConfig,
   type ResolvedRealm,
+  type ConfigValidationResult,
 } from "./config-loader";
+import type { SecurityConfig } from "./config-schema";
 
 /**
  * Legacy CONFIG interface for backward compatibility.
@@ -237,4 +242,44 @@ export function getRealmByTeamKey(teamKey: string): {
     workspace: realm.linearWorkspace,
     realmName: realm.name,
   };
+}
+
+/**
+ * Get current security configuration.
+ */
+export function getSecurityConfig(): SecurityConfig {
+  if (REALM_CONFIG) {
+    return REALM_CONFIG.global.security;
+  }
+  return { enableAgentMessaging: false };
+}
+
+/**
+ * Get the raw YAML configuration content.
+ */
+export { getConfigYaml, validateConfigYaml };
+
+export type ReloadConfigResult =
+  | { success: true; config: ResolvedConfig }
+  | { success: false; errors: string[] };
+
+/**
+ * Reload configuration from disk and update in-memory config.
+ * Only works with new-style YAML config.
+ */
+export function reloadConfig(yamlContent: string): ReloadConfigResult {
+  if (!REALM_CONFIG) {
+    return { success: false, errors: ["Config reload only supported with YAML config"] };
+  }
+
+  const result = writeConfig(yamlContent);
+  if (!result.valid) {
+    return { success: false, errors: result.errors };
+  }
+
+  REALM_CONFIG = result.config;
+  CONFIG = buildLegacyConfigFromResolved(result.config);
+
+  console.log(`[Config] Reloaded configuration with ${result.config.realms.length} realm(s)`);
+  return { success: true, config: result.config };
 }
