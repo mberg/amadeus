@@ -326,7 +326,63 @@ AGENT_NAME=Amadeus
 # RESEND_API_KEY=re_xxxxxxxxxxxxx
 # NOTIFICATION_EMAIL=your_phone@carrier.net
 # NOTIFICATION_FROM_EMAIL=amadeus@yourdomain.com
+
+# Optional: Clerk authentication (enables sign-in and role-based access)
+# CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxx
+# CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
 ```
+
+### Clerk Authentication (Optional)
+
+Amadeus supports two authentication modes:
+
+1. **Simple Mode** (default): No authentication required. Dashboard is accessible to anyone.
+2. **Clerk Mode**: Full authentication with role-based access control.
+
+#### Enabling Clerk
+
+1. Create a Clerk application at [clerk.com](https://clerk.com)
+2. Add your keys to `.env`:
+   ```bash
+   CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxx
+   CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
+   ```
+3. Restart Amadeus - the dashboard will now require sign-in
+
+#### Role-Based Access Control
+
+Clerk mode supports three roles, set via user **public metadata**:
+
+| Role | Permissions |
+|------|-------------|
+| `viewer` | Read-only dashboard access (default) |
+| `operator` | Can message agents and stop processes |
+| `admin` | Full access including config editing |
+
+#### Setting User Roles
+
+1. Go to [Clerk Dashboard](https://dashboard.clerk.com) → Users
+2. Select the user you want to modify
+3. Click **Edit** next to "Public Metadata"
+4. Add the role:
+   ```json
+   {
+     "role": "admin"
+   }
+   ```
+5. Save changes - the role takes effect immediately
+
+#### Simple Mode with Agent Messaging
+
+If you want to enable agent messaging without full Clerk authentication, add to your `amadeus.config.yaml`:
+
+```yaml
+global:
+  security:
+    enableAgentMessaging: true
+```
+
+This allows dashboard users to send messages to agents without signing in.
 
 ### Realms
 
