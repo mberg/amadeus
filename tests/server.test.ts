@@ -266,5 +266,38 @@ describe("HTTP Server", () => {
       const res = await fetch(`${baseUrl}/config`);
       expect(res.status).toBe(401);
     });
+
+    it("returns setup data with realms and projects", async () => {
+      const res = await fetch(`${baseUrl}/config`, {
+        headers: { "X-Amadeus-Token": TEST_TOKEN },
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      // Should have setup property with realms
+      expect(data).toHaveProperty("setup");
+      expect(data.setup).toHaveProperty("realms");
+      expect(Array.isArray(data.setup.realms)).toBe(true);
+
+      // Each realm should have safe fields only (no secrets)
+      if (data.setup.realms.length > 0) {
+        const realm = data.setup.realms[0];
+        expect(realm).toHaveProperty("name");
+        expect(realm).toHaveProperty("linearWorkspace");
+        expect(realm).toHaveProperty("projects");
+        expect(Array.isArray(realm.projects)).toBe(true);
+
+        // Should NOT have sensitive fields
+        expect(realm).not.toHaveProperty("apiKey");
+        expect(realm).not.toHaveProperty("webhookSecret");
+        expect(realm).not.toHaveProperty("apiKeyEnvVar");
+        expect(realm).not.toHaveProperty("webhookSecretEnvVar");
+      }
+
+      // Should have global settings
+      expect(data.setup).toHaveProperty("global");
+      expect(data.setup.global).toHaveProperty("agentName");
+      expect(data.setup.global).toHaveProperty("triggerStates");
+    });
   });
 });

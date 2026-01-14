@@ -2,7 +2,7 @@
 // ABOUTME: Entry point for the Bun server.
 
 import { $ } from "bun";
-import { CONFIG, getAllWebhookSecrets, getRealmByTeamKey } from "./config";
+import { CONFIG, REALM_CONFIG, getAllWebhookSecrets, getRealmByTeamKey } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
@@ -489,8 +489,33 @@ export const server = Bun.serve({
       const authError = requireAuth(req);
       if (authError) return authError;
 
+      // Build setup data from REALM_CONFIG, filtering out sensitive fields
+      const setup = REALM_CONFIG
+        ? {
+            realms: REALM_CONFIG.realms.map((realm) => ({
+              name: realm.name,
+              linearWorkspace: realm.linearWorkspace,
+              projects: realm.projects.map((project) => ({
+                teamKey: project.teamKey,
+                linearProject: project.linearProject,
+                path: project.path,
+                profile: project.profile,
+                githubRepoUrl: project.githubRepoUrl,
+              })),
+            })),
+            global: {
+              agentName: REALM_CONFIG.global.agentName,
+              port: REALM_CONFIG.global.port,
+              triggerStates: REALM_CONFIG.global.triggerStates,
+              useWorktrees: REALM_CONFIG.global.useWorktrees,
+              defaultProfile: REALM_CONFIG.global.defaultProfile,
+            },
+          }
+        : null;
+
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
+        setup,
       });
     }
 
