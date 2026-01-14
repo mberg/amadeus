@@ -148,7 +148,7 @@ describe("buildPrompt", () => {
     expect(prompt).toMatch(/Feedback Needed.*STOP|STOP.*Feedback Needed/i);
   });
 
-  it("includes workspace name for constructing mention URLs", () => {
+  it("includes Feedback Needed notification section when workspace is provided", () => {
     const issue: LinearIssue = {
       id: "issue-123",
       identifier: "ENG-42",
@@ -157,12 +157,11 @@ describe("buildPrompt", () => {
 
     const prompt = buildPrompt(issue, undefined, "ona");
 
-    expect(prompt).toContain("ona");
-    expect(prompt).toContain("linear.app");
-    expect(prompt).toContain("profiles");
+    expect(prompt).toContain("Notify the issue creator");
+    expect(prompt).toContain("--assignee");
   });
 
-  it("includes instructions to mention issue creator when requesting feedback", () => {
+  it("includes Review notification in non-YOLO mode when workspace is provided", () => {
     const issue: LinearIssue = {
       id: "issue-123",
       identifier: "ENG-42",
@@ -171,9 +170,36 @@ describe("buildPrompt", () => {
 
     const prompt = buildPrompt(issue, undefined, "ona");
 
-    // Should instruct agent to @mention the creator/assignee
-    expect(prompt).toMatch(/mention|@|notify/i);
-    expect(prompt).toMatch(/linear-cli issues get/i);
+    // Should have explicit notification step for Review state (after setting to Review)
+    // Look for assignee notification with "review" context within 500 chars
+    expect(prompt).toMatch(/set.*Review[\s\S]{0,500}--assignee|--assignee[\s\S]{0,500}review/i);
+  });
+
+  it("excludes notification section when workspace is not provided", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt).not.toContain("Notify the issue creator");
+  });
+
+  it("includes instructions to assign issue to creator for reliable notifications", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue, undefined, "ona");
+
+    // Should instruct agent to use --assignee to trigger inbox notification
+    expect(prompt).toMatch(/--assignee/i);
+    expect(prompt).toMatch(/linear-cli issues update/i);
+    expect(prompt).toMatch(/inbox notification/i);
   });
 
   it("includes file linking instructions when githubRepoUrl is provided", () => {
@@ -303,6 +329,20 @@ describe("buildPrompt YOLO mode", () => {
     const prompt = buildPrompt(issue);
 
     expect(prompt).toMatch(/yolo.*mode|YOLO.*mode/i);
+  });
+
+  it("includes assignee notification for Review state when workspace is provided", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      description: "Do this yolo",
+    };
+
+    const prompt = buildPrompt(issue, undefined, "ona");
+
+    // Should include notification step after Review
+    expect(prompt).toMatch(/Review[\s\S]*--assignee/i);
   });
 });
 

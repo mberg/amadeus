@@ -115,7 +115,7 @@ export function App() {
             </div>
           )}
 
-          {activeNav === "setup" && (
+          {activeNav === "settings" && (
             <SettingsPage setup={config.setup} />
           )}
         </div>

@@ -6,7 +6,7 @@ import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { UserMenu } from "./UserMenu";
 
-export type NavItem = "tasks" | "setup";
+export type NavItem = "tasks" | "settings";
 
 interface SidebarProps {
   activeItem: NavItem;
@@ -63,11 +63,11 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               {!collapsed && "Tasks"}
             </button>
             <button
-              onClick={() => onNavigate("setup")}
+              onClick={() => onNavigate("settings")}
               title="Settings"
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                activeItem === "setup"
+                activeItem === "settings"
                   ? "bg-muted/50 text-foreground"
                   : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
                 collapsed && "justify-center px-2"

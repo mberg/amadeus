@@ -27,6 +27,11 @@ import {
   notifyFeedbackNeeded,
   notifyReviewReady,
 } from "./notifications";
+import {
+  notifyFeedbackNeededTelegram,
+  notifyReviewReadyTelegram,
+  parseIssueFromMessage,
+} from "./telegram";
 
 async function requireViewer(req: Request): Promise<Response | null> {
   const security = getSecurityConfig();
@@ -177,37 +182,66 @@ async function sendStateNotification(
   newState: string,
   issue: LinearIssue
 ): Promise<void> {
-  if (!CONFIG.notificationEmail || !CONFIG.resendApiKey) {
-    return;
-  }
-
   if (!shouldNotify(previousState, newState)) {
     return;
   }
 
-  const options = {
-    issueIdentifier: issue.identifier,
-    issueTitle: issue.title,
-    to: CONFIG.notificationEmail,
-    apiKey: CONFIG.resendApiKey,
-    from: CONFIG.notificationFromEmail,
-  };
+  const issueUrl = `https://linear.app/${CONFIG.linearWorkspace}/issue/${issue.identifier}`;
 
-  let result;
-  if (newState === "Feedback Needed") {
-    result = await notifyFeedbackNeeded(options);
-  } else if (newState === "Review") {
-    result = await notifyReviewReady(options);
+  // Send email notification if configured
+  if (CONFIG.notificationEmail && CONFIG.resendApiKey) {
+    const emailOptions = {
+      issueIdentifier: issue.identifier,
+      issueTitle: issue.title,
+      to: CONFIG.notificationEmail,
+      apiKey: CONFIG.resendApiKey,
+      from: CONFIG.notificationFromEmail,
+    };
+
+    let emailResult;
+    if (newState === "Feedback Needed") {
+      emailResult = await notifyFeedbackNeeded(emailOptions);
+    } else if (newState === "Review") {
+      emailResult = await notifyReviewReady(emailOptions);
+    }
+
+    if (emailResult?.success) {
+      console.log(
+        `[Notification] Sent email ${newState} notification for ${issue.identifier}`
+      );
+    } else if (emailResult?.error) {
+      console.warn(
+        `[Notification] Failed to send email for ${issue.identifier}: ${emailResult.error}`
+      );
+    }
   }
 
-  if (result?.success) {
-    console.log(
-      `[Notification] Sent ${newState} notification for ${issue.identifier}`
-    );
-  } else if (result?.error) {
-    console.warn(
-      `[Notification] Failed to send for ${issue.identifier}: ${result.error}`
-    );
+  // Send Telegram notification if configured
+  if (CONFIG.telegramBotToken && CONFIG.telegramChatId) {
+    const telegramOptions = {
+      issueIdentifier: issue.identifier,
+      issueTitle: issue.title,
+      issueUrl,
+      chatId: CONFIG.telegramChatId,
+      botToken: CONFIG.telegramBotToken,
+    };
+
+    let telegramResult;
+    if (newState === "Feedback Needed") {
+      telegramResult = await notifyFeedbackNeededTelegram(telegramOptions);
+    } else if (newState === "Review") {
+      telegramResult = await notifyReviewReadyTelegram(telegramOptions);
+    }
+
+    if (telegramResult?.success) {
+      console.log(
+        `[Notification] Sent Telegram ${newState} notification for ${issue.identifier}`
+      );
+    } else if (telegramResult?.error) {
+      console.warn(
+        `[Notification] Failed to send Telegram for ${issue.identifier}: ${telegramResult.error}`
+      );
+    }
   }
 }
 
@@ -609,6 +643,51 @@ export const server = Bun.serve({
         return new Response("Sent");
       } catch {
         return new Response("Bad Request", { status: 400 });
+      }
+    }
+
+    // Telegram webhook endpoint for receiving replies
+    if (req.method === "POST" && url.pathname === "/telegram-webhook") {
+      try {
+        const update = await req.json();
+
+        // Telegram sends updates with message object
+        const messageText = update?.message?.text;
+        if (!messageText) {
+          return new Response("OK"); // Acknowledge but ignore non-text messages
+        }
+
+        const parsed = parseIssueFromMessage(messageText);
+        if (!parsed) {
+          console.log(
+            `[Telegram] Received message without valid issue format: ${messageText.slice(0, 50)}...`
+          );
+          return new Response("OK"); // Acknowledge but ignore invalid format
+        }
+
+        console.log(
+          `[Telegram] Received reply for ${parsed.issueIdentifier}: ${parsed.message.slice(0, 50)}...`
+        );
+
+        // Post the message as a Linear comment on the issue
+        const teamKey = parsed.issueIdentifier.split("-")[0];
+        const realmInfo = getRealmByTeamKey(teamKey);
+        const env = realmInfo?.apiKey
+          ? { ...process.env, LINEAR_API_KEY: realmInfo.apiKey }
+          : process.env;
+
+        await $`linear-cli comments create --body ${parsed.message} ${parsed.issueIdentifier}`
+          .env(env)
+          .quiet();
+
+        console.log(
+          `[Telegram] Posted comment to ${parsed.issueIdentifier}`
+        );
+
+        return new Response("OK");
+      } catch (err) {
+        console.error("[Telegram] Error processing webhook:", err);
+        return new Response("OK"); // Always return OK to prevent Telegram retries
       }
     }
 
