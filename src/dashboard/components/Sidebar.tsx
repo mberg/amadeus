@@ -25,7 +25,10 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
         {/* Logo - clickable to toggle */}
         <button
           onClick={onToggleCollapse}
-          className="flex h-14 items-center gap-2.5 px-4 hover:bg-muted/50 transition-colors"
+          className={cn(
+            "flex h-14 items-center gap-2.5 hover:bg-muted/50 transition-colors",
+            collapsed ? "justify-center px-2" : "px-4"
+          )}
         >
           <Activity className="h-5 w-5 text-foreground shrink-0" />
           {!collapsed && (
