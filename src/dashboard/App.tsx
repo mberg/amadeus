@@ -114,17 +114,17 @@ export function App() {
             </div>
           )}
 
-          {activeNav === "setup" && (
+          {activeNav === "settings" && (
             <div className="space-y-6">
               {/* Page Header */}
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Setup</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
                 <p className="text-muted-foreground">
                   View configured realms and projects
                 </p>
               </div>
 
-              {/* Setup Content */}
+              {/* Settings Content */}
               <SetupPanel setup={config.setup} />
             </div>
           )}
