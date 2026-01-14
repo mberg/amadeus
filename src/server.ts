@@ -468,6 +468,11 @@ export const server = Bun.serve({
       return new Response("OK");
     }
 
+    // Redirect root to dashboard
+    if (req.method === "GET" && url.pathname === "/") {
+      return Response.redirect(new URL("/dashboard", req.url).toString(), 302);
+    }
+
     // Linear webhook endpoint
     if (req.method === "POST" && url.pathname === "/webhook") {
       const payload = await req.text();
