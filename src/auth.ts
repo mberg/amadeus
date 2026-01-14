@@ -126,18 +126,27 @@ export async function requireAuth(
   }
 
   if (context.mode === "simple") {
-    if (requiredRole === "operator" && !options.enableAgentMessaging) {
-      return {
-        authorized: false,
-        response: new Response("Forbidden: Agent messaging disabled", { status: 403 }),
-      };
-    }
+    const hasApiToken = options.apiToken && req.headers.get("X-Amadeus-Token") === options.apiToken;
+
     if (requiredRole === "admin") {
       return {
         authorized: false,
         response: new Response("Forbidden: Config editing requires Clerk authentication", { status: 403 }),
       };
     }
+
+    if (requiredRole === "operator") {
+      if (hasApiToken) {
+        return { authorized: true, context };
+      }
+      if (!options.enableAgentMessaging) {
+        return {
+          authorized: false,
+          response: new Response("Forbidden: Agent messaging disabled", { status: 403 }),
+        };
+      }
+    }
+
     return { authorized: true, context };
   }
 
