@@ -7,6 +7,7 @@ import { StatsBar } from "./components/StatsBar";
 import { TaskTable } from "./components/TaskTable";
 import { MessagePanel } from "./components/MessagePanel";
 import { SearchFilterBar } from "./components/SearchFilterBar";
+import { SetupPanel } from "./components/SetupPanel";
 import { useStatus } from "./hooks/useStatus";
 import { collectUniqueSkills } from "./lib/filter";
 import type { Task } from "./types";
@@ -85,6 +86,8 @@ export function App() {
       <div className="mt-4 text-xs text-muted-foreground/60">
         {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : ""}
       </div>
+
+      <SetupPanel setup={config.setup} />
 
       <MessagePanel task={selectedTask} onClose={handleClosePanel} />
     </div>

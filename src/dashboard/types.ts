@@ -21,8 +21,36 @@ export interface Message {
   content: string;
 }
 
+export interface SetupProject {
+  teamKey: string;
+  linearProject?: string;
+  path: string;
+  profile?: string;
+  githubRepoUrl?: string;
+}
+
+export interface SetupRealm {
+  name: string;
+  linearWorkspace: string;
+  projects: SetupProject[];
+}
+
+export interface SetupGlobal {
+  agentName: string;
+  port: number;
+  triggerStates: string[];
+  useWorktrees: boolean;
+  defaultProfile: string;
+}
+
+export interface SetupData {
+  realms: SetupRealm[];
+  global: SetupGlobal;
+}
+
 export interface DashboardConfig {
   linearWorkspace?: string;
+  setup?: SetupData | null;
 }
 
 export interface StatusResponse {
