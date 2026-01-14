@@ -10,6 +10,7 @@ import { SearchFilterBar } from "./components/SearchFilterBar";
 import { SetupPanel } from "./components/SetupPanel";
 import { useStatus } from "./hooks/useStatus";
 import { collectUniqueSkills } from "./lib/filter";
+import { cn } from "./lib/utils";
 import type { Task } from "./types";
 
 export function App() {
@@ -20,6 +21,7 @@ export function App() {
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [activeNav, setActiveNav] = useState<NavItem>("tasks");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const availableSkills = useMemo(() => collectUniqueSkills(tasks), [tasks]);
 
@@ -55,10 +57,15 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar activeItem={activeNav} onNavigate={setActiveNav} />
+      <Sidebar
+        activeItem={activeNav}
+        onNavigate={setActiveNav}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+      />
 
-      {/* Main content area - offset by sidebar width (w-52 = 13rem) */}
-      <main className="pl-52">
+      {/* Main content area - offset by sidebar width */}
+      <main className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-52")}>
         <div className="min-h-screen p-8">
           {activeNav === "tasks" && (
             <div className="space-y-6">
