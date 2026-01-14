@@ -329,11 +329,15 @@ export class ClaudeOrchestrator {
     agent.status = "idle";
   }
 
-  async acknowledgeIssue(issue: LinearIssue): Promise<void> {
+  async acknowledgeIssue(issue: LinearIssue, workspace?: string): Promise<void> {
     const name = this.config.agentName ?? "Amadeus";
     const message = `**🤖 ${name}:** I've received the issue. Beginning the planning process.`;
     console.log(`[Agent] Acknowledging issue ${issue.identifier}`);
     try {
+      // Switch to the correct workspace if specified
+      if (workspace) {
+        await Bun.$`linear-cli config workspace-switch ${workspace}`.quiet();
+      }
       await Bun.$`linear-cli comments create --body ${message} ${issue.identifier}`.quiet();
     } catch (err) {
       console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}:`, err);
@@ -487,7 +491,7 @@ export class ClaudeOrchestrator {
     await this.clearInputBuffer(agent.port);
 
     // Acknowledge the issue before starting the planning process
-    await this.acknowledgeIssue(issue);
+    await this.acknowledgeIssue(issue, realmInfo?.workspace);
 
     // Get GitHub repo URL for file linking in comments
     const githubRepoUrl = await getGitHubRepoUrl(workingDir);

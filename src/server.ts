@@ -2,7 +2,7 @@
 // ABOUTME: Entry point for the Bun server.
 
 import { $ } from "bun";
-import { CONFIG, getAllWebhookSecrets } from "./config";
+import { CONFIG, getAllWebhookSecrets, getRealmByTeamKey } from "./config";
 import { verifyLinearSignature } from "./signature";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
@@ -364,6 +364,12 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
       );
 
       try {
+        // Switch to the correct workspace for this issue's realm
+        const teamKey = agent.issueIdentifier.split("-")[0];
+        const realmInfo = getRealmByTeamKey(teamKey);
+        if (realmInfo?.workspace) {
+          await $`linear-cli config workspace-switch ${realmInfo.workspace}`.quiet();
+        }
         await $`linear-cli issues update ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.quiet();
         console.log(
           `[PR Check] Successfully updated ${agent.issueIdentifier} to Done`
