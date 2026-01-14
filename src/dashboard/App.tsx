@@ -7,8 +7,9 @@ import { StatsBar } from "./components/StatsBar";
 import { TaskTable } from "./components/TaskTable";
 import { MessagePanel } from "./components/MessagePanel";
 import { SearchFilterBar } from "./components/SearchFilterBar";
-import { SetupPanel } from "./components/SetupPanel";
+import { SettingsPage } from "./components/SettingsPage";
 import { useStatus } from "./hooks/useStatus";
+import { useAuth } from "./components/AuthProvider";
 import { collectUniqueSkills } from "./lib/filter";
 import { cn } from "./lib/utils";
 import type { Task } from "./types";
@@ -115,18 +116,7 @@ export function App() {
           )}
 
           {activeNav === "settings" && (
-            <div className="space-y-6">
-              {/* Page Header */}
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-                <p className="text-muted-foreground">
-                  View configured realms and projects
-                </p>
-              </div>
-
-              {/* Settings Content */}
-              <SetupPanel setup={config.setup} />
-            </div>
+            <SettingsPage setup={config.setup} />
           )}
         </div>
       </main>
