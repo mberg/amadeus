@@ -364,13 +364,11 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
       );
 
       try {
-        // Switch to the correct workspace for this issue's realm
+        // Use realm-specific API key for this issue
         const teamKey = agent.issueIdentifier.split("-")[0];
         const realmInfo = getRealmByTeamKey(teamKey);
-        if (realmInfo?.workspace) {
-          await $`linear-cli config workspace-switch ${realmInfo.workspace}`.quiet();
-        }
-        await $`linear-cli issues update ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.quiet();
+        const env = realmInfo?.apiKey ? { ...process.env, LINEAR_API_KEY: realmInfo.apiKey } : process.env;
+        await $`linear-cli issues update ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.env(env).quiet();
         console.log(
           `[PR Check] Successfully updated ${agent.issueIdentifier} to Done`
         );
