@@ -1,9 +1,10 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
-// ABOUTME: Contains logo and navigation items for Tasks and Setup views.
+// ABOUTME: Contains logo, navigation items, and user menu for Clerk mode.
 
 import { Activity, Settings, Blocks, Sun, Moon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
+import { UserMenu } from "./UserMenu";
 
 export type NavItem = "tasks" | "setup";
 
@@ -63,7 +64,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
             </button>
             <button
               onClick={() => onNavigate("setup")}
-              title="Setup"
+              title="Settings"
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 activeItem === "setup"
@@ -73,7 +74,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               )}
             >
               <Settings className="h-4 w-4 shrink-0" />
-              {!collapsed && "Setup"}
+              {!collapsed && "Settings"}
             </button>
           </div>
         </nav>
@@ -83,6 +84,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
           "border-t border-border py-3",
           collapsed ? "px-3" : "px-4"
         )}>
+          <UserMenu collapsed={collapsed} />
           <button
             onClick={toggleTheme}
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
