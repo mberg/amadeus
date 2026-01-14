@@ -4,7 +4,7 @@
 import { Activity, Settings, Blocks, Sun, Moon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
-import { UserMenu } from "./UserMenu";
+import { UserMenu, SignOutButton } from "./UserMenu";
 
 export type NavItem = "tasks" | "settings";
 
@@ -41,7 +41,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
         </button>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 pt-4">
+        <nav className="flex-1 flex flex-col px-3 pt-4">
           {!collapsed && (
             <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
               Menu
@@ -94,9 +94,14 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               {!collapsed && (theme === "dark" ? "Light mode" : "Dark mode")}
             </button>
           </div>
+
+          {/* Sign out - pushed to bottom of nav, just above the border */}
+          <div className="mt-auto pb-2">
+            <SignOutButton collapsed={collapsed} />
+          </div>
         </nav>
 
-        {/* User Menu Footer */}
+        {/* User Info Footer */}
         <div className={cn(
           "border-t border-border py-3",
           collapsed ? "px-3" : "px-4"
