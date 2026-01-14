@@ -177,7 +177,7 @@ export function TaskTable({
         const abbreviatedProject = abbreviateProjectName(project);
         return (
           <div className="flex items-center gap-2 max-w-[400px] overflow-hidden">
-            <span className="truncate text-muted-foreground">
+            <span className="truncate text-foreground">
               {row.getValue("issueTitle")}
             </span>
             {abbreviatedProject && (
@@ -453,7 +453,7 @@ export function TaskTable({
                         </TableCell>
                         <TableCell className="max-w-[350px]">
                           <div className="flex items-center gap-2 overflow-hidden">
-                            <span className="truncate text-muted-foreground">
+                            <span className="truncate text-foreground">
                               {task.issueTitle}
                             </span>
                             {task.linearProject && (

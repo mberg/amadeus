@@ -1,5 +1,5 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
-// ABOUTME: Contains logo, navigation items, and user menu for Clerk mode.
+// ABOUTME: Contains logo, navigation items, theme toggle, and user menu.
 
 import { Activity, Settings, Blocks, Sun, Moon } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -76,30 +76,32 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               <Settings className="h-4 w-4 shrink-0" />
               {!collapsed && "Settings"}
             </button>
+
+            {/* Theme toggle in nav area */}
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                collapsed && "justify-center px-2"
+              )}
+            >
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4 shrink-0" />
+              ) : (
+                <Moon className="h-4 w-4 shrink-0" />
+              )}
+              {!collapsed && (theme === "dark" ? "Light mode" : "Dark mode")}
+            </button>
           </div>
         </nav>
 
-        {/* Footer */}
+        {/* User Menu Footer */}
         <div className={cn(
           "border-t border-border py-3",
           collapsed ? "px-3" : "px-4"
         )}>
           <UserMenu collapsed={collapsed} />
-          <button
-            onClick={toggleTheme}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-muted-foreground hover:bg-muted/30 hover:text-foreground w-full",
-              collapsed && "justify-center px-2"
-            )}
-          >
-            {theme === "dark" ? (
-              <Sun className="h-4 w-4 shrink-0" />
-            ) : (
-              <Moon className="h-4 w-4 shrink-0" />
-            )}
-            {!collapsed && (theme === "dark" ? "Light mode" : "Dark mode")}
-          </button>
         </div>
       </div>
     </aside>
