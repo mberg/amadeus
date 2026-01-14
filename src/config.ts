@@ -33,6 +33,8 @@ export interface LegacyConfig {
   notificationEmail?: string;
   resendApiKey?: string;
   notificationFromEmail: string;
+  telegramBotToken?: string;
+  telegramChatId?: string;
 }
 
 function loadProjectPathsFromEnv(): Record<string, string> {
@@ -133,6 +135,8 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     notificationEmail: process.env.NOTIFICATION_EMAIL,
     resendApiKey: process.env.RESEND_API_KEY,
     notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL ?? "amadeus@resend.dev",
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
+    telegramChatId: process.env.TELEGRAM_CHAT_ID,
   };
 }
 
@@ -166,6 +170,8 @@ function loadLegacyConfigFromEnv(): LegacyConfig {
     notificationEmail: process.env.NOTIFICATION_EMAIL,
     resendApiKey: process.env.RESEND_API_KEY,
     notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL ?? "amadeus@resend.dev",
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
+    telegramChatId: process.env.TELEGRAM_CHAT_ID,
   };
 }
 
