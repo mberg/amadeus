@@ -1,7 +1,7 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
 // ABOUTME: Contains logo and navigation items for Tasks and Setup views.
 
-import { LayoutDashboard, Settings, Activity, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Settings, Activity } from "lucide-react";
 import { cn } from "../lib/utils";
 
 export type NavItem = "tasks" | "setup";
@@ -17,7 +17,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen border-r border-border bg-background transition-all duration-300",
+        "fixed left-0 top-0 z-40 h-screen overflow-hidden border-r border-border bg-background transition-all duration-300",
         collapsed ? "w-16" : "w-52"
       )}
     >
@@ -31,13 +31,6 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
           {!collapsed && (
             <span className="text-base font-semibold tracking-tight">Amadeus</span>
           )}
-          <div className={cn("ml-auto", collapsed && "hidden")}>
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-            )}
-          </div>
         </button>
 
         {/* Navigation */}
