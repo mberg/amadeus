@@ -52,6 +52,26 @@ describe("AgentPersistence", () => {
       expect(loaded!.status).toBe("alive");
     });
 
+    it("saves agent state with linearProject", () => {
+      const state: PersistedAgentState = {
+        key: "TEST-issue-123",
+        issueId: "issue-123",
+        issueIdentifier: "TEST-1",
+        issueTitle: "Test Issue",
+        projectPath: "/tmp/test-project",
+        linearProject: "Amadeus",
+        port: 8001,
+        status: "alive",
+        lastHeartbeat: new Date(),
+      };
+
+      persistence.saveAgentState(state);
+
+      const loaded = persistence.getAgentByIssueId("issue-123");
+      expect(loaded).not.toBeNull();
+      expect(loaded!.linearProject).toBe("Amadeus");
+    });
+
     it("updates existing agent state", () => {
       const state: PersistedAgentState = {
         key: "TEST-issue-123",
@@ -244,6 +264,26 @@ describe("AgentPersistence", () => {
       const tasks = persistence.getCompletedTasks();
       expect(tasks.length).toBe(1);
       expect(tasks[0].finalLinearState).toBeUndefined();
+    });
+
+    it("saves completed task with linearProject", () => {
+      const task: PersistedCompletedTask = {
+        key: "TEST-issue-789",
+        issueId: "issue-789",
+        issueIdentifier: "TEST-3",
+        issueTitle: "Project Test Issue",
+        completedAt: new Date(),
+        completionReason: "done",
+        finalLinearState: "Done",
+        linearProject: "My Project",
+        duration: 3600000,
+      };
+
+      persistence.saveCompletedTask(task);
+
+      const tasks = persistence.getCompletedTasks();
+      expect(tasks.length).toBe(1);
+      expect(tasks[0].linearProject).toBe("My Project");
     });
   });
 

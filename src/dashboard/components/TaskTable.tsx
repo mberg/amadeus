@@ -33,7 +33,7 @@ import {
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import type { Task, CompletedTask } from "../types";
-import { formatUptime, getStateVariant } from "../lib/utils";
+import { formatUptime, getStateVariant, abbreviateProjectName } from "../lib/utils";
 import { filterTasks, filterCompletedTasks } from "../lib/filter";
 
 interface TaskTableProps {
@@ -172,11 +172,22 @@ export function TaskTable({
     {
       accessorKey: "issueTitle",
       header: "Title",
-      cell: ({ row }) => (
-        <span className="max-w-[400px] truncate text-muted-foreground">
-          {row.getValue("issueTitle")}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const project = row.original.linearProject;
+        const abbreviatedProject = abbreviateProjectName(project);
+        return (
+          <div className="flex items-center gap-2 max-w-[400px]">
+            <span className="truncate text-muted-foreground">
+              {row.getValue("issueTitle")}
+            </span>
+            {abbreviatedProject && (
+              <span className="shrink-0 text-xs text-muted-foreground/60" title={project}>
+                ({abbreviatedProject})
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "activeSkills",
@@ -441,9 +452,16 @@ export function TaskTable({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="max-w-[350px] truncate text-muted-foreground">
-                            {task.issueTitle}
-                          </span>
+                          <div className="flex items-center gap-2 max-w-[350px]">
+                            <span className="truncate text-muted-foreground">
+                              {task.issueTitle}
+                            </span>
+                            {task.linearProject && (
+                              <span className="shrink-0 text-xs text-muted-foreground/60" title={task.linearProject}>
+                                ({abbreviateProjectName(task.linearProject)})
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="default" className="text-xs">

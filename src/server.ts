@@ -49,6 +49,7 @@ function handleAgentComplete(info: AgentCompletionInfo): void {
     issueId: info.issueId,
     issueIdentifier: info.issueIdentifier,
     issueTitle: info.issueTitle,
+    linearProject: info.linearProject,
     completedAt: new Date(),
     completionReason: info.completionReason,
     finalLinearState: info.finalLinearState,

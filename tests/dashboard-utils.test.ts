@@ -2,7 +2,7 @@
 // ABOUTME: Verifies state variant matching for Linear issue states.
 
 import { describe, expect, it } from "bun:test";
-import { getStateVariant } from "../src/dashboard/lib/utils";
+import { getStateVariant, abbreviateProjectName } from "../src/dashboard/lib/utils";
 
 describe("getStateVariant", () => {
   it("returns 'default' for undefined state", () => {
@@ -45,5 +45,28 @@ describe("getStateVariant", () => {
     expect(getStateVariant("PLANNING")).toBe("planning");
     expect(getStateVariant("building")).toBe("building");
     expect(getStateVariant("FEEDBACK NEEDED")).toBe("feedback");
+  });
+});
+
+describe("abbreviateProjectName", () => {
+  it("returns undefined for undefined input", () => {
+    expect(abbreviateProjectName(undefined)).toBeUndefined();
+  });
+
+  it("returns short names unchanged", () => {
+    expect(abbreviateProjectName("Amadeus")).toBe("Amadeus");
+    expect(abbreviateProjectName("My Project")).toBe("My Project");
+  });
+
+  it("abbreviates names longer than 15 characters", () => {
+    expect(abbreviateProjectName("Mobile Data Collection")).toBe("Mobile Data ...");
+  });
+
+  it("abbreviates very long names", () => {
+    expect(abbreviateProjectName("Enterprise Resource Planning System")).toBe("Enterprise R...");
+  });
+
+  it("returns exactly 15 character names unchanged", () => {
+    expect(abbreviateProjectName("Exactly15Chars!")).toBe("Exactly15Chars!");
   });
 });

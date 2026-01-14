@@ -8,6 +8,7 @@ export interface Task {
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   linearState?: string;
   activeSkills?: string[];
   status: "idle" | "working" | "starting";
@@ -41,6 +42,7 @@ export interface CompletedTask {
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
+  linearProject?: string;
   completedAt: string;
   completionReason: CompletionReason;
   finalLinearState?: string;
