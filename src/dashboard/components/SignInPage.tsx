@@ -12,6 +12,8 @@ export function SignInPage() {
           <p className="text-muted-foreground">Sign in to continue</p>
         </div>
         <SignIn
+          afterSignInUrl="/dashboard"
+          afterSignUpUrl="/dashboard"
           appearance={{
             elements: {
               rootBox: "mx-auto",
