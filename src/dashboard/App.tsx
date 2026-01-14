@@ -40,7 +40,6 @@ export function App() {
         console.error("Failed to stop task:", response.status);
         alert("Failed to stop task");
       }
-      // If we stopped the task we're viewing, close the panel
       if (selectedTask?.key === taskKey) {
         setSelectedTask(null);
       }
@@ -58,20 +57,23 @@ export function App() {
     <div className="min-h-screen bg-background">
       <Sidebar activeItem={activeNav} onNavigate={setActiveNav} />
 
-      {/* Main content area - offset by sidebar width */}
-      <main className="ml-56 min-h-screen">
-        <div className="mx-auto max-w-[1400px] px-6 py-6">
+      {/* Main content area - offset by sidebar width (w-52 = 13rem) */}
+      <main className="pl-52">
+        <div className="min-h-screen p-8">
           {activeNav === "tasks" && (
-            <>
-              <div className="mb-6">
-                <h1 className="text-2xl font-semibold text-foreground">Tasks</h1>
-                <p className="text-sm text-muted-foreground">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
+                <p className="text-muted-foreground">
                   Monitor and manage running agents
                 </p>
               </div>
 
+              {/* Stats Cards */}
               <StatsBar tasks={tasks} completedCount={completedTotal} />
 
+              {/* Search and Filters */}
               <SearchFilterBar
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
@@ -82,6 +84,7 @@ export function App() {
                 availableSkills={availableSkills}
               />
 
+              {/* Task Table */}
               <TaskTable
                 tasks={tasks}
                 completedTasks={completedTasks}
@@ -97,23 +100,26 @@ export function App() {
                 selectedSkills={selectedSkills}
               />
 
-              <div className="mt-4 text-xs text-muted-foreground/60">
-                {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : ""}
+              {/* Last Updated */}
+              <div className="text-xs text-muted-foreground">
+                {lastUpdated ? `Last updated ${lastUpdated.toLocaleTimeString()}` : ""}
               </div>
-            </>
+            </div>
           )}
 
           {activeNav === "setup" && (
-            <>
-              <div className="mb-6">
-                <h1 className="text-2xl font-semibold text-foreground">Setup</h1>
-                <p className="text-sm text-muted-foreground">
+            <div className="space-y-6">
+              {/* Page Header */}
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Setup</h1>
+                <p className="text-muted-foreground">
                   View configured realms and projects
                 </p>
               </div>
 
+              {/* Setup Content */}
               <SetupPanel setup={config.setup} />
-            </>
+            </div>
           )}
         </div>
       </main>
