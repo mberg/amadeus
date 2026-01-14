@@ -176,7 +176,7 @@ export function TaskTable({
         const project = row.original.linearProject;
         const abbreviatedProject = abbreviateProjectName(project);
         return (
-          <div className="flex items-center gap-2 max-w-[400px]">
+          <div className="flex items-center gap-2 max-w-[400px] overflow-hidden">
             <span className="truncate text-muted-foreground">
               {row.getValue("issueTitle")}
             </span>
@@ -451,8 +451,8 @@ export function TaskTable({
                             {task.issueIdentifier}
                           </span>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 max-w-[350px]">
+                        <TableCell className="max-w-[350px]">
+                          <div className="flex items-center gap-2 overflow-hidden">
                             <span className="truncate text-muted-foreground">
                               {task.issueTitle}
                             </span>
