@@ -1,11 +1,11 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
-// ABOUTME: Contains logo and navigation items for Tasks and Setup views.
+// ABOUTME: Contains logo and navigation items for Tasks and Settings views.
 
 import { Activity, Settings, Blocks, Sun, Moon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 
-export type NavItem = "tasks" | "setup";
+export type NavItem = "tasks" | "settings";
 
 interface SidebarProps {
   activeItem: NavItem;
@@ -62,18 +62,18 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
               {!collapsed && "Tasks"}
             </button>
             <button
-              onClick={() => onNavigate("setup")}
-              title="Setup"
+              onClick={() => onNavigate("settings")}
+              title="Settings"
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                activeItem === "setup"
+                activeItem === "settings"
                   ? "bg-muted/50 text-foreground"
                   : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
                 collapsed && "justify-center px-2"
               )}
             >
               <Settings className="h-4 w-4 shrink-0" />
-              {!collapsed && "Setup"}
+              {!collapsed && "Settings"}
             </button>
           </div>
         </nav>

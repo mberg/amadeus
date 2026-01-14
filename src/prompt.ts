@@ -18,7 +18,7 @@ export function buildPrompt(
   const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
-  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName);
+  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace);
   const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
 
   return `
@@ -83,7 +83,20 @@ Any thoughts or questions you don't post to Linear will never reach the user. Yo
 ${profileSection}`.trim();
 }
 
-function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string): string {
+function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string, workspace?: string): string {
+  const reviewNotificationSection = workspace ? `
+**Step 7:** Notify the issue creator by assigning the issue to them:
+\`\`\`bash
+linear-cli issues get ${issue.identifier} -o json
+\`\`\`
+Find the creator's email and assign:
+\`\`\`bash
+linear-cli issues update ${issue.identifier} --assignee "<email>"
+\`\`\`
+
+This triggers an inbox notification that the PR is ready for review.
+` : "";
+
   if (yolo) {
     return `
 ### Status Workflow (YOLO Mode)
@@ -138,7 +151,7 @@ Linear: https://linear.app/ona/issue/${issue.identifier}" 2>/dev/null || echo "P
 linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 linear-cli comments create --body "**🤖 ${agentName}:** Implementation complete. PR created/updated and ready for review." ${issue.identifier}
 \`\`\`
-
+${reviewNotificationSection}
 **NOTE:** If you encounter a situation where you genuinely need user input (unclear requirements, major architectural decision, etc.), you may set status to Feedback Needed and wait.
 `;
   }
@@ -183,7 +196,16 @@ linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-68
 \`\`\`
 ${notificationSection}
 **IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
-`;
+${reviewNotificationSection ? `
+### When Setting Status to Review
+
+After the user approves and you complete implementation:
+1. Push your changes and create a PR
+2. Set status to Review
+3. Notify the issue creator by assigning the issue to them (same process as above with \`--assignee\`)
+
+This ensures they receive an inbox notification that the PR is ready for review.
+` : ""}`;
 }
 
 function buildFileLinkingSection(githubRepoUrl?: string, issueIdentifier?: string): string {
@@ -227,21 +249,21 @@ function buildNotificationSection(
   }
 
   return `
-**Notify the issue creator:** Before setting the status, @mention the issue creator so they receive an inbox notification:
+**Notify the issue creator:** After posting your plan, assign the issue to the creator to trigger an inbox notification:
 
 1. Get the issue creator's info:
 \`\`\`bash
 linear-cli issues get ${issueIdentifier ?? "<identifier>"} -o json
 \`\`\`
 
-2. Find the creator/assignee email (e.g., \`mberg@ona.io\`) and extract the username prefix (e.g., \`mberg\`)
+2. Find the creator's email (e.g., \`mberg@ona.io\`)
 
-3. Include a mention in your plan comment by adding the profile URL:
-\`\`\`
-https://linear.app/${workspace}/profiles/<username> please review this plan.
+3. Assign the issue to them:
+\`\`\`bash
+linear-cli issues update ${issueIdentifier ?? "<identifier>"} --assignee "<email>"
 \`\`\`
 
-Linear will convert this URL to an @mention, triggering an inbox notification for the user.
+This triggers a reliable inbox notification for the user.
 `;
 }
 
