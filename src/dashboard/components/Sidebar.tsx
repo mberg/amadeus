@@ -1,7 +1,7 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
 // ABOUTME: Contains logo and navigation items for Tasks and Setup views.
 
-import { LayoutDashboard, Settings, Blocks } from "lucide-react";
+import { Activity, Settings, Blocks } from "lucide-react";
 import { cn } from "../lib/utils";
 
 export type NavItem = "tasks" | "setup";
@@ -55,7 +55,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
                 collapsed && "justify-center px-2"
               )}
             >
-              <LayoutDashboard className="h-4 w-4 shrink-0" />
+              <Activity className="h-4 w-4 shrink-0" />
               {!collapsed && "Tasks"}
             </button>
             <button
