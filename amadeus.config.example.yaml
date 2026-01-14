@@ -60,3 +60,9 @@ global:
   # Health monitoring intervals (milliseconds)
   healthCheckIntervalMs: 30000
   healthCheckTimeoutMs: 5000
+
+  # Security settings
+  security:
+    # Allow sending messages to agents without authentication (simple mode only)
+    # Default: false (view-only access without auth)
+    enableAgentMessaging: false
