@@ -339,6 +339,14 @@ async function handleCommentWebhook(
 
   // Spawn a new agent if one doesn't exist for this issue
   if (!agentKey) {
+    // Only spawn if the issue meets trigger criteria (has Amadeus label + correct state)
+    if (!orchestrator.shouldStartAgent(comment.issue)) {
+      console.log(
+        `[${new Date().toISOString()}] Ignoring comment on ${comment.issue.identifier} - does not meet trigger criteria`
+      );
+      return;
+    }
+
     // Check if we have saved state for this issue (recovering from crash)
     const savedState = persistence.getAgentByIssueId(comment.issueId);
 
