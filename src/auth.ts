@@ -3,6 +3,27 @@
 
 import { createClerkClient, verifyToken } from "@clerk/backend";
 
+/**
+ * Parses a cookie header string into a key-value object.
+ * Handles edge cases: values containing '=', whitespace variations, malformed entries.
+ */
+export function parseCookies(cookieHeader: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+
+  for (const cookie of cookieHeader.split(/;\s*/)) {
+    const eqIndex = cookie.indexOf("=");
+    if (eqIndex === -1) continue;
+    const name = cookie.slice(0, eqIndex);
+    const value = cookie.slice(eqIndex + 1);
+    if (name) {
+      cookies[name] = value;
+    }
+  }
+
+  return cookies;
+}
+
 export type AuthMode = "simple" | "clerk";
 export type UserRole = "viewer" | "operator" | "admin";
 
@@ -43,9 +64,7 @@ async function getClerkAuth(req: Request): Promise<AuthContext> {
   if (authHeader?.startsWith("Bearer ")) {
     token = authHeader.slice(7);
   } else if (cookieHeader) {
-    const cookies = Object.fromEntries(
-      cookieHeader.split("; ").map((c) => c.split("="))
-    );
+    const cookies = parseCookies(cookieHeader);
     token = cookies["__session"];
   }
 
