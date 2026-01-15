@@ -1,8 +1,58 @@
-// ABOUTME: Tests for authentication utilities including cookie parsing.
-// ABOUTME: Validates robust handling of edge cases in cookie headers.
+// ABOUTME: Tests for authentication middleware and utilities.
+// ABOUTME: Covers simple auth mode, secure defaults, and cookie parsing.
 
-import { describe, expect, test } from "bun:test";
-import { parseCookies } from "../src/auth";
+import { describe, expect, it, test } from "bun:test";
+import { getAuthContext, parseCookies } from "../src/auth";
+
+function mockRequest(headers: Record<string, string> = {}): Request {
+  return new Request("http://localhost/test", { headers });
+}
+
+describe("getAuthContext in simple mode", () => {
+  describe("when no API token is configured", () => {
+    it("denies access by default", async () => {
+      const req = mockRequest();
+      const context = await getAuthContext(req, undefined);
+
+      expect(context.authenticated).toBe(false);
+      expect(context.mode).toBe("simple");
+    });
+
+    it("denies access even with X-Amadeus-Token header", async () => {
+      const req = mockRequest({ "X-Amadeus-Token": "some-token" });
+      const context = await getAuthContext(req, undefined);
+
+      expect(context.authenticated).toBe(false);
+    });
+  });
+
+  describe("when API token is configured", () => {
+    const apiToken = "test-secret-token";
+
+    it("grants admin access with valid token", async () => {
+      const req = mockRequest({ "X-Amadeus-Token": apiToken });
+      const context = await getAuthContext(req, apiToken);
+
+      expect(context.authenticated).toBe(true);
+      expect(context.role).toBe("admin");
+      expect(context.mode).toBe("simple");
+    });
+
+    it("denies access with invalid token", async () => {
+      const req = mockRequest({ "X-Amadeus-Token": "wrong-token" });
+      const context = await getAuthContext(req, apiToken);
+
+      expect(context.authenticated).toBe(false);
+    });
+
+    it("denies access with no token header", async () => {
+      const req = mockRequest();
+      const context = await getAuthContext(req, apiToken);
+
+      expect(context.authenticated).toBe(false);
+    });
+  });
+});
 
 describe("parseCookies", () => {
   test("parses a single cookie", () => {

@@ -769,3 +769,11 @@ console.log(`   Webhook:   https://your-machine.ts.net/webhook`);
 console.log(`   Status:    http://localhost:${server.port}/status`);
 console.log(`   Dashboard: http://localhost:${server.port}/dashboard`);
 console.log(`   PR Check:  Every ${PR_CHECK_INTERVAL_MS / 1000 / 60} minutes`);
+
+if (!isClerkEnabled() && !CONFIG.apiToken) {
+  console.warn(
+    "\n⚠️  WARNING: No authentication configured!\n" +
+    "   Set AMADEUS_API_TOKEN or configure Clerk to secure your instance.\n" +
+    "   All API endpoints will deny access until authentication is configured.\n"
+  );
+}

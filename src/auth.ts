@@ -95,7 +95,7 @@ async function getClerkAuth(req: Request): Promise<AuthContext> {
 
 function getSimpleAuth(req: Request, apiToken?: string): AuthContext {
   if (!apiToken) {
-    return { mode: "simple", authenticated: true, role: "admin" };
+    return { mode: "simple", authenticated: false, role: "viewer" };
   }
 
   const token = req.headers.get("X-Amadeus-Token");
