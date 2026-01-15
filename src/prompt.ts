@@ -3,6 +3,7 @@
 
 import type { LinearIssue, LinearComment, AgentProfile } from "./types";
 import type { PersistedAgentState } from "./persistence";
+import type { FetchedComment } from "./linear";
 
 export function isYoloMode(issue: LinearIssue): boolean {
   return issue.description?.toLowerCase().includes("yolo") ?? false;
@@ -13,13 +14,15 @@ export function buildPrompt(
   profile?: AgentProfile,
   workspace?: string,
   agentName: string = "Amadeus",
-  githubRepoUrl?: string
+  githubRepoUrl?: string,
+  existingComments?: FetchedComment[]
 ): string {
   const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
   const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace);
   const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
+  const commentHistorySection = buildCommentHistorySection(existingComments);
 
   return `
 ## New Task from Linear
@@ -80,7 +83,7 @@ Any thoughts or questions you don't post to Linear will never reach the user. Yo
 - Communicate your progress via Linear comments using \`linear-cli comments create\`
 - Update the issue status to reflect your current state using \`linear-cli issues update\`
 - Keep the human in the loop—post meaningful updates, not just status changes
-${profileSection}`.trim();
+${commentHistorySection}${profileSection}`.trim();
 }
 
 function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string, workspace?: string): string {
@@ -237,6 +240,30 @@ function buildProfileSection(profile?: AgentProfile): string {
 ### Profile Capabilities
 
 ${profile.promptAdditions.join("\n\n")}
+`;
+}
+
+function buildCommentHistorySection(comments?: FetchedComment[]): string {
+  if (!comments || comments.length === 0) {
+    return "";
+  }
+
+  const formattedComments = comments.map((c) => {
+    const date = new Date(c.createdAt).toLocaleString();
+    return `**${c.authorName}** (${date}):\n${c.body}`;
+  }).join("\n\n---\n\n");
+
+  return `
+
+### Previous Discussion
+
+This issue has existing comments from previous work. Review this history to understand what has been discussed and decided:
+
+${formattedComments}
+
+---
+
+**Important:** If you see comments from a previous agent session (prefixed with 🤖), that agent may have crashed. Review what was planned or done and continue from where they left off rather than starting from scratch.
 `;
 }
 

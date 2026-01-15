@@ -21,7 +21,7 @@ import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
 import dashboardHtml from "./dashboard/index.html";
-import { checkPRMerged } from "./github";
+import { checkPRMerged, deleteBranch } from "./github";
 import {
   shouldNotify,
   notifyFeedbackNeeded,
@@ -437,6 +437,14 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
 
         // Update local state tracking
         orchestrator.updateIssueState(agent.key, "Done");
+
+        // Delete the branch now that PR is merged
+        const branchResult = await deleteBranch(agent.issueIdentifier, projectPath);
+        if (branchResult.success) {
+          console.log(
+            `[PR Check] Deleted branch for ${agent.issueIdentifier} (local: ${branchResult.localDeleted}, remote: ${branchResult.remoteDeleted})`
+          );
+        }
       } catch (err) {
         console.error(
           `[PR Check] Failed to update Linear for ${agent.issueIdentifier}:`,

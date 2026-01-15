@@ -12,6 +12,7 @@ import { getGitHubRepoUrl } from "./git-utils";
 import { getRealmByTeamKey } from "./config";
 import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
+import { fetchIssueComments } from "./linear";
 
 export interface AgentDeathInfo {
   key: string;
@@ -511,7 +512,16 @@ export class ClaudeOrchestrator {
       }
     }
 
-    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined));
+    // Fetch existing comments to provide full context for agent recovery
+    let existingComments;
+    if (realmInfo?.apiKey) {
+      existingComments = await fetchIssueComments(issue.id, realmInfo.apiKey);
+      if (existingComments.length > 0) {
+        console.log(`[Agent] Including ${existingComments.length} existing comments for ${issue.identifier}`);
+      }
+    }
+
+    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments));
   }
 
   private setupExitHandler(
