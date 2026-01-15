@@ -1,5 +1,5 @@
-// ABOUTME: GitHub integration for checking PR merge status.
-// ABOUTME: Uses gh CLI to detect when PRs are merged.
+// ABOUTME: GitHub integration for checking PR merge status and branch cleanup.
+// ABOUTME: Uses gh CLI to detect when PRs are merged and delete branches.
 
 import { $ } from "bun";
 
@@ -54,4 +54,70 @@ export async function checkPRMerged(
   executor: PRStatusExecutor = defaultExecutor
 ): Promise<PRStatus> {
   return executor(issueIdentifier, projectPath);
+}
+
+export interface DeleteBranchResult {
+  success: boolean;
+  localDeleted: boolean;
+  remoteDeleted: boolean;
+  error?: string;
+}
+
+/**
+ * Deletes both local and remote branches for an issue.
+ * Safe to call even if branches don't exist.
+ */
+export async function deleteBranch(
+  issueIdentifier: string,
+  projectPath: string
+): Promise<DeleteBranchResult> {
+  const branchName = `issue/${issueIdentifier}`;
+  let localDeleted = false;
+  let remoteDeleted = false;
+
+  // Delete remote branch first
+  try {
+    const remoteResult = await $`git push origin --delete ${branchName}`
+      .cwd(projectPath)
+      .nothrow()
+      .quiet();
+
+    if (remoteResult.exitCode === 0) {
+      remoteDeleted = true;
+    } else {
+      const stderr = remoteResult.stderr.toString();
+      // Branch might not exist on remote, which is fine
+      if (!stderr.includes("remote ref does not exist")) {
+        console.warn(`[Branch] Failed to delete remote branch ${branchName}: ${stderr}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Branch] Error deleting remote branch ${branchName}:`, err);
+  }
+
+  // Delete local branch
+  try {
+    const localResult = await $`git branch -D ${branchName}`
+      .cwd(projectPath)
+      .nothrow()
+      .quiet();
+
+    if (localResult.exitCode === 0) {
+      localDeleted = true;
+    } else {
+      const stderr = localResult.stderr.toString();
+      // Branch might not exist locally, which is fine
+      if (!stderr.includes("not found")) {
+        console.warn(`[Branch] Failed to delete local branch ${branchName}: ${stderr}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Branch] Error deleting local branch ${branchName}:`, err);
+  }
+
+  return {
+    success: localDeleted || remoteDeleted,
+    localDeleted,
+    remoteDeleted,
+  };
 }
