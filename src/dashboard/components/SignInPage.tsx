@@ -2,8 +2,12 @@
 // ABOUTME: Displays a centered sign-in form when user is not authenticated.
 
 import { SignIn } from "@clerk/clerk-react";
+import { dark } from "@clerk/themes";
+import { useTheme } from "./ThemeProvider";
 
 export function SignInPage() {
+  const { theme } = useTheme();
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="w-full max-w-md">
@@ -15,6 +19,7 @@ export function SignInPage() {
           afterSignInUrl="/dashboard"
           afterSignUpUrl="/dashboard"
           appearance={{
+            baseTheme: theme === "dark" ? dark : undefined,
             elements: {
               rootBox: "mx-auto",
               card: "bg-card border shadow-sm",
