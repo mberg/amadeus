@@ -9,6 +9,10 @@ export function isYoloMode(issue: LinearIssue): boolean {
   return issue.description?.toLowerCase().includes("yolo") ?? false;
 }
 
+export function hasUltrathinkLabel(issue: LinearIssue): boolean {
+  return issue.labels?.some((l) => l.name.toLowerCase() === "ultrathink") ?? false;
+}
+
 export function buildPrompt(
   issue: LinearIssue,
   profile?: AgentProfile,
@@ -19,12 +23,14 @@ export function buildPrompt(
 ): string {
   const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
+  const ultrathink = hasUltrathinkLabel(issue);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
   const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace);
   const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
   const commentHistorySection = buildCommentHistorySection(existingComments);
+  const ultrathinkPrefix = ultrathink ? "ultrathink\n\n" : "";
 
-  return `
+  return `${ultrathinkPrefix}
 ## New Task from Linear
 
 **Issue**: ${issue.identifier} - ${issue.title}
