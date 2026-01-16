@@ -261,6 +261,16 @@ export function getSecurityConfig(): SecurityConfig {
 }
 
 /**
+ * Get router configuration if configured.
+ */
+export function getRouterConfig(): { url: string; machineName: string; secret: string } | null {
+  if (REALM_CONFIG?.router) {
+    return REALM_CONFIG.router;
+  }
+  return null;
+}
+
+/**
  * Get the raw YAML configuration content.
  */
 export { getConfigYaml, validateConfigYaml };

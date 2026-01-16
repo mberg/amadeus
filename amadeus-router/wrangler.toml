@@ -1,0 +1,15 @@
+# ABOUTME: Cloudflare Worker configuration for the Amadeus multi-machine router.
+# ABOUTME: Defines KV namespace bindings and worker entry point.
+
+name = "amadeus-router"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# These are overridden by secrets in production
+
+[[kv_namespaces]]
+binding = "ROUTER_KV"
+id = "placeholder-create-via-wrangler"
+preview_id = "placeholder-create-via-wrangler"

@@ -66,3 +66,11 @@ global:
     # Allow sending messages to agents without authentication (simple mode only)
     # Default: false (view-only access without auth)
     enableAgentMessaging: false
+
+  # Multi-machine router configuration (optional)
+  # Enables routing Linear webhooks through a Cloudflare Worker to multiple machines.
+  # See amadeus-router/README.md for deployment instructions.
+  # router:
+  #   url: https://amadeus-router.your-account.workers.dev
+  #   machineName: my-machine
+  #   secretEnvVar: ROUTER_SECRET
