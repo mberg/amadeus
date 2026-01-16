@@ -8,6 +8,8 @@ import {
   writeConfig,
   getConfigYaml,
   validateConfigYaml,
+  isLinearRealm,
+  isGitHubRealm,
   type ResolvedConfig,
   type ResolvedRealm,
   type ConfigValidationResult,
@@ -120,12 +122,28 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     ? join(baseDir, resolved.global.dbPath)
     : resolved.global.dbPath;
 
+  // Handle first realm based on type
+  let linearWebhookSecret = "";
+  let claudeBotUserId: string | undefined;
+  let linearWorkspace: string | undefined;
+
+  if (isLinearRealm(firstRealm)) {
+    linearWebhookSecret = firstRealm.webhookSecret;
+    claudeBotUserId = firstRealm.claudeBotUserId;
+    linearWorkspace = firstRealm.linearWorkspace;
+  } else if (isGitHubRealm(firstRealm)) {
+    // For GitHub realms, use webhook secret but no Linear-specific fields
+    linearWebhookSecret = firstRealm.webhookSecret;
+    claudeBotUserId = firstRealm.botUserId;
+    linearWorkspace = undefined;
+  }
+
   return {
     port: resolved.global.port,
     apiToken: process.env.AMADEUS_API_TOKEN,
     agentName: resolved.global.agentName,
-    linearWebhookSecret: firstRealm.webhookSecret,
-    claudeBotUserId: firstRealm.claudeBotUserId,
+    linearWebhookSecret,
+    claudeBotUserId,
     projectPaths,
     triggerStates: resolved.global.triggerStates,
     profilesDir,
@@ -133,7 +151,7 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     teamProfiles,
     useWorktrees: resolved.global.useWorktrees,
     worktreesDir: resolved.global.worktreesDir,
-    linearWorkspace: firstRealm.linearWorkspace,
+    linearWorkspace,
     dbPath,
     healthCheckIntervalMs: resolved.global.healthCheckIntervalMs,
     healthCheckTimeoutMs: resolved.global.healthCheckTimeoutMs,
@@ -231,23 +249,39 @@ export function getAllWebhookSecrets(): Array<{ secret: string; realmName: strin
 }
 
 /**
- * Get realm by team key (for routing issues to correct API key).
+ * Realm info returned by getRealmByTeamKey.
  */
-export function getRealmByTeamKey(teamKey: string): {
-  apiKey: string;
-  workspace: string;
-  realmName: string;
-} | null {
+export type RealmInfo =
+  | { type: "linear"; apiKey: string; workspace: string; realmName: string }
+  | { type: "github"; token: string; owner: string; repo: string; realmName: string };
+
+/**
+ * Get realm by team key (for routing issues to correct API key/token).
+ */
+export function getRealmByTeamKey(teamKey: string): RealmInfo | null {
   if (!REALM_CONFIG) return null;
 
   const realm = REALM_CONFIG.realmByTeamKey.get(teamKey);
   if (!realm) return null;
 
-  return {
-    apiKey: realm.apiKey,
-    workspace: realm.linearWorkspace,
-    realmName: realm.name,
-  };
+  if (isLinearRealm(realm)) {
+    return {
+      type: "linear",
+      apiKey: realm.apiKey,
+      workspace: realm.linearWorkspace,
+      realmName: realm.name,
+    };
+  } else if (isGitHubRealm(realm)) {
+    return {
+      type: "github",
+      token: realm.token,
+      owner: realm.owner,
+      repo: realm.repo,
+      realmName: realm.name,
+    };
+  }
+
+  return null;
 }
 
 /**

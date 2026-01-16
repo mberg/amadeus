@@ -1,4 +1,4 @@
-// ABOUTME: Amadeus orchestrator server - receives Linear webhooks and manages Claude Code agents.
+// ABOUTME: Amadeus orchestrator server - receives Linear and GitHub webhooks and manages Claude Code agents.
 // ABOUTME: Entry point for the Bun server.
 
 import { $ } from "bun";
@@ -13,6 +13,7 @@ import {
   validateConfigYaml,
   reloadConfig,
 } from "./config";
+import { isGitHubRealm } from "./config-loader";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { verifyLinearSignature } from "./signature";
 import { requireAuth as checkAuth, getAuthInfo, isClerkEnabled } from "./auth";
@@ -34,6 +35,8 @@ import {
   notifyReviewReadyTelegram,
   parseIssueFromMessage,
 } from "./telegram";
+import { GitHubProvider, type IssueTrackingProvider } from "./providers";
+import { toLinearIssue, toLinearComment } from "./providers/adapters";
 
 async function requireViewer(req: Request): Promise<Response | null> {
   const security = getSecurityConfig();
@@ -143,6 +146,29 @@ if (routerConfig) {
     secret: routerConfig.secret,
   });
   routerHeartbeat.start();
+}
+
+// Initialize GitHub providers from REALM_CONFIG
+const githubProviders: Map<string, GitHubProvider> = new Map();
+if (REALM_CONFIG) {
+  for (const realm of REALM_CONFIG.realms) {
+    if (isGitHubRealm(realm)) {
+      const provider = new GitHubProvider({
+        type: "github",
+        realmName: realm.name,
+        agentName: CONFIG.agentName,
+        triggerStates: CONFIG.triggerStates,
+        botUserId: realm.botUserId,
+        githubOwner: realm.owner,
+        githubRepo: realm.repo,
+        githubProjectNumber: realm.projectNumber,
+        githubToken: realm.token,
+        githubWebhookSecret: realm.webhookSecret,
+      });
+      githubProviders.set(realm.name, provider);
+      console.log(`[Config] Initialized GitHub provider for ${realm.owner}/${realm.repo}`);
+    }
+  }
 }
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
@@ -424,6 +450,143 @@ async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
   }
 }
 
+import type { ParsedWebhook } from "./providers/types";
+
+async function handleGitHubWebhook(
+  parsed: ParsedWebhook,
+  provider: GitHubProvider
+): Promise<void> {
+  if (parsed.type === "issue") {
+    const issue = toLinearIssue(parsed.issue);
+    console.log(
+      `[GitHub Webhook] Issue ${parsed.action}: ${issue.identifier} - ${issue.title}`
+    );
+
+    // Skip draft issues
+    if (provider.isDraft(parsed.issue)) {
+      console.log(`[GitHub Webhook] Skipping draft issue: ${issue.identifier}`);
+      return;
+    }
+
+    const agentKey = orchestrator.getAgentKey(issue);
+
+    if (parsed.action === "remove") {
+      await orchestrator.stopAgent(agentKey, "canceled");
+      return;
+    }
+
+    // Check if agent should be terminated
+    if (provider.shouldTerminateAgent(parsed.issue)) {
+      const existingKey = orchestrator.findAgentByIssueId(issue.id);
+      if (existingKey) {
+        if (issue.state?.name) {
+          orchestrator.updateIssueState(existingKey, issue.state.name);
+        }
+        const reason = provider.getCompletionReason(parsed.issue);
+        console.log(
+          `[GitHub Webhook] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name} (${reason})`
+        );
+        await orchestrator.stopAgent(existingKey, reason);
+      }
+      return;
+    }
+
+    // Update state if agent exists
+    if (orchestrator.hasAgent(agentKey) && issue.state?.name) {
+      orchestrator.updateIssueState(agentKey, issue.state.name);
+    }
+
+    // Start or message agent
+    if (provider.shouldStartAgent(parsed.issue)) {
+      if (orchestrator.hasAgent(agentKey)) {
+        // Build GitHub-specific prompt using provider
+        const prompt = provider.buildPrompt(parsed.issue);
+        await orchestrator.sendMessage(agentKey, prompt);
+      } else {
+        // Start new agent - need to acknowledge first via provider
+        await provider.acknowledgeIssue(issue.identifier);
+        await orchestrator.startAgent(issue);
+      }
+    }
+  } else if (parsed.type === "comment") {
+    // Only handle new comments
+    if (parsed.action !== "create") return;
+
+    const comment = toLinearComment(parsed.comment);
+    const issue = comment.issue;
+
+    // Skip draft issues
+    if (provider.isDraft(parsed.comment.issue)) {
+      console.log(`[GitHub Webhook] Skipping comment on draft issue: ${issue.identifier}`);
+      return;
+    }
+
+    // Skip bot comments
+    if (provider.isBotComment(parsed.comment)) {
+      console.log(`[GitHub Webhook] Skipping bot comment on ${issue.identifier}`);
+      return;
+    }
+
+    console.log(
+      `[GitHub Webhook] Comment ${parsed.action}: ${issue.identifier} from ${comment.user?.name ?? "unknown"}`
+    );
+
+    let agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+    if (!agentKey) {
+      const shouldSpawn =
+        provider.shouldStartAgent(parsed.comment.issue) ||
+        provider.isAwaitingFeedback(parsed.comment.issue);
+
+      if (!shouldSpawn) {
+        console.log(
+          `[GitHub Webhook] Ignoring comment on ${issue.identifier} - does not meet trigger criteria`
+        );
+        return;
+      }
+
+      if (provider.isAwaitingFeedback(parsed.comment.issue)) {
+        console.log(
+          `[GitHub Webhook] Spawning agent for ${issue.identifier} - feedback response received`
+        );
+      }
+
+      // Check for recovery
+      const savedState = persistence.getAgentByIssueId(comment.issueId);
+
+      if (savedState?.status === "dead") {
+        console.log(
+          `[GitHub Webhook] Recovering agent for ${issue.identifier} from saved state`
+        );
+        await orchestrator.startAgent(issue);
+        agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+        if (!agentKey) {
+          console.error(`[GitHub Webhook] Failed to spawn recovery agent for ${issue.identifier}`);
+          return;
+        }
+
+        const recoveryPrompt = provider.buildRecoveryPrompt(parsed.comment.issue, savedState);
+        await orchestrator.sendMessage(agentKey, recoveryPrompt);
+        persistence.markAgentAlive(comment.issueId);
+      } else {
+        console.log(`[GitHub Webhook] Spawning new agent for ${issue.identifier}`);
+        await orchestrator.startAgent(issue);
+        agentKey = orchestrator.findAgentByIssueId(comment.issueId);
+
+        if (!agentKey) {
+          console.error(`[GitHub Webhook] Failed to spawn agent for ${issue.identifier}`);
+          return;
+        }
+      }
+    }
+
+    // Send comment prompt using provider
+    const commentPrompt = provider.buildCommentPrompt(parsed.comment);
+    await orchestrator.sendMessage(agentKey, commentPrompt);
+  }
+}
+
 const DONE_STATE_ID = "edbec4af-dc30-4d27-a122-84395ac3b885";
 const PR_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -558,6 +721,43 @@ export const server = Bun.serve({
       // Process async, respond immediately
       handleWebhook(data).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
+      });
+
+      return new Response("OK", { status: 200 });
+    }
+
+    // GitHub webhook endpoint
+    if (req.method === "POST" && url.pathname === "/github-webhook") {
+      const payload = await req.text();
+      const signature = req.headers.get("X-Hub-Signature-256");
+
+      // Try each GitHub provider's webhook secret for verification
+      let verifiedProvider: GitHubProvider | null = null;
+
+      for (const [realmName, provider] of githubProviders) {
+        if (await provider.verifyWebhook(payload, signature)) {
+          verifiedProvider = provider;
+          console.log(`[GitHub Webhook] Verified for realm: ${realmName}`);
+          break;
+        }
+      }
+
+      if (!verifiedProvider) {
+        console.warn("[GitHub Webhook] Invalid signature - no matching provider");
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      // Parse the webhook
+      const parsed = verifiedProvider.parseWebhook(payload);
+
+      if (parsed.type === "unknown") {
+        console.log(`[GitHub Webhook] Ignoring unknown webhook type: ${parsed.action}`);
+        return new Response("OK", { status: 200 });
+      }
+
+      // Process async, respond immediately
+      handleGitHubWebhook(parsed, verifiedProvider).catch((err) => {
+        console.error("[GitHub Webhook] Error handling webhook:", err);
       });
 
       return new Response("OK", { status: 200 });

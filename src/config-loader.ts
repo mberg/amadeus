@@ -9,12 +9,17 @@ import {
   type AmadeusConfig,
   type ResolvedConfig,
   type ResolvedRealm,
+  type ResolvedLinearRealm,
+  type ResolvedGitHubRealm,
   type ResolvedRouterConfig,
   type Project,
+  isLinearRealm,
+  isGitHubRealm,
 } from "./config-schema";
 
 // Re-export types for consumers
-export type { ResolvedConfig, ResolvedRealm, ResolvedRouterConfig, Project } from "./config-schema";
+export type { ResolvedConfig, ResolvedRealm, ResolvedLinearRealm, ResolvedGitHubRealm, ResolvedRouterConfig, Project } from "./config-schema";
+export { isLinearRealm, isGitHubRealm } from "./config-schema";
 
 const CONFIG_FILE_NAMES = ["amadeus.config.yaml", "amadeus.config.yml", "amadeus.config.json"];
 
@@ -66,17 +71,40 @@ function buildResolvedConfig(config: AmadeusConfig): ResolvedConfig {
   const projectByTeamKey = new Map<string, { realm: ResolvedRealm; project: Project }>();
 
   for (const [realmName, realm] of Object.entries(config.realms)) {
-    const resolvedRealm: ResolvedRealm = {
-      name: realmName,
-      linearWorkspace: realm.linearWorkspace,
-      apiKey: resolveEnvVar(realm.apiKeyEnvVar, `realm "${realmName}" API key`),
-      webhookSecret: resolveEnvVar(realm.webhookSecretEnvVar, `realm "${realmName}" webhook secret`),
-      claudeBotUserId: realm.claudeBotUserId,
-      projects: realm.projects,
-    };
+    let resolvedRealm: ResolvedRealm;
+
+    if (realm.type === "github") {
+      // GitHub realm
+      resolvedRealm = {
+        type: "github",
+        name: realmName,
+        owner: realm.owner,
+        repo: realm.repo,
+        projectNumber: realm.projectNumber,
+        token: resolveEnvVar(realm.tokenEnvVar, `realm "${realmName}" GitHub token`),
+        webhookSecret: resolveEnvVar(realm.webhookSecretEnvVar, `realm "${realmName}" webhook secret`),
+        botUserId: realm.botUserId,
+        projects: realm.projects,
+      };
+
+      // For GitHub, use owner/repo as workspace key
+      realmByWorkspace.set(`${realm.owner}/${realm.repo}`, resolvedRealm);
+    } else {
+      // Linear realm (type === "linear" or legacy without type)
+      resolvedRealm = {
+        type: "linear",
+        name: realmName,
+        linearWorkspace: realm.linearWorkspace,
+        apiKey: resolveEnvVar(realm.apiKeyEnvVar, `realm "${realmName}" API key`),
+        webhookSecret: resolveEnvVar(realm.webhookSecretEnvVar, `realm "${realmName}" webhook secret`),
+        claudeBotUserId: realm.claudeBotUserId,
+        projects: realm.projects,
+      };
+
+      realmByWorkspace.set(realm.linearWorkspace, resolvedRealm);
+    }
 
     resolvedRealms.push(resolvedRealm);
-    realmByWorkspace.set(realm.linearWorkspace, resolvedRealm);
 
     for (const project of realm.projects) {
       // Only error if the same team key is used in a different realm
