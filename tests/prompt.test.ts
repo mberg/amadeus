@@ -1,10 +1,13 @@
 // ABOUTME: Tests for building Claude prompts from Linear issues.
 // ABOUTME: Ensures prompts include all relevant issue information.
 
-import { describe, expect, it } from "bun:test";
-import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt, isYoloMode } from "../src/prompt";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt, isYoloMode, buildContextSection } from "../src/prompt";
 import type { LinearIssue, LinearComment, AgentProfile } from "../src/types";
 import type { PersistedAgentState } from "../src/persistence";
+import { ensureContextDir, saveKnowledge, saveIssueSummary } from "../src/context";
 
 describe("buildPrompt", () => {
   it("includes issue identifier and title", () => {
@@ -475,5 +478,74 @@ describe("buildRecoveryPrompt", () => {
 
     expect(prompt).toContain("linear-cli comments create");
     expect(prompt).toMatch(/recover|restart|resume/i);
+  });
+});
+
+describe("buildContextSection", () => {
+  const TEST_DIR = "/tmp/amadeus-context-prompt-tests";
+  const PROJECT_DIR = join(TEST_DIR, "test-project");
+
+  beforeEach(async () => {
+    await mkdir(PROJECT_DIR, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("returns empty string when .context doesn't exist", async () => {
+    const section = await buildContextSection(PROJECT_DIR);
+    expect(section).toBe("");
+  });
+
+  it("returns empty string when .context is empty", async () => {
+    await ensureContextDir(PROJECT_DIR);
+    const section = await buildContextSection(PROJECT_DIR);
+    expect(section).toBe("");
+  });
+
+  it("includes knowledge titles when knowledge exists", async () => {
+    await ensureContextDir(PROJECT_DIR);
+    await saveKnowledge(PROJECT_DIR, {
+      title: "Auth System Architecture",
+      content: "The auth system uses JWT...",
+      tags: ["auth", "jwt"],
+    });
+
+    const section = await buildContextSection(PROJECT_DIR);
+
+    expect(section).toContain("Available Context");
+    expect(section).toContain("Auth System Architecture");
+    expect(section).toContain(".context/knowledge/");
+  });
+
+  it("includes issue summaries when they exist", async () => {
+    await ensureContextDir(PROJECT_DIR);
+    await saveIssueSummary(PROJECT_DIR, {
+      identifier: "ONA-1234",
+      title: "Fix auth bug",
+      outcome: "Fixed the bug",
+      keyLearnings: [],
+      filesModified: [],
+    });
+
+    const section = await buildContextSection(PROJECT_DIR);
+
+    expect(section).toContain("ONA-1234");
+    expect(section).toContain(".context/issues/");
+  });
+
+  it("instructs agent how to search and use context", async () => {
+    await ensureContextDir(PROJECT_DIR);
+    await saveKnowledge(PROJECT_DIR, {
+      title: "Some Knowledge",
+      content: "Content here",
+      tags: ["test"],
+    });
+
+    const section = await buildContextSection(PROJECT_DIR);
+
+    expect(section).toMatch(/search|grep|read/i);
+    expect(section).toContain(".context");
   });
 });

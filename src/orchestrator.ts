@@ -4,7 +4,7 @@
 import { spawn, type Subprocess } from "bun";
 import { dirname, join } from "node:path";
 import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
-import { buildPrompt } from "./prompt";
+import { buildPrompt, buildContextSection } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles, resolveSkillLabels, mergeSkillProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 import { applyProfileConfig } from "./profile-config";
@@ -537,7 +537,17 @@ export class ClaudeOrchestrator {
       }
     }
 
-    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments));
+    // Build the main prompt
+    let prompt = buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments);
+
+    // Add context section if .context knowledge exists (from main project, not worktree)
+    const contextSection = await buildContextSection(projectPath);
+    if (contextSection) {
+      prompt = `${prompt}\n\n${contextSection}`;
+      console.log(`[Agent] Including .context knowledge for ${issue.identifier}`);
+    }
+
+    await this.sendMessage(key, prompt);
   }
 
   private setupExitHandler(

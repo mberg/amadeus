@@ -47,3 +47,6 @@ amadeus.config.json
 *.db
 *.db-shm
 *.db-wal
+
+# Context directory (cross-agent knowledge repository)
+.context/
