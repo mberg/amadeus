@@ -464,7 +464,7 @@ export function TaskTable({
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="default" className="text-xs">
+                          <Badge variant={task.completionReason === "stopped" ? "stopped" : "default"} className="text-xs">
                             {formatCompletionReason(task.completionReason)}
                           </Badge>
                         </TableCell>

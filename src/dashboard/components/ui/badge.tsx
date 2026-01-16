@@ -20,6 +20,7 @@ const badgeVariants = cva(
         feedback: "bg-status-feedback/15 text-status-feedback",
         review: "bg-status-review/15 text-status-review",
         done: "bg-status-done/15 text-status-done",
+        stopped: "bg-destructive/15 text-destructive",
       },
     },
     defaultVariants: {
