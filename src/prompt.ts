@@ -4,6 +4,7 @@
 import type { LinearIssue, LinearComment, AgentProfile } from "./types";
 import type { PersistedAgentState } from "./persistence";
 import type { FetchedComment } from "./linear";
+import { getContextSummary, type ContextSummary } from "./context";
 
 export function isYoloMode(issue: LinearIssue): boolean {
   return issue.description?.toLowerCase().includes("yolo") ?? false;
@@ -405,4 +406,59 @@ The user can ONLY see messages you post to Linear. If you need to ask questions,
 - Always communicate your progress via Linear comments
 - Always update the issue status to reflect your current state
 ${profileSection}`.trim();
+}
+
+/**
+ * Builds a context awareness section for the prompt if .context knowledge exists.
+ * Returns an empty string if no context is available.
+ */
+export async function buildContextSection(projectPath: string): Promise<string> {
+  const summary = await getContextSummary(projectPath);
+
+  // If no context exists, return empty
+  if (summary.knowledgeCount === 0 && summary.issueCount === 0 && summary.debugCount === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  lines.push("### Available Context");
+  lines.push("");
+  lines.push("This project has accumulated knowledge from previous agent sessions in `.context/`:");
+  lines.push("");
+
+  if (summary.knowledgeCount > 0) {
+    lines.push(`**Knowledge Articles** (${summary.knowledgeCount} in .context/knowledge/):`);
+    for (const title of summary.knowledgeTitles.slice(0, 5)) {
+      lines.push(`- ${title}`);
+    }
+    if (summary.knowledgeTitles.length > 5) {
+      lines.push(`- ... and ${summary.knowledgeTitles.length - 5} more`);
+    }
+    lines.push("");
+  }
+
+  if (summary.issueCount > 0) {
+    lines.push(`**Issue Summaries** (${summary.issueCount} in .context/issues/):`);
+    for (const identifier of summary.issueSummaries.slice(0, 5)) {
+      lines.push(`- ${identifier}`);
+    }
+    if (summary.issueSummaries.length > 5) {
+      lines.push(`- ... and ${summary.issueSummaries.length - 5} more`);
+    }
+    lines.push("");
+  }
+
+  if (summary.debugCount > 0) {
+    lines.push(`**Debug Artifacts** (${summary.debugCount} in .context/debug/)`);
+    lines.push("");
+  }
+
+  lines.push("**To use this context:**");
+  lines.push("- Search: `grep -r \"keyword\" .context/`");
+  lines.push("- Read specific files: `cat .context/knowledge/filename.md`");
+  lines.push("- Check if a related issue was documented: `cat .context/issues/ONA-XXXX.md`");
+  lines.push("");
+  lines.push("Consider checking `.context/` for relevant knowledge before deep-diving into unfamiliar code.");
+
+  return lines.join("\n");
 }
