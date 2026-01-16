@@ -8,10 +8,12 @@ import {
   getAllWebhookSecrets,
   getRealmByTeamKey,
   getSecurityConfig,
+  getRouterConfig,
   getConfigYaml,
   validateConfigYaml,
   reloadConfig,
 } from "./config";
+import { RouterHeartbeat } from "./router-heartbeat";
 import { verifyLinearSignature } from "./signature";
 import { requireAuth as checkAuth, getAuthInfo, isClerkEnabled } from "./auth";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
@@ -130,6 +132,18 @@ const healthMonitor = new HealthMonitor({
 
 // Start health monitoring
 healthMonitor.start();
+
+// Initialize router heartbeat if configured
+let routerHeartbeat: RouterHeartbeat | null = null;
+const routerConfig = getRouterConfig();
+if (routerConfig) {
+  routerHeartbeat = new RouterHeartbeat({
+    routerUrl: routerConfig.url,
+    machineName: routerConfig.machineName,
+    secret: routerConfig.secret,
+  });
+  routerHeartbeat.start();
+}
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
   return "body" in data && "issueId" in data;
@@ -494,6 +508,15 @@ export const server = Bun.serve({
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
+      // Verify router secret if router is configured
+      if (routerConfig) {
+        const routerSecret = req.headers.get("X-Amadeus-Secret");
+        if (routerSecret !== routerConfig.secret) {
+          console.warn("[Webhook] Invalid router secret");
+          return new Response("Unauthorized", { status: 401 });
+        }
+      }
+
       // Try each realm's webhook secret for verification
       const secrets = getAllWebhookSecrets();
       let verified = false;
@@ -763,6 +786,11 @@ async function shutdown(): Promise<void> {
   // Stop health monitoring
   healthMonitor.stop();
 
+  // Stop router heartbeat if running
+  if (routerHeartbeat) {
+    routerHeartbeat.stop();
+  }
+
   clearInterval(prCheckInterval);
 
   // Stop all agents
@@ -785,6 +813,10 @@ console.log(`   Webhook:   https://your-machine.ts.net/webhook`);
 console.log(`   Status:    http://localhost:${server.port}/status`);
 console.log(`   Dashboard: http://localhost:${server.port}/dashboard`);
 console.log(`   PR Check:  Every ${PR_CHECK_INTERVAL_MS / 1000 / 60} minutes`);
+
+if (routerConfig) {
+  console.log(`   Router:    ${routerConfig.url} (as "${routerConfig.machineName}")`);
+}
 
 if (!isClerkEnabled() && !CONFIG.apiToken) {
   console.warn(

@@ -41,6 +41,17 @@ export const SecurityConfigSchema = z.object({
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>;
 
 /**
+ * Schema for multi-machine router configuration.
+ */
+export const RouterConfigSchema = z.object({
+  url: z.string().url("Router URL must be a valid URL"),
+  machineName: z.string().min(1, "Machine name cannot be empty"),
+  secretEnvVar: z.string().min(1, "Router secret env var name cannot be empty"),
+});
+
+export type RouterConfig = z.infer<typeof RouterConfigSchema>;
+
+/**
  * Schema for global configuration settings.
  */
 export const GlobalConfigSchema = z.object({
@@ -55,6 +66,7 @@ export const GlobalConfigSchema = z.object({
   healthCheckIntervalMs: z.number().int().positive().default(30000),
   healthCheckTimeoutMs: z.number().int().positive().default(5000),
   security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false }),
+  router: RouterConfigSchema.optional(),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
@@ -73,6 +85,15 @@ export const AmadeusConfigSchema = z.object({
 export type AmadeusConfig = z.infer<typeof AmadeusConfigSchema>;
 
 /**
+ * Resolved router configuration with secret value.
+ */
+export interface ResolvedRouterConfig {
+  url: string;
+  machineName: string;
+  secret: string;
+}
+
+/**
  * Resolved configuration with actual secret values.
  * This is what the application uses after loading and resolving env vars.
  */
@@ -88,6 +109,7 @@ export interface ResolvedRealm {
 export interface ResolvedConfig {
   realms: ResolvedRealm[];
   global: GlobalConfig;
+  router?: ResolvedRouterConfig;
   // Convenience lookups
   realmByWorkspace: Map<string, ResolvedRealm>;
   realmByTeamKey: Map<string, ResolvedRealm>;

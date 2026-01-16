@@ -9,11 +9,12 @@ import {
   type AmadeusConfig,
   type ResolvedConfig,
   type ResolvedRealm,
+  type ResolvedRouterConfig,
   type Project,
 } from "./config-schema";
 
 // Re-export types for consumers
-export type { ResolvedConfig, ResolvedRealm, Project } from "./config-schema";
+export type { ResolvedConfig, ResolvedRealm, ResolvedRouterConfig, Project } from "./config-schema";
 
 const CONFIG_FILE_NAMES = ["amadeus.config.yaml", "amadeus.config.yml", "amadeus.config.json"];
 
@@ -91,9 +92,20 @@ function buildResolvedConfig(config: AmadeusConfig): ResolvedConfig {
     }
   }
 
+  // Resolve router config if present
+  let resolvedRouter: ResolvedRouterConfig | undefined;
+  if (config.global.router) {
+    resolvedRouter = {
+      url: config.global.router.url,
+      machineName: config.global.router.machineName,
+      secret: resolveEnvVar(config.global.router.secretEnvVar, "router secret"),
+    };
+  }
+
   return {
     realms: resolvedRealms,
     global: config.global,
+    router: resolvedRouter,
     realmByWorkspace,
     realmByTeamKey,
     projectByTeamKey,
