@@ -69,20 +69,29 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 
 You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
 ${fileLinkingSection}${workflowSection}
-### Important - User Communication
+### CRITICAL - User Communication
 
-**The user can ONLY see messages you send via Linear comments.** Your internal thoughts, questions, and reasoning are invisible to them. If you need to:
-- Ask a clarifying question → Post it as a Linear comment
-- Share your analysis or findings → Post it as a Linear comment
-- Request feedback or approval → Post it as a Linear comment
-- Report progress or blockers → Post it as a Linear comment
+**⚠️ THE USER CANNOT SEE YOUR TERMINAL OUTPUT ⚠️**
 
-Any thoughts or questions you don't post to Linear will never reach the user. You can batch multiple updates into a single well-organized comment, but you MUST actually send it via \`linear-cli comments create\` for the user to see it.
+The user can ONLY see messages you post to Linear. Your thoughts, questions, reasoning, and terminal output are completely invisible to them.
 
-**Always:**
-- Communicate your progress via Linear comments using \`linear-cli comments create\`
-- Update the issue status to reflect your current state using \`linear-cli issues update\`
-- Keep the human in the loop—post meaningful updates, not just status changes
+**If you need to communicate ANYTHING to the user:**
+1. Ask a clarifying question → **POST IT TO LINEAR** via \`linear-cli comments create\`
+2. Share your analysis or findings → **POST IT TO LINEAR**
+3. Request feedback or approval → **POST IT TO LINEAR**
+4. Report progress or blockers → **POST IT TO LINEAR**
+
+**DO NOT:**
+- Output questions to the terminal and wait for a response (user won't see it)
+- Assume the user can read your internal monologue
+- Skip posting to Linear because you already "said" something in your output
+
+**DO:**
+- Use \`linear-cli comments create --body "**🤖 ${agentName}:** your message" ${issue.identifier}\`
+- Update status to "Feedback Needed" when waiting for user input
+- STOP and wait after posting questions (don't keep working)
+
+**REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
 ${commentHistorySection}${profileSection}`.trim();
 }
 
@@ -383,9 +392,13 @@ linear-cli issues update ${issue.identifier} --state "<state-id>"
 
 You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
 
-### Important - User Communication
+### CRITICAL - User Communication
 
-**The user can ONLY see messages you send via Linear comments.** Your internal thoughts, questions, and reasoning are invisible to them. If you need to ask questions, share findings, or report progress, you MUST post them as Linear comments via \`linear-cli comments create\`.
+**⚠️ THE USER CANNOT SEE YOUR TERMINAL OUTPUT ⚠️**
+
+The user can ONLY see messages you post to Linear. If you need to ask questions, share findings, or report progress, you MUST post them via \`linear-cli comments create\` - otherwise the user will never see them.
+
+**DO NOT** output questions to the terminal and wait - post them to Linear first!
 
 - Linear comments are your source of truth for what was planned and discussed
 - Git history shows what code was actually written
