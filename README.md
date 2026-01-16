@@ -2,6 +2,18 @@
 
 Amadeus uses Linear as a control plane to manage multiple Claude Code agents. Each agent runs on a dedicated port, working on different projects. Linear's Kanban board becomes the UI for orchestrating AI-powered development.
 
+## Dashboard
+
+Amadeus includes a web dashboard for monitoring and managing agents:
+
+![Tasks Dashboard](.amadeus-images/52831c34-f68d-49aa-836f-fbd7e22c3420-1768563182241.png)
+
+*Tasks view showing active and completed agents with real-time status, memory usage, and filtering options.*
+
+![Messages Panel](.amadeus-images/42a0a400-f4e4-4c14-b813-a926ef6634ca-1768563182065.png)
+
+*Agent conversation panel showing message history and direct interaction capabilities.*
+
 ## Architecture
 
 ```
@@ -59,6 +71,312 @@ Amadeus uses Linear as a control plane to manage multiple Claude Code agents. Ea
 3. Updates appear on the Linear issue that triggered the agent
 
 **Key insight:** Amadeus is a one-way orchestrator. It spawns agents and sends them work, but agents communicate back to Linear directly via `linear-cli`—not through Amadeus.
+
+## Prerequisites
+
+You need these installed on your machine:
+
+1. **Claude Code CLI** - The `claude` command must be available
+   ```bash
+   # Verify installation
+   claude --version
+   ```
+
+2. **AgentAPI** - HTTP wrapper for Claude Code ([github.com/coder/agentapi](https://github.com/coder/agentapi))
+   ```bash
+   # Download binary for macOS
+   OS=$(uname -s | tr "[:upper:]" "[:lower:]")
+   ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")
+   curl -fsSL "https://github.com/coder/agentapi/releases/latest/download/agentapi-${OS}-${ARCH}" -o /usr/local/bin/agentapi
+   chmod +x /usr/local/bin/agentapi
+
+   # Verify
+   agentapi --help
+   ```
+
+   **macOS security note:** If you get "cannot be opened because it is from an unidentified developer", go to **System Settings → Privacy & Security** and click "Open Anyway".
+
+3. **linear-cli** - Command-line tool for agents to interact with Linear ([github.com/Finesssee/linear-cli](https://github.com/Finesssee/linear-cli))
+   ```bash
+   # Install via Cargo (requires Rust)
+   cargo install linear-cli
+
+   # Or download pre-built binary from GitHub releases
+   # https://github.com/Finesssee/linear-cli/releases
+
+   # Configure your Linear API key
+   linear-cli config set-key lin_api_xxxxxxxxxxxxx
+
+   # Verify installation
+   linear-cli --help
+   ```
+
+   Agents use linear-cli to post comments and update issue status. Without this, agents cannot communicate progress back to Linear.
+
+4. **Tailscale** (optional) - For exposing webhooks to the internet via Funnel
+
+## Quick Start
+
+```bash
+# Install dependencies
+bun install
+
+# Configure secrets
+cp .env.example .env
+# Edit .env with your Linear API keys and webhook secrets
+
+# Configure realms and projects
+cp amadeus.config.example.yaml amadeus.config.yaml
+# Edit amadeus.config.yaml with your Linear workspaces and project paths
+
+# Start the server
+bun run start
+
+# Expose via Tailscale Funnel (in another terminal)
+tailscale funnel --bg 5678
+```
+
+## Configuration
+
+Amadeus uses a YAML configuration file for non-sensitive settings and `.env` for secrets.
+
+### Configuration File (amadeus.config.yaml)
+
+Copy `amadeus.config.example.yaml` to `amadeus.config.yaml` and customize:
+
+```yaml
+realms:
+  # A realm groups a Linear workspace with its projects and credentials
+  ona:
+    linearWorkspace: ona  # workspace slug from linear.app/ona
+    apiKeyEnvVar: LINEAR_API_KEY_ONA
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_ONA
+    claudeBotUserId: user-id-optional  # Optional: filter out bot's own comments
+    projects:
+      - teamKey: ONA
+        linearProject: Optional Project Name  # Route by project name within team
+        path: /path/to/ona/project
+        profile: base
+        githubRepoUrl: https://github.com/org/repo  # Optional: for PR links
+      - teamKey: DESIGN
+        path: /path/to/design/project
+        profile: frontend
+
+global:
+  port: 5678
+  agentName: Amadeus  # Label name for selective triggering
+  triggerStates:
+    - Planning
+  useWorktrees: true
+  worktreesDir: /path/to/.amadeus-worktrees
+  profilesDir: ./agent-profiles
+  defaultProfile: base
+  dbPath: ./amadeus-agents.db  # SQLite database for persistence
+  healthCheckIntervalMs: 30000
+  healthCheckTimeoutMs: 5000
+  security:
+    enableAgentMessaging: false  # Allow dashboard users to send messages to agents
+```
+
+### Environment Variables (.env)
+
+Secrets are stored in `.env` and referenced by name in the config file:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LINEAR_API_KEY_<REALM>` | Yes | Linear API key for each realm |
+| `LINEAR_WEBHOOK_SECRET_<REALM>` | Yes | Webhook signing secret for each realm |
+| `AMADEUS_API_TOKEN` | No | API token for simple auth mode |
+| `CLERK_PUBLISHABLE_KEY` | No | Clerk publishable key (enables Clerk auth) |
+| `CLERK_SECRET_KEY` | No | Clerk secret key (required with publishable key) |
+| `RESEND_API_KEY` | No | Resend API key for email notifications |
+| `NOTIFICATION_EMAIL` | No | Email address to send notifications to |
+| `NOTIFICATION_FROM_EMAIL` | No | Email address to send notifications from |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for notifications |
+| `TELEGRAM_CHAT_ID` | No | Telegram chat ID to send notifications to |
+
+Example `.env`:
+```bash
+LINEAR_API_KEY_ONA=lin_api_xxxxxxxxxxxxx
+LINEAR_WEBHOOK_SECRET_ONA=your_webhook_secret_here
+
+# Simple auth (optional)
+AMADEUS_API_TOKEN=your_secret_token
+
+# Or Clerk auth (optional)
+CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
+CLERK_SECRET_KEY=sk_live_xxxxx
+
+# Notifications (optional)
+RESEND_API_KEY=re_xxxxx
+NOTIFICATION_EMAIL=you@example.com
+NOTIFICATION_FROM_EMAIL=amadeus@example.com
+TELEGRAM_BOT_TOKEN=123456:ABC-xxxxx
+TELEGRAM_CHAT_ID=123456789
+```
+
+### Realms
+
+A **realm** groups a Linear workspace with its projects and credentials. This allows Amadeus to:
+- Handle multiple Linear workspaces in one instance
+- Use different API keys per workspace
+- Route issues to the correct repositories
+
+Each realm contains:
+- `linearWorkspace`: The workspace slug (e.g., `ona` for linear.app/ona)
+- `apiKeyEnvVar`: Name of the env var containing the Linear API key
+- `webhookSecretEnvVar`: Name of the env var containing the webhook secret
+- `claudeBotUserId`: Optional user ID to filter out the bot's own comments
+- `projects`: Array of team-to-path mappings
+
+### Project Routing
+
+Projects can be routed by team key and optionally by project name:
+
+```yaml
+projects:
+  - teamKey: ONA
+    linearProject: Amadeus  # Only issues in the "Amadeus" project
+    path: /code/amadeus
+  - teamKey: ONA
+    linearProject: Dashboard  # Only issues in the "Dashboard" project
+    path: /code/dashboard
+  - teamKey: ONA
+    path: /code/default  # Fallback for other ONA issues
+```
+
+### Label-Based Agent Triggering
+
+When `agentName` is set in config (or `AGENT_NAME` env var), Amadeus only processes issues that have a matching label.
+
+```yaml
+global:
+  agentName: Amadeus
+```
+
+With this setting:
+- Issues **with** the "Amadeus" label → agent spawns when moved to Planning
+- Issues **without** the "Amadeus" label → ignored by Amadeus
+
+This enables selective automation—only issues explicitly labeled for AI assistance are processed. The matching is case-insensitive.
+
+## Agent Profiles
+
+Agent profiles let you configure different setups for different types of issues. For example, frontend issues might get Playwright for browser testing, while backend issues get database tools.
+
+### How Profiles Work
+
+Profiles are JSON files in the `agent-profiles/` directory. Each profile can specify:
+
+- **MCP Servers** - Tools the agent can use (Playwright, database clients, etc.)
+- **Permissions** - What commands the agent is allowed to run
+- **Skills** - Claude Code skills to install from marketplaces
+- **Prompt Additions** - Extra instructions appended to the agent's prompt
+
+### Profile Format
+
+```json
+{
+  "extends": "base",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-playwright"]
+    }
+  },
+  "permissions": {
+    "allow": ["Bash(playwright:*)"],
+    "deny": []
+  },
+  "skills": {
+    "marketplaces": ["anthropics/skills"],
+    "install": ["frontend-design@anthropic-agent-skills"],
+    "local": []
+  },
+  "promptAdditions": [
+    "You have access to Playwright for browser automation.",
+    "Use the frontend-design skill for UI components."
+  ]
+}
+```
+
+### Built-in Profiles
+
+| Profile | Description |
+|---------|-------------|
+| `base` | Minimal profile with Bash/git/bun/curl permissions |
+| `frontend` | Extends base with Playwright MCP and frontend-design skill |
+| `frontend-design` | Lightweight profile with just the frontend-design skill |
+| `superpowers` | Adds superpowers skill for structured workflows (brainstorming, planning, TDD, debugging) |
+
+### Profile Selection
+
+Profiles are selected in this order:
+
+1. **Issue Labels** - Add a `profile:<name>` label to the issue (e.g., `profile:frontend`)
+2. **Project Default** - Configure a default profile per project in config
+3. **Global Default** - Falls back to the `base` profile
+
+Multiple `profile:` labels on an issue will merge those profiles together.
+
+### Profile Inheritance
+
+Profiles can extend other profiles using the `extends` field:
+
+```json
+{
+  "extends": "base",
+  "mcpServers": {
+    "playwright": { ... }
+  }
+}
+```
+
+When extending:
+- MCP servers are merged (child overrides parent for same key)
+- Permissions are combined (both allow and deny lists)
+- Skills are combined and deduplicated
+- Prompt additions are concatenated (parent first, then child)
+
+## Dashboard Features
+
+The web dashboard at `/dashboard` provides real-time monitoring and control of agents.
+
+### Tasks Page
+
+- **Real-time status** - See all active agents with their current state
+- **Filtering** - Filter by Linear state (Planning, Building, Feedback Needed, Review, Done) or by active skills
+- **Search** - Find agents by issue identifier or title
+- **Stats bar** - Total agents, working, idle, and memory usage
+- **Sortable columns** - Sort by ID, memory, title, status, state, uptime
+
+### Task Actions
+
+- **View messages** - Open the agent's conversation panel to see full message history
+- **Stop agent** - Terminate an agent with confirmation dialog
+- **Link to Linear** - Jump directly to the Linear issue
+
+### Completed Tasks
+
+The dashboard shows a history of completed tasks with:
+- Completion reason (Done, Stopped, Canceled, Backlogged)
+- Time since completion
+- Task duration
+
+### Settings Page
+
+- **Overview tab** - Read-only summary of current configuration
+- **YAML tab** - Edit configuration directly (admin role required)
+  - Save changes and reload
+  - Validate without saving
+  - Reset to original
+
+### Message Panel
+
+Click on any active agent to open the message panel showing:
+- Full conversation history
+- Agent console output
+- Ability to send messages (if enabled and authorized)
 
 ## Agent Workflow
 
@@ -156,6 +474,98 @@ gh pr create --title "ONA-123: Feature title" --body "Resolves ONA-123"
 linear-cli comments create --body "**🤖 Claude:** PR created: https://github.com/..." ONA-123
 linear-cli issues update ONA-123 --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 ```
+
+### Automatic PR Merge Detection
+
+Amadeus automatically detects when PRs are merged and updates Linear:
+
+- Checks agents in "Review" state every 5 minutes
+- Uses `gh pr view` to check merge status
+- When a PR is merged:
+  1. Updates Linear issue to "Done"
+  2. Deletes local and remote branches
+  3. Cleans up agent state
+
+This keeps Linear in sync without manual intervention.
+
+## Notifications
+
+Amadeus can notify you when agents need attention via email or Telegram.
+
+### Email Notifications (Resend)
+
+Configure email notifications with Resend:
+
+```bash
+RESEND_API_KEY=re_xxxxx
+NOTIFICATION_EMAIL=you@example.com
+NOTIFICATION_FROM_EMAIL=amadeus@yourdomain.com
+```
+
+Notifications are sent when:
+- An agent moves to **Feedback Needed** (plan ready for review)
+- An agent moves to **Review** (PR ready for review)
+
+### Telegram Notifications
+
+Configure Telegram notifications:
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:ABC-xxxxx
+TELEGRAM_CHAT_ID=123456789
+```
+
+**Two-way communication:** You can reply to Telegram notifications to post comments back to Linear. Use the format:
+
+```
+ISSUE-123: Your comment here
+```
+
+The reply will be posted as a comment on the Linear issue.
+
+## Authentication
+
+Amadeus supports two authentication modes for the dashboard and API.
+
+### Simple Mode (Default)
+
+Uses a single API token for authentication:
+
+```bash
+AMADEUS_API_TOKEN=your_secret_token
+```
+
+- Include token in requests via `X-Amadeus-Token` header
+- Without token: read-only access (viewer)
+- With valid token: full access (admin)
+
+To enable agent messaging in simple mode:
+
+```yaml
+global:
+  security:
+    enableAgentMessaging: true
+```
+
+### Clerk Mode
+
+For production deployments with role-based access control:
+
+```bash
+CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
+CLERK_SECRET_KEY=sk_live_xxxxx
+```
+
+**Roles:**
+| Role | Permissions |
+|------|-------------|
+| `viewer` | View dashboard, read agent status |
+| `operator` | Send messages to agents, stop agents |
+| `admin` | Edit configuration |
+
+Assign roles via Clerk's user metadata (`publicMetadata.role`).
+
+**Auth detection:** Clerk mode is enabled automatically when both env vars are set.
 
 ## Multi-Project Support
 
@@ -259,302 +669,49 @@ Without worktrees, two agents working on the same project would overwrite each o
 
 ### Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `USE_WORKTREES` | `true` | Set to `false` to disable worktrees (agents work in project root) |
-| `WORKTREES_DIR` | `../.amadeus-worktrees` | Custom directory for worktrees |
+```yaml
+global:
+  useWorktrees: true
+  worktreesDir: /path/to/.amadeus-worktrees
+```
 
 ### Disabling Worktrees
 
-If you prefer agents to work directly in the project directory (like before):
+If you prefer agents to work directly in the project directory:
 
-```bash
-USE_WORKTREES=false bun run start
+```yaml
+global:
+  useWorktrees: false
 ```
 
 Note: Without worktrees, multiple agents on the same project may conflict with each other's file changes.
 
-## Agent Profiles
-
-Agent profiles let you configure different setups for different types of issues. For example, frontend issues might get Playwright for browser testing, while backend issues get database tools.
-
-### How Profiles Work
-
-Profiles are JSON files in the `agent-profiles/` directory. Each profile can specify:
-
-- **MCP Servers** - Tools the agent can use (Playwright, database clients, etc.)
-- **Permissions** - What commands the agent is allowed to run
-- **Skills** - Claude Code skills to install from marketplaces
-- **Prompt Additions** - Extra instructions appended to the agent's prompt
-
-### Profile Format
-
-```json
-{
-  "extends": "base",
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-playwright"]
-    }
-  },
-  "permissions": {
-    "allow": ["Bash(playwright:*)"],
-    "deny": []
-  },
-  "skills": {
-    "marketplaces": ["anthropics/skills"],
-    "install": ["frontend-design@anthropic-agent-skills"],
-    "local": []
-  },
-  "promptAdditions": [
-    "You have access to Playwright for browser automation.",
-    "Use the frontend-design skill for UI components."
-  ]
-}
-```
-
-### Profile Selection
-
-Profiles are selected in this order:
-
-1. **Issue Labels** - Add a `profile:<name>` label to the issue (e.g., `profile:frontend`)
-2. **Team Default** - Configure a default profile per Linear team
-3. **Global Default** - Falls back to the `base` profile
-
-Multiple `profile:` labels on an issue will merge those profiles together.
-
-### Profile Inheritance
-
-Profiles can extend other profiles using the `extends` field:
-
-```json
-{
-  "extends": "base",
-  "mcpServers": {
-    "playwright": { ... }
-  }
-}
-```
-
-When extending:
-- MCP servers are merged (child overrides parent for same key)
-- Permissions are combined (both allow and deny lists)
-- Skills are combined and deduplicated
-- Prompt additions are concatenated (parent first, then child)
-
-### Built-in Profiles
-
-| Profile | Description |
-|---------|-------------|
-| `base` | Default profile with Linear MCP and basic Git/Bun permissions |
-| `frontend` | Extends base with Playwright and frontend-design skill |
-
-### Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PROFILES_DIR` | `./agent-profiles` | Directory containing profile JSON files |
-| `DEFAULT_PROFILE` | `base` | Profile to use when no label matches |
-| `TEAM_PROFILES` | - | Per-team defaults: `TEAM1:profile1,TEAM2:profile2` |
-
-### Example: Adding a Profile
-
-Create `agent-profiles/backend.json`:
-
-```json
-{
-  "extends": "base",
-  "mcpServers": {
-    "postgres": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-postgres"],
-      "env": {
-        "DATABASE_URL": "${DATABASE_URL}"
-      }
-    }
-  },
-  "permissions": {
-    "allow": ["Bash(psql:*)"]
-  },
-  "promptAdditions": [
-    "You have access to PostgreSQL via MCP for database operations."
-  ]
-}
-```
-
-Then add the `profile:backend` label to relevant Linear issues.
-
-## Prerequisites
-
-You need these installed on your machine:
-
-1. **Claude Code CLI** - The `claude` command must be available
-   ```bash
-   # Verify installation
-   claude --version
-   ```
-
-2. **AgentAPI** - HTTP wrapper for Claude Code ([github.com/coder/agentapi](https://github.com/coder/agentapi))
-   ```bash
-   # Download binary for macOS
-   OS=$(uname -s | tr "[:upper:]" "[:lower:]")
-   ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")
-   curl -fsSL "https://github.com/coder/agentapi/releases/latest/download/agentapi-${OS}-${ARCH}" -o /usr/local/bin/agentapi
-   chmod +x /usr/local/bin/agentapi
-
-   # Verify
-   agentapi --help
-   ```
-
-   **macOS security note:** If you get "cannot be opened because it is from an unidentified developer", go to **System Settings → Privacy & Security** and click "Open Anyway".
-
-3. **Linear MCP Server** - Each project needs Linear MCP configured so Claude can update issues
-   ```json
-   // .claude/mcp.json (in each project that agents will work in)
-   {
-     "mcpServers": {
-       "linear": {
-         "command": "npx",
-         "args": ["-y", "@anthropic-ai/linear-mcp"],
-         "env": {
-           "LINEAR_API_KEY": "${LINEAR_API_KEY}"
-         }
-       }
-     }
-   }
-   ```
-
-   Without this, agents can work on code but **cannot post updates back to Linear**.
-
-4. **linear-cli** - Command-line tool for agents to interact with Linear ([github.com/Finesssee/linear-cli](https://github.com/Finesssee/linear-cli))
-   ```bash
-   # Install via Cargo (requires Rust)
-   cargo install linear-cli
-
-   # Or download pre-built binary from GitHub releases
-   # https://github.com/Finesssee/linear-cli/releases
-
-   # Configure your Linear API key
-   linear-cli config set-key lin_api_xxxxxxxxxxxxx
-
-   # Verify installation
-   linear-cli --help
-   ```
-
-   Agents use linear-cli to post comments and update issue status. Without this, agents cannot communicate progress back to Linear.
-
-5. **Tailscale** (optional) - For exposing webhooks to the internet via Funnel
-
-## Quick Start
-
-```bash
-# Install dependencies
-bun install
-
-# Configure secrets
-cp .env.example .env
-# Edit .env with your Linear API keys and webhook secrets
-
-# Configure realms and projects
-cp amadeus.config.example.yaml amadeus.config.yaml
-# Edit amadeus.config.yaml with your Linear workspaces and project paths
-
-# Start the server
-bun run start
-
-# Expose via Tailscale Funnel (in another terminal)
-tailscale funnel --bg 5678
-```
-
-## Configuration
-
-Amadeus uses a YAML configuration file for non-sensitive settings and `.env` for secrets.
-
-### Configuration File (amadeus.config.yaml)
-
-Copy `amadeus.config.example.yaml` to `amadeus.config.yaml` and customize:
-
-```yaml
-realms:
-  # A realm groups a Linear workspace with its projects and credentials
-  ona:
-    linearWorkspace: ona  # workspace slug from linear.app/ona
-    apiKeyEnvVar: LINEAR_API_KEY_ONA
-    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_ONA
-    projects:
-      - teamKey: ONA
-        path: /path/to/ona/project
-        profile: base
-      - teamKey: DESIGN
-        path: /path/to/design/project
-        profile: frontend
-
-global:
-  port: 5678
-  triggerStates:
-    - Planning
-  useWorktrees: true
-  worktreesDir: /path/to/.amadeus-worktrees
-  profilesDir: ./agent-profiles
-  defaultProfile: base
-```
-
-### Environment Variables (.env)
-
-Secrets are stored in `.env` and referenced by name in the config file:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `LINEAR_API_KEY_<REALM>` | Yes | Linear API key for each realm |
-| `LINEAR_WEBHOOK_SECRET_<REALM>` | Yes | Webhook signing secret for each realm |
-| `AGENT_NAME` | No | Label name that issues must have for agent to act (default: none) |
-| `AMADEUS_API_TOKEN` | No | API authentication for dashboard endpoints |
-
-Example `.env`:
-```bash
-LINEAR_API_KEY_ONA=lin_api_xxxxxxxxxxxxx
-LINEAR_WEBHOOK_SECRET_ONA=your_webhook_secret_here
-AGENT_NAME=Amadeus
-```
-
-### Realms
-
-A **realm** groups a Linear workspace with its projects and credentials. This allows Amadeus to:
-- Handle multiple Linear workspaces in one instance
-- Use different API keys per workspace
-- Route issues to the correct repositories
-
-Each realm contains:
-- `linearWorkspace`: The workspace slug (e.g., `ona` for linear.app/ona)
-- `apiKeyEnvVar`: Name of the env var containing the Linear API key
-- `webhookSecretEnvVar`: Name of the env var containing the webhook secret
-- `projects`: Array of team-to-path mappings
-
-### Label-Based Agent Triggering
-
-When `AGENT_NAME` is set, Amadeus only processes issues that have a matching label.
-
-```bash
-# In .env
-AGENT_NAME=Amadeus
-```
-
-With this setting:
-- Issues **with** the "Amadeus" label → agent spawns when moved to Planning
-- Issues **without** the "Amadeus" label → ignored by Amadeus
-
-This enables selective automation—only issues explicitly labeled for AI assistance are processed. The matching is case-insensitive.
-
-If `AGENT_NAME` is not set, all issues in trigger states are processed (original behavior).
-
 ## Endpoints
 
-- `GET /health` - Health check
-- `GET /status` - JSON status of all running agents
-- `GET /dashboard` - Visual dashboard for agent status
-- `POST /webhook` - Linear webhook receiver
-- `POST /trigger` - Manual agent message: `{"agentKey": "...", "message": "..."}`
+### Public Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Redirect to dashboard |
+| `/health` | GET | Health check |
+| `/dashboard` | GET | Web dashboard |
+| `/auth/info` | GET | Auth mode and Clerk public key |
+| `/webhook` | POST | Linear webhook receiver |
+| `/telegram-webhook` | POST | Telegram reply webhook |
+
+### Authenticated Endpoints
+
+| Endpoint | Method | Role | Description |
+|----------|--------|------|-------------|
+| `/status` | GET | viewer | JSON status of all running agents |
+| `/status/history` | GET | viewer | Completed tasks history (paginated) |
+| `/config` | GET | viewer | Dashboard config (non-secret) |
+| `/config/yaml` | GET | viewer | Raw YAML configuration |
+| `/config` | POST | admin | Update and reload configuration |
+| `/config/validate` | POST | admin | Validate YAML without saving |
+| `/trigger` | POST | operator | Send message to agent: `{"agentKey": "...", "message": "..."}` |
+| `/agents/:key/messages` | GET | viewer | Proxy agent conversation messages |
+| `/agents/:key/stop` | POST | operator | Stop a running agent |
 
 ## Linear Setup
 
@@ -607,6 +764,7 @@ Each agent process has a runtime status:
 | **starting** | Agent process is spawning, waiting for readiness checks |
 | **idle** | Agent is ready and waiting for messages |
 | **working** | Agent is actively processing a message |
+| **stopped** | Agent has been terminated |
 
 Transitions: `starting` → `idle` (health check passes) → `working` (message sent) → `idle` (processing complete)
 
@@ -714,19 +872,6 @@ tailscale funnel off
 - Confirm the URL in Linear matches your Funnel URL exactly
 - Ensure `LINEAR_WEBHOOK_SECRET` in `.env` matches the secret shown in Linear
 
-## Development
-
-```bash
-# Run tests
-bun test
-
-# Run tests in watch mode
-bun test --watch
-
-# Interactive chat with Claude Code (for testing agentapi integration)
-bun run chat
-```
-
 ## Security
 
 Amadeus grants significant autonomy to AI agents. Understand these security implications before deploying.
@@ -764,13 +909,13 @@ Keep your webhook secret confidential. Rotate it if compromised.
 
 **Network Exposure**
 
-Only the `/webhook` endpoint should be exposed to the internet. Keep these endpoints internal:
+Only the `/webhook` and `/telegram-webhook` endpoints should be exposed to the internet. Keep these endpoints internal:
 - `/status` - Agent status information
 - `/dashboard` - Visual dashboard
 - `/trigger` - Manual agent control
 - `/config` - Server configuration
 
-If using a reverse proxy, allowlist only `/webhook` for external access.
+If using a reverse proxy, allowlist only webhook endpoints for external access.
 
 **Secrets Management**
 
@@ -819,3 +964,25 @@ Always review agent output before merging:
 - Verify agents haven't modified files outside their scope
 - Review commit history for unexpected patterns
 - Test changes in a staging environment when possible
+
+## Development
+
+```bash
+# Run tests
+bun test
+
+# Run tests in watch mode
+bun test --watch
+
+# Interactive chat with Claude Code (for testing agentapi integration)
+bun run chat
+```
+
+## Credits
+
+Amadeus builds on these excellent tools:
+
+- **[AgentAPI](https://github.com/coder/agentapi)** by Coder - HTTP wrapper that enables programmatic control of Claude Code
+- **[linear-cli](https://github.com/Finesssee/linear-cli)** by Finesssee - Command-line tool for Linear that agents use to post comments and update issues
+- **[Claude Code](https://claude.com/claude-code)** by Anthropic - The AI coding assistant that powers each agent
+- **[Linear](https://linear.app)** - The issue tracker that serves as Amadeus's control plane
