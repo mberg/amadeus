@@ -34,6 +34,7 @@ import {
   notifyReviewReadyTelegram,
   parseIssueFromMessage,
 } from "./telegram";
+import { fetchIssueDetails } from "./linear";
 
 async function requireViewer(req: Request): Promise<Response | null> {
   const security = getSecurityConfig();
@@ -353,21 +354,39 @@ async function handleCommentWebhook(
 
   // Spawn a new agent if one doesn't exist for this issue
   if (!agentKey) {
+    // Webhook data may be incomplete (missing labels/state), so fetch full issue details
+    const teamKey = comment.issue.identifier.split("-")[0];
+    const realmInfo = getRealmByTeamKey(teamKey);
+    let issue = comment.issue;
+
+    if (realmInfo?.apiKey && (!issue.state?.name || !issue.labels?.length)) {
+      const fullIssue = await fetchIssueDetails(comment.issueId, realmInfo.apiKey);
+      if (fullIssue) {
+        issue = fullIssue;
+        console.log(
+          `[${new Date().toISOString()}] Fetched full issue details for ${issue.identifier} (state: ${issue.state?.name}, labels: ${issue.labels?.map(l => l.name).join(", ")})`
+        );
+      }
+    }
+
     // Spawn if issue meets trigger criteria OR is awaiting feedback (human response resumes work)
-    const shouldSpawn = orchestrator.shouldStartAgent(comment.issue) || orchestrator.isAwaitingFeedback(comment.issue);
+    const shouldSpawn = orchestrator.shouldStartAgent(issue) || orchestrator.isAwaitingFeedback(issue);
     if (!shouldSpawn) {
       console.log(
-        `[${new Date().toISOString()}] Ignoring comment on ${comment.issue.identifier} - does not meet trigger criteria`
+        `[${new Date().toISOString()}] Ignoring comment on ${issue.identifier} - does not meet trigger criteria (state: ${issue.state?.name}, labels: ${issue.labels?.map(l => l.name).join(", ") ?? "none"})`
       );
       return;
     }
 
     // Log why we're spawning
-    if (orchestrator.isAwaitingFeedback(comment.issue)) {
+    if (orchestrator.isAwaitingFeedback(issue)) {
       console.log(
-        `[${new Date().toISOString()}] Spawning agent for ${comment.issue.identifier} - feedback response received`
+        `[${new Date().toISOString()}] Spawning agent for ${issue.identifier} - feedback response received`
       );
     }
+
+    // Update comment.issue with full details for downstream use
+    comment.issue = issue;
 
     // Check if we have saved state for this issue (recovering from crash)
     const savedState = persistence.getAgentByIssueId(comment.issueId);
