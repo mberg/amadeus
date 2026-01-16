@@ -2,7 +2,7 @@
 // ABOUTME: Ensures prompts include all relevant issue information.
 
 import { describe, expect, it } from "bun:test";
-import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt, isYoloMode } from "../src/prompt";
+import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt, isYoloMode, hasUltrathinkLabel } from "../src/prompt";
 import type { LinearIssue, LinearComment, AgentProfile } from "../src/types";
 import type { PersistedAgentState } from "../src/persistence";
 
@@ -284,6 +284,129 @@ describe("isYoloMode", () => {
     };
 
     expect(isYoloMode(issue)).toBe(false);
+  });
+});
+
+describe("hasUltrathinkLabel", () => {
+  it("returns true when labels contain 'ultrathink' lowercase", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [{ name: "bug" }, { name: "ultrathink" }],
+    };
+
+    expect(hasUltrathinkLabel(issue)).toBe(true);
+  });
+
+  it("returns true when labels contain 'ULTRATHINK' uppercase", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [{ name: "ULTRATHINK" }],
+    };
+
+    expect(hasUltrathinkLabel(issue)).toBe(true);
+  });
+
+  it("returns true when labels contain 'Ultrathink' mixed case", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [{ name: "Ultrathink" }, { name: "feature" }],
+    };
+
+    expect(hasUltrathinkLabel(issue)).toBe(true);
+  });
+
+  it("returns false when labels do not contain ultrathink", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [{ name: "bug" }, { name: "urgent" }],
+    };
+
+    expect(hasUltrathinkLabel(issue)).toBe(false);
+  });
+
+  it("returns false when labels is undefined", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    expect(hasUltrathinkLabel(issue)).toBe(false);
+  });
+
+  it("returns false when labels is empty array", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [],
+    };
+
+    expect(hasUltrathinkLabel(issue)).toBe(false);
+  });
+});
+
+describe("buildPrompt ultrathink mode", () => {
+  it("starts with 'ultrathink' when ultrathink label is present", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [{ name: "ultrathink" }],
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt.startsWith("ultrathink")).toBe(true);
+  });
+
+  it("does not start with 'ultrathink' when ultrathink label is absent", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+      labels: [{ name: "bug" }],
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt.startsWith("ultrathink")).toBe(false);
+  });
+
+  it("does not start with 'ultrathink' when labels is undefined", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Test issue",
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt.startsWith("ultrathink")).toBe(false);
+  });
+
+  it("still includes all issue details when ultrathink is active", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "ENG-42",
+      title: "Add authentication",
+      description: "Implement OAuth2",
+      labels: [{ name: "ultrathink" }],
+    };
+
+    const prompt = buildPrompt(issue);
+
+    expect(prompt).toContain("ENG-42");
+    expect(prompt).toContain("Add authentication");
+    expect(prompt).toContain("Implement OAuth2");
   });
 });
 
