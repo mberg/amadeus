@@ -59,12 +59,17 @@ export async function createWorktree(
   // Ensure worktrees directory exists
   await mkdir(worktreesDir, { recursive: true });
 
-  // Check if worktree already exists
+  // Check if worktree already exists - reuse it if so
+  // Compare by sanitized identifier to handle path differences (e.g., /var vs /private/var on macOS)
   const worktrees = await listWorktrees(repoPath);
-  if (worktrees.some((w) => w.path === worktreePath)) {
+  const sanitizedIdentifier = issueIdentifier.replace(/[/\\]/g, "-");
+  const existingWorktree = worktrees.find((w) => w.path.endsWith(`/${sanitizedIdentifier}`));
+  if (existingWorktree) {
+    console.log(`[Worktree] Reusing existing worktree at ${existingWorktree.path}`);
     return {
-      success: false,
-      error: `Worktree already exists at ${worktreePath}`,
+      success: true,
+      worktreePath: existingWorktree.path,
+      branchName: existingWorktree.branch?.replace("refs/heads/", "") ?? branchName,
     };
   }
 

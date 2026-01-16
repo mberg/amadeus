@@ -77,21 +77,26 @@ describe("Worktree", () => {
       expect(result.worktreePath).toContain("TEST-2");
     });
 
-    it("returns error if worktree already exists", async () => {
-      await createWorktree({
+    it("reuses existing worktree if it already exists", async () => {
+      const first = await createWorktree({
         repoPath: testRepoDir,
         worktreesDir,
         issueIdentifier: "TEST-3",
       });
 
-      const result = await createWorktree({
+      expect(first.success).toBe(true);
+
+      const second = await createWorktree({
         repoPath: testRepoDir,
         worktreesDir,
         issueIdentifier: "TEST-3",
       });
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("already exists");
+      expect(second.success).toBe(true);
+      // Paths may differ due to symlink resolution (e.g., /var vs /private/var on macOS)
+      // but should end with the same identifier
+      expect(second.worktreePath?.endsWith("TEST-3")).toBe(true);
+      expect(second.branchName).toBe(first.branchName);
     });
 
     it("uses existing branch if it exists", async () => {

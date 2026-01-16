@@ -1,7 +1,7 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
 // ABOUTME: Contains logo, navigation items, theme toggle, and user menu.
 
-import { Activity, Settings, Blocks, Sun, Moon } from "lucide-react";
+import { ListTodo, Settings, Blocks, Sun, Moon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { UserMenu, SignOutButton } from "./UserMenu";
@@ -59,7 +59,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
                 collapsed && "justify-center px-2"
               )}
             >
-              <Activity className="h-4 w-4 shrink-0" />
+              <ListTodo className="h-4 w-4 shrink-0" />
               {!collapsed && "Tasks"}
             </button>
             <button

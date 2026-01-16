@@ -353,12 +353,20 @@ async function handleCommentWebhook(
 
   // Spawn a new agent if one doesn't exist for this issue
   if (!agentKey) {
-    // Only spawn if the issue meets trigger criteria (has Amadeus label + correct state)
-    if (!orchestrator.shouldStartAgent(comment.issue)) {
+    // Spawn if issue meets trigger criteria OR is awaiting feedback (human response resumes work)
+    const shouldSpawn = orchestrator.shouldStartAgent(comment.issue) || orchestrator.isAwaitingFeedback(comment.issue);
+    if (!shouldSpawn) {
       console.log(
         `[${new Date().toISOString()}] Ignoring comment on ${comment.issue.identifier} - does not meet trigger criteria`
       );
       return;
+    }
+
+    // Log why we're spawning
+    if (orchestrator.isAwaitingFeedback(comment.issue)) {
+      console.log(
+        `[${new Date().toISOString()}] Spawning agent for ${comment.issue.identifier} - feedback response received`
+      );
     }
 
     // Check if we have saved state for this issue (recovering from crash)

@@ -322,4 +322,121 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.hasPendingMessages("agent-2")).toBe(true);
     });
   });
+
+  describe("isAwaitingFeedback", () => {
+    it("returns true when issue is in Feedback Needed state with agent label", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Planning"],
+        agentName: "Amadeus",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Feedback Needed" },
+        team: { key: "TEST" },
+        labels: [{ name: "Amadeus" }],
+      };
+
+      expect(orchestrator.isAwaitingFeedback(issue)).toBe(true);
+    });
+
+    it("returns false when issue is in Feedback Needed state without agent label", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Planning"],
+        agentName: "Amadeus",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Feedback Needed" },
+        team: { key: "TEST" },
+        labels: [{ name: "bug" }],
+      };
+
+      expect(orchestrator.isAwaitingFeedback(issue)).toBe(false);
+    });
+
+    it("returns false when issue is in different state with agent label", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Planning"],
+        agentName: "Amadeus",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Planning" },
+        team: { key: "TEST" },
+        labels: [{ name: "Amadeus" }],
+      };
+
+      expect(orchestrator.isAwaitingFeedback(issue)).toBe(false);
+    });
+
+    it("is case-insensitive for state name matching", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Planning"],
+        agentName: "Amadeus",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "FEEDBACK NEEDED" },
+        team: { key: "TEST" },
+        labels: [{ name: "Amadeus" }],
+      };
+
+      expect(orchestrator.isAwaitingFeedback(issue)).toBe(true);
+    });
+
+    it("is case-insensitive for agent label matching", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Planning"],
+        agentName: "Amadeus",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Feedback Needed" },
+        team: { key: "TEST" },
+        labels: [{ name: "amadeus" }],
+      };
+
+      expect(orchestrator.isAwaitingFeedback(issue)).toBe(true);
+    });
+
+    it("returns true regardless of trigger states config", () => {
+      // This ensures the feedback check is independent of trigger states
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Scoping", "Ready to Build"],
+        agentName: "Amadeus",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Feedback Needed" },
+        team: { key: "TEST" },
+        labels: [{ name: "Amadeus" }],
+      };
+
+      expect(orchestrator.isAwaitingFeedback(issue)).toBe(true);
+    });
+  });
 });

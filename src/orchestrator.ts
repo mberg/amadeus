@@ -128,6 +128,22 @@ export class ClaudeOrchestrator {
     return stateMatch || assigneeMatch;
   }
 
+  isAwaitingFeedback(issue: LinearIssue): boolean {
+    // Check if issue has the required agent label (case-insensitive)
+    const agentName = this.config.agentName?.toLowerCase();
+    const hasAgentLabel = agentName
+      ? issue.labels?.some((l) => l.name.toLowerCase() === agentName) ?? false
+      : true; // If no agent name configured, don't require label
+
+    if (!hasAgentLabel) {
+      return false;
+    }
+
+    // Check if issue is in "Feedback Needed" state
+    const stateName = issue.state?.name?.toLowerCase() ?? "";
+    return stateName === "feedback needed";
+  }
+
   getAgentKey(issue: LinearIssue): string {
     // Use project name if available, otherwise fall back to team key
     const projectKey = issue.project?.name ?? issue.team?.key ?? "DEFAULT";
@@ -739,8 +755,10 @@ export class ClaudeOrchestrator {
     this.stoppingAgents.add(key);
     agent.process.kill();
 
-    // Clean up worktree if one was created
-    if (agent.worktreePath) {
+    // Only clean up worktree when issue is truly finished (done, canceled, backlog)
+    // Keep worktree for "stopped" (manual stop) so agent can resume with existing work
+    const shouldDeleteWorktree = completionReason === "done" || completionReason === "canceled" || completionReason === "backlog";
+    if (agent.worktreePath && shouldDeleteWorktree) {
       console.log(`[Agent] Removing worktree: ${agent.worktreePath}`);
       const result = await removeWorktree({
         repoPath: agent.projectPath,
@@ -749,6 +767,8 @@ export class ClaudeOrchestrator {
       if (!result.success) {
         console.warn(`[Agent] Failed to remove worktree: ${result.error}`);
       }
+    } else if (agent.worktreePath) {
+      console.log(`[Agent] Preserving worktree for potential respawn: ${agent.worktreePath}`);
     }
 
     // Clean up message cache for this agent
