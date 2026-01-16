@@ -159,7 +159,15 @@ gh pr create --title "${issue.identifier}: ${issue.title}" --body "Resolves ${is
 Linear: https://linear.app/ona/issue/${issue.identifier}" 2>/dev/null || echo "PR already exists, pushing updates"
 \`\`\`
 
-**Step 6:** Set status to Review:
+**Step 6:** Document your work in \`.context/\` for future agents:
+- If you learned something valuable about the codebase, save it to \`.context/knowledge/\`
+- Create an issue summary at \`.context/issues/${issue.identifier}.md\` with:
+  - What was accomplished
+  - Key learnings or gotchas discovered
+  - Files modified
+  - Related issues (if any)
+
+**Step 7:** Set status to Review:
 \`\`\`bash
 linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
 linear-cli comments create --body "**🤖 ${agentName}:** Implementation complete. PR created/updated and ready for review." ${issue.identifier}
@@ -214,8 +222,11 @@ ${reviewNotificationSection ? `
 
 After the user approves and you complete implementation:
 1. Push your changes and create a PR
-2. Set status to Review
-3. Notify the issue creator by assigning the issue to them (same process as above with \`--assignee\`)
+2. Document your work in \`.context/\` for future agents:
+   - If you learned something valuable about the codebase, save it to \`.context/knowledge/\`
+   - Create an issue summary at \`.context/issues/${issue.identifier}.md\` with what was accomplished, key learnings, and files modified
+3. Set status to Review
+4. Notify the issue creator by assigning the issue to them (same process as above with \`--assignee\`)
 
 This ensures they receive an inbox notification that the PR is ready for review.
 ` : ""}`;
@@ -315,7 +326,7 @@ ${comment.body}
 ---
 
 Respond based on the feedback type:
-- **Approved** → Set status to Building, implement, then create PR and set to Review
+- **Approved** → Set status to Building, implement, then create PR. Before setting to Review, document your work in \`.context/\` (issue summary + any valuable learnings).
 - **Changes requested** → Update plan, stay in Feedback Needed
 - **Question** → Answer it, stay in Feedback Needed
 
