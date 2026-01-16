@@ -31,12 +31,27 @@ realms:
 
   # Example of a second realm for a different Linear workspace
   # recode:
+  #   type: linear  # optional, defaults to "linear" for backward compatibility
   #   linearWorkspace: recode
   #   apiKeyEnvVar: LINEAR_API_KEY_RECODE
   #   webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_RECODE
   #   projects:
   #     - teamKey: RECODE
   #       path: /path/to/recode/project
+
+  # Example of a GitHub realm
+  # Uses GitHub Issues + Projects for issue tracking instead of Linear.
+  # github-project:
+  #   type: github
+  #   owner: your-username
+  #   repo: your-repo
+  #   projectNumber: 1  # optional - GitHub Projects number for kanban view
+  #   tokenEnvVar: GITHUB_TOKEN
+  #   webhookSecretEnvVar: GITHUB_WEBHOOK_SECRET
+  #   # botUserId: optional bot user ID for filtering
+  #   projects:
+  #     - teamKey: DEFAULT
+  #       path: /path/to/github/project
 
 global:
   # Server port
