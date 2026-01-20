@@ -26,7 +26,7 @@ Integrate [Sprites](https://sprites.dev/) as the sandbox runtime environment for
 │   amadeus-router.workers.dev    │
 │                                 │
 │   • Verifies Linear signature   │
-│   • Reads labels & project      │
+│   • Reads project from issue    │
 │   • Looks up target Sprite      │
 │   • Forwards to Sprite URL      │
 └──────────┬──────────────────────┘
@@ -36,7 +36,8 @@ Integrate [Sprites](https://sprites.dev/) as the sandbox runtime environment for
 │                  Sprites Network                      │
 │                                                       │
 │  ┌─────────────────────┐  ┌─────────────────────┐    │
-│  │ ona-dev.sprites.app │  │ ml-prod.sprites.app │    │
+│  │ amadeus-ona         │  │ amadeus-ml          │    │
+│  │ (ONA project)       │  │ (ML project)        │    │
 │  │                     │  │                     │    │
 │  │  ┌───────────────┐  │  │  ┌───────────────┐  │    │
 │  │  │ Amadeus       │  │  │  │ Amadeus       │  │    │
@@ -81,7 +82,7 @@ Integrate [Sprites](https://sprites.dev/) as the sandbox runtime environment for
 
 ## Integration Model Options
 
-### Option A: Sprite-per-Realm (Recommended)
+### Option A: Sprite-per-Realm
 
 Each Linear realm (workspace/team) gets its own Sprite:
 
@@ -100,8 +101,34 @@ Each Linear realm (workspace/team) gets its own Sprite:
 **Cons:**
 - Agents within a realm share isolation boundary
 - All projects in realm share 8GB RAM limit
+- Less granular than per-project isolation
 
-### Option B: Sprite-per-Issue
+### Option B: Sprite-per-Project
+
+Each Linear project gets its own Sprite:
+
+| Sprite | Project |
+|--------|---------|
+| `amadeus-ona` | ONA |
+| `amadeus-design` | DESIGN |
+| `amadeus-ml` | ML |
+| `amadeus-training` | TRAINING |
+
+**Pros:**
+- Finer-grained isolation than per-realm (projects don't share resources)
+- Project-specific configuration and secrets
+- Clear 1:1 mapping between Linear project and Sprite
+- Easier cost tracking per project
+- If one project's agents misbehave, other projects unaffected
+- Natural fit for router's existing project-based routing
+
+**Cons:**
+- More Sprites to manage than per-realm
+- Projects in the same realm can't share agents
+- Slightly higher base cost (more storage instances)
+- More configuration duplication across Sprites
+
+### Option C: Sprite-per-Issue
 
 Each Linear issue gets a dedicated Sprite:
 
@@ -118,7 +145,13 @@ Each Linear issue gets a dedicated Sprite:
 
 ### Recommendation
 
-**Start with Option A (Sprite-per-Realm)**. This aligns with existing architecture patterns and provides good isolation at the realm boundary. Option B can be explored later for high-security workloads.
+**Option B (Sprite-per-Project) is recommended** for production use. It provides a good balance:
+- Better isolation than per-realm (project boundaries)
+- Simpler than per-issue (no external orchestration needed)
+- Aligns with router's project-based routing
+- Clear ownership and cost attribution
+
+**For the PoC, start with a single Sprite for the ONA project** to validate the integration pattern before expanding to other projects.
 
 ## Components
 
@@ -168,25 +201,29 @@ wait
 
 ### 3. Router Config Updates
 
-Update Cloudflare Worker to route to Sprite URLs:
+Update Cloudflare Worker to route to Sprite URLs (one Sprite per project):
 
 ```json
 {
   "machines": {
     "amadeus-ona": {
       "url": "https://amadeus-ona-abc123.sprites.app",
-      "labels": ["frontend", "mobile"],
-      "projects": ["ONA", "DESIGN"]
+      "projects": ["ONA"]
+    },
+    "amadeus-design": {
+      "url": "https://amadeus-design-xyz789.sprites.app",
+      "projects": ["DESIGN"]
     },
     "amadeus-ml": {
       "url": "https://amadeus-ml-def456.sprites.app",
-      "labels": ["ml", "training", "gpu"],
       "projects": ["ML"]
     }
   },
   "secret": "<shared-secret>"
 }
 ```
+
+Each project routes to its dedicated Sprite. The router matches the issue's project to the appropriate Sprite URL.
 
 ### 4. Health Monitoring Adaptation
 
@@ -241,18 +278,27 @@ The 8GB RAM limit means ~2-4 concurrent agents per Sprite (Claude Code agents us
 - Router adds `X-Amadeus-Secret` header for authentication
 - Amadeus verifies secret before processing webhooks
 
-### Egress
+### Egress (Outbound Network Access)
 
-Sprites have unrestricted outbound access by default. For production, consider:
+**What this means:** When agents run inside a Sprite, they can make outbound network requests (API calls, git clone, package downloads, etc.). "Network egress" refers to what destinations agents are allowed to connect to from inside the Sprite.
+
+**Current decision: Keep egress unrestricted.** Sprites have unrestricted outbound access by default, and we'll keep it that way. Agents need to:
+- Call Linear API (`api.linear.app`)
+- Call Claude API (`api.anthropic.com`)
+- Clone repos (`github.com`)
+- Install packages (`registry.npmjs.org`, etc.)
+- Potentially call any API the task requires
+
+Restricting egress would break legitimate agent workflows. If we ever need to lock down a specific Sprite for high-security work, Sprites support domain allowlists:
 
 ```yaml
-# Future: Configure egress allowlist in Sprite
+# Example: Restrictive egress (not using for now)
 egress:
   allowlist:
-    - api.linear.app      # Linear API
-    - api.anthropic.com   # Claude API
-    - github.com          # Git operations
-    - registry.npmjs.org  # Package installs
+    - api.linear.app
+    - api.anthropic.com
+    - github.com
+    - registry.npmjs.org
 ```
 
 ### Secrets Management
@@ -393,20 +439,27 @@ runtime:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Isolation model | Sprite-per-Realm | Balances isolation with cost; aligns with existing realm concept |
+| Isolation model | Sprite-per-Project | Better isolation than per-realm; aligns with router's project routing |
 | Sprite port | 8080 | Sprites route public URL to 8080 by default |
 | Heartbeat strategy | None for Sprites | Sprites wake on demand; always "available" |
 | Initial setup | Manual | Keep simple; automate in Phase 4 |
 | Agent isolation | Process-level (within Sprite) | Same as current; Sprite provides outer boundary |
 | Checkpoint strategy | Manual + golden state | Start simple; automate later |
+| Network egress | Unrestricted | Agents need to call various APIs; restricting would break workflows |
+| PoC project | ONA | Start with ONA project for proof of concept |
+
+## Resolved Questions
+
+1. **Concurrent agent limit**: ~3-4 agents max per Sprite is the practical limit given 8GB RAM. No hard limit enforced in code.
+2. **Wake latency tolerance**: 100-500ms wake time is acceptable. Router needs to handle this (may need timeout adjustments).
+3. **Egress policies**: Keep unrestricted. Agents need to call various APIs and services.
+4. **PoC starting point**: ONA project/realm for initial proof of concept.
 
 ## Open Questions
 
-1. **Concurrent agent limit**: How many agents can run effectively in 8GB RAM? Need testing.
-2. **Wake latency tolerance**: Is 100-500ms wake time acceptable for Linear webhook SLAs?
-3. **Egress policies**: Should we restrict network access? Which domains are required?
-4. **Multi-Sprite scaling**: If one realm needs more capacity, how do we load-balance?
-5. **Sprite lifecycle**: Who manages Sprite creation/deletion? Manual vs automated?
+1. **Multi-Sprite scaling**: If one project needs more capacity, how do we load-balance across multiple Sprites?
+2. **Sprite lifecycle**: Who manages Sprite creation/deletion? Manual vs automated?
+3. **Router timeout handling**: Does the router need longer timeouts to accommodate Sprite wake latency?
 
 ## References
 
