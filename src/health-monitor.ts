@@ -45,6 +45,7 @@ export class HealthMonitor {
   private timeoutMs: number;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private paused = false; // Paused when no agents to monitor
 
   constructor(config: HealthMonitorConfig) {
     this.config = config;
@@ -64,11 +65,31 @@ export class HealthMonitor {
     return this.running;
   }
 
+  isPaused(): boolean {
+    return this.paused;
+  }
+
   start(): void {
     if (this.running) return;
 
     this.running = true;
     console.log(`[HealthMonitor] Starting health checks every ${this.checkIntervalMs}ms`);
+
+    // Check if we have agents to monitor
+    const agents = this.config.getAgents();
+    if (agents.length === 0) {
+      this.paused = true;
+      console.log("[HealthMonitor] No agents to monitor, starting in paused state");
+      return;
+    }
+
+    this.startInterval();
+  }
+
+  private startInterval(): void {
+    if (this.intervalId) return; // Already running
+
+    this.paused = false;
 
     // Run initial check
     this.runHealthCheck().catch((err) => {
@@ -83,19 +104,51 @@ export class HealthMonitor {
     }, this.checkIntervalMs);
   }
 
-  stop(): void {
-    if (!this.running) return;
-
-    this.running = false;
+  private stopInterval(): void {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    this.paused = true;
+  }
+
+  /**
+   * Call this when agents are added or removed.
+   * Automatically pauses when no agents, resumes when agents exist.
+   */
+  notifyAgentCountChanged(): void {
+    if (!this.running) return;
+
+    const agents = this.config.getAgents();
+
+    if (agents.length === 0 && !this.paused) {
+      console.log("[HealthMonitor] No agents to monitor, pausing health checks");
+      this.stopInterval();
+    } else if (agents.length > 0 && this.paused) {
+      console.log("[HealthMonitor] Agents detected, resuming health checks");
+      this.startInterval();
+    }
+  }
+
+  stop(): void {
+    if (!this.running) return;
+
+    this.running = false;
+    this.stopInterval();
+    this.paused = false;
     console.log("[HealthMonitor] Stopped health checks");
   }
 
   async runHealthCheck(): Promise<void> {
     const agents = this.config.getAgents();
+
+    // Auto-pause if no agents (defensive check)
+    if (agents.length === 0) {
+      if (!this.paused) {
+        this.notifyAgentCountChanged();
+      }
+      return;
+    }
 
     for (const agent of agents) {
       const health = await this.checkAgentHealth(agent.port);

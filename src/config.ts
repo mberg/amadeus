@@ -35,6 +35,7 @@ export interface LegacyConfig {
   dbPath: string;
   healthCheckIntervalMs: number;
   healthCheckTimeoutMs: number;
+  disablePRCheck: boolean;
   notificationEmail?: string;
   resendApiKey?: string;
   notificationFromEmail: string;
@@ -137,6 +138,7 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     dbPath,
     healthCheckIntervalMs: resolved.global.healthCheckIntervalMs,
     healthCheckTimeoutMs: resolved.global.healthCheckTimeoutMs,
+    disablePRCheck: resolved.global.disablePRCheck,
     notificationEmail: process.env.NOTIFICATION_EMAIL,
     resendApiKey: process.env.RESEND_API_KEY,
     notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL ?? "amadeus@resend.dev",
@@ -172,6 +174,7 @@ function loadLegacyConfigFromEnv(): LegacyConfig {
     dbPath: process.env.DB_PATH ?? join(import.meta.dir, "..", "amadeus-agents.db"),
     healthCheckIntervalMs: Number(process.env.HEALTH_CHECK_INTERVAL_MS) || 30000,
     healthCheckTimeoutMs: Number(process.env.HEALTH_CHECK_TIMEOUT_MS) || 5000,
+    disablePRCheck: process.env.DISABLE_PR_CHECK === "true",
     notificationEmail: process.env.NOTIFICATION_EMAIL,
     resendApiKey: process.env.RESEND_API_KEY,
     notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL ?? "amadeus@resend.dev",

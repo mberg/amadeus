@@ -289,6 +289,7 @@ async function handleIssueWebhook(
 
   if (action === "remove") {
     await orchestrator.stopAgent(agentKey, "canceled");
+    healthMonitor.notifyAgentCountChanged();
     return;
   }
 
@@ -305,6 +306,7 @@ async function handleIssueWebhook(
         `[${new Date().toISOString()}] Terminating agent for ${issue.identifier} - moved to ${issue.state?.name} (${reason})`
       );
       await orchestrator.stopAgent(existingKey, reason);
+      healthMonitor.notifyAgentCountChanged();
     }
     return;
   }
@@ -334,6 +336,7 @@ async function handleIssueWebhook(
       );
     } else {
       await orchestrator.startAgent(issue);
+      healthMonitor.notifyAgentCountChanged();
     }
   }
 }
@@ -413,6 +416,7 @@ async function handleCommentWebhook(
 
       // Start a new agent
       await orchestrator.startAgent(comment.issue);
+      healthMonitor.notifyAgentCountChanged();
       agentKey = orchestrator.findAgentByIssueId(comment.issueId);
 
       if (!agentKey) {
@@ -440,6 +444,7 @@ async function handleCommentWebhook(
         `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
       );
       await orchestrator.startAgent(comment.issue);
+      healthMonitor.notifyAgentCountChanged();
       agentKey = orchestrator.findAgentByIssueId(comment.issueId);
 
       if (!agentKey) {
@@ -909,6 +914,7 @@ export const server = Bun.serve({
       const agentKey = decodeURIComponent(stopMatch[1]);
       console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
       await orchestrator.stopAgent(agentKey, "stopped");
+      healthMonitor.notifyAgentCountChanged();
       return Response.json({ success: true });
     }
 
@@ -916,12 +922,15 @@ export const server = Bun.serve({
   },
 });
 
-// Start polling for merged PRs
-const prCheckInterval = setInterval(() => {
-  checkMergedPRsAndUpdateLinear().catch((err) => {
-    console.error("[PR Check] Error during PR merge check:", err);
-  });
-}, PR_CHECK_INTERVAL_MS);
+// Start polling for merged PRs (unless disabled)
+let prCheckInterval: ReturnType<typeof setInterval> | null = null;
+if (!CONFIG.disablePRCheck) {
+  prCheckInterval = setInterval(() => {
+    checkMergedPRsAndUpdateLinear().catch((err) => {
+      console.error("[PR Check] Error during PR merge check:", err);
+    });
+  }, PR_CHECK_INTERVAL_MS);
+}
 
 async function shutdown(): Promise<void> {
   console.log("\nShutting down...");
@@ -934,7 +943,9 @@ async function shutdown(): Promise<void> {
     routerHeartbeat.stop();
   }
 
-  clearInterval(prCheckInterval);
+  if (prCheckInterval) {
+    clearInterval(prCheckInterval);
+  }
 
   // Stop all agents
   for (const status of orchestrator.getStatus()) {
@@ -955,7 +966,7 @@ console.log(`🎼 Amadeus listening on http://localhost:${server.port}`);
 console.log(`   Webhook:   https://your-machine.ts.net/webhook`);
 console.log(`   Status:    http://localhost:${server.port}/status`);
 console.log(`   Dashboard: http://localhost:${server.port}/dashboard`);
-console.log(`   PR Check:  Every ${PR_CHECK_INTERVAL_MS / 1000 / 60} minutes`);
+console.log(`   PR Check:  ${CONFIG.disablePRCheck ? "Disabled" : `Every ${PR_CHECK_INTERVAL_MS / 1000 / 60} minutes`}`);
 
 if (routerConfig) {
   console.log(`   Router:    ${routerConfig.url} (as "${routerConfig.machineName}")`);
