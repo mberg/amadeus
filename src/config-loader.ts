@@ -14,7 +14,7 @@ import {
 } from "./config-schema";
 
 // Re-export types for consumers
-export type { ResolvedConfig, ResolvedRealm, ResolvedRouterConfig, Project } from "./config-schema";
+export type { ResolvedConfig, ResolvedRealm, ResolvedRouterConfig, Project, StaticMachine } from "./config-schema";
 
 const CONFIG_FILE_NAMES = ["amadeus.config.yaml", "amadeus.config.yml", "amadeus.config.json"];
 
@@ -102,10 +102,17 @@ function buildResolvedConfig(config: AmadeusConfig): ResolvedConfig {
     };
   }
 
+  // Resolve machines config if present
+  const machines = config.global.machines?.map((m) => ({
+    name: m.name,
+    url: m.url,
+  }));
+
   return {
     realms: resolvedRealms,
     global: config.global,
     router: resolvedRouter,
+    machines,
     realmByWorkspace,
     realmByTeamKey,
     projectByTeamKey,

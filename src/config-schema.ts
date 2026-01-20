@@ -147,6 +147,7 @@ export interface ResolvedConfig {
   realms: ResolvedRealm[];
   global: GlobalConfig;
   router?: ResolvedRouterConfig;
+  machines?: Array<{ name: string; url: string }>;
   // Convenience lookups
   realmByWorkspace: Map<string, ResolvedRealm>;
   realmByTeamKey: Map<string, ResolvedRealm>;
