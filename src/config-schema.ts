@@ -37,6 +37,7 @@ export type Realm = z.infer<typeof RealmSchema>;
  */
 export const SecurityConfigSchema = z.object({
   enableAgentMessaging: z.boolean().default(false),
+  publicDashboard: z.boolean().default(false), // Allow unauthenticated access to dashboard/status
 });
 
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>;

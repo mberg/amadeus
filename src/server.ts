@@ -41,6 +41,10 @@ import { fetchIssueDetails } from "./linear";
 
 async function requireViewer(req: Request): Promise<Response | null> {
   const security = getSecurityConfig();
+  // Skip auth for public dashboards (read-only access)
+  if (security.publicDashboard) {
+    return null;
+  }
   const result = await checkAuth(req, "viewer", {
     apiToken: CONFIG.apiToken,
     enableAgentMessaging: security.enableAgentMessaging,
