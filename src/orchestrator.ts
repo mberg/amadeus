@@ -465,8 +465,11 @@ export class ClaudeOrchestrator {
         ...process.env,
         LINEAR_ISSUE_ID: issue.id,
         LINEAR_ISSUE_IDENTIFIER: issue.identifier,
-        // Pass realm's Linear API key for MCP server authentication
-        ...(realmInfo && { LINEAR_API_KEY: realmInfo.apiKey }),
+        // Pass realm's Linear API key for MCP server and linear-cli
+        ...(realmInfo && {
+          LINEAR_API_KEY: realmInfo.apiKey,
+          LINEAR_TOKEN: realmInfo.apiKey,
+        }),
       },
       stdout: "inherit",
       stderr: "inherit",
