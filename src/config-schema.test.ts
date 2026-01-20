@@ -1,0 +1,69 @@
+// ABOUTME: Tests for Amadeus configuration schema validation.
+// ABOUTME: Verifies RuntimeModeSchema and MachineConfigSchema behavior.
+
+import { describe, test, expect } from "bun:test";
+import { RuntimeModeSchema, MachineConfigSchema, AmadeusConfigSchema } from "./config-schema";
+
+describe("RuntimeModeSchema", () => {
+  test("accepts 'standalone' mode", () => {
+    expect(RuntimeModeSchema.parse("standalone")).toBe("standalone");
+  });
+
+  test("accepts 'hub' mode", () => {
+    expect(RuntimeModeSchema.parse("hub")).toBe("hub");
+  });
+
+  test("accepts 'machine' mode", () => {
+    expect(RuntimeModeSchema.parse("machine")).toBe("machine");
+  });
+
+  test("defaults to 'standalone'", () => {
+    expect(RuntimeModeSchema.parse(undefined)).toBe("standalone");
+  });
+
+  test("rejects invalid modes", () => {
+    expect(() => RuntimeModeSchema.parse("invalid")).toThrow();
+  });
+});
+
+describe("MachineConfigSchema", () => {
+  test("validates machine config with name", () => {
+    const result = MachineConfigSchema.parse({
+      name: "Frank",
+      heartbeat: true,
+    });
+    expect(result.name).toBe("Frank");
+    expect(result.heartbeat).toBe(true);
+  });
+
+  test("heartbeat defaults to false", () => {
+    const result = MachineConfigSchema.parse({ name: "Bob" });
+    expect(result.heartbeat).toBe(false);
+  });
+
+  test("hub URL is optional", () => {
+    const result = MachineConfigSchema.parse({ name: "Local" });
+    expect(result.hubUrl).toBeUndefined();
+  });
+
+  test("validates hub URL format when provided", () => {
+    const result = MachineConfigSchema.parse({
+      name: "Remote",
+      hubUrl: "https://hub.example.com",
+    });
+    expect(result.hubUrl).toBe("https://hub.example.com");
+  });
+
+  test("rejects invalid hub URL", () => {
+    expect(() =>
+      MachineConfigSchema.parse({
+        name: "Invalid",
+        hubUrl: "not-a-url",
+      })
+    ).toThrow();
+  });
+
+  test("requires non-empty name", () => {
+    expect(() => MachineConfigSchema.parse({ name: "" })).toThrow();
+  });
+});
