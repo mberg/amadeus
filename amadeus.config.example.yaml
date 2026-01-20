@@ -3,6 +3,11 @@
 #
 # This file contains non-sensitive configuration. Secrets (API keys, webhook secrets)
 # should be defined in .env and referenced here by their environment variable names.
+#
+# Runtime modes:
+# - standalone: Hub + Machine combined (default, for solo users)
+# - hub: Routing + aggregate dashboard only
+# - machine: Agent execution + local dashboard only
 
 realms:
   # A realm groups a Linear workspace with its projects and credentials.
@@ -42,14 +47,30 @@ realms:
   #       path: /path/to/recode/project
 
 global:
-  # Runtime mode: 'machine' (default), 'sprite', or 'local'
-  # - machine: Running on a local machine with router heartbeat
-  # - sprite: Running in a Sprite VM (no heartbeat, PORT env var override)
-  # - local: Local development (no heartbeat, no router)
-  runtimeMode: machine
+  # Runtime mode: 'standalone' (default), 'hub', or 'machine'
+  # - standalone: Hub + Machine combined (default, for solo users)
+  # - hub: Routing + aggregate dashboard only
+  # - machine: Agent execution + local dashboard only
+  # runtimeMode: standalone  # Uncomment to change
 
-  # Server port (in sprite mode, PORT env var takes precedence)
+  # Server port
   port: 5678
+
+  # Agent name shown in dashboard
+  agentName: Amadeus
+
+  # Machine identity (for dashboard display and hub registration)
+  machine:
+    name: "MyMachine"  # Friendly name shown in hub
+    # hubUrl: "https://hub.example.com"  # URL to register with (if using hub)
+    # heartbeat: false  # Whether to send heartbeats to hub
+
+  # Static machines list (for hub mode only)
+  # machines:
+  #   - name: "Frank"
+  #     url: "http://frank.local:5678"
+  #   - name: "Bob"
+  #     url: "https://bob-sprite.sprites.dev"
 
   # Workflow states that trigger agent spawn
   triggerStates:
@@ -76,10 +97,3 @@ global:
     # Default: false (view-only access without auth)
     enableAgentMessaging: false
 
-  # Multi-machine router configuration (optional)
-  # Enables routing Linear webhooks through a Cloudflare Worker to multiple machines.
-  # See amadeus-router/README.md for deployment instructions.
-  # router:
-  #   url: https://amadeus-router.your-account.workers.dev
-  #   machineName: my-machine
-  #   secretEnvVar: ROUTER_SECRET
