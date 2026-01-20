@@ -1,0 +1,28 @@
+# ABOUTME: Sprite-specific Amadeus configuration template.
+# ABOUTME: Pre-configured for Sprite VMs with correct runtime mode and port.
+#
+# Copy this file to amadeus.config.yaml on the sprite and customize the realm/project settings.
+# Secrets should be in .env (created by the provisioning script).
+
+realms:
+  # Configure your realm here
+  main:
+    linearWorkspace: your-workspace
+    apiKeyEnvVar: LINEAR_API_KEY
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET
+    projects:
+      - teamKey: TEAM
+        path: /home/sprite/projects/your-project
+        profile: base
+
+global:
+  runtimeMode: sprite
+  port: 8080
+  agentName: Amadeus
+  triggerStates:
+    - Planning
+  useWorktrees: true
+  worktreesDir: /home/sprite/.amadeus-worktrees
+  profilesDir: ./agent-profiles
+  defaultProfile: base
+  dbPath: ./amadeus-agents.db
