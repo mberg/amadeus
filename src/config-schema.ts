@@ -99,7 +99,7 @@ export const GlobalConfigSchema = z.object({
   healthCheckIntervalMs: z.number().int().positive().default(30000),
   healthCheckTimeoutMs: z.number().int().positive().default(5000),
   disablePRCheck: z.boolean().default(false), // Disable periodic PR merge checking
-  security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false }),
+  security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false, publicDashboard: false }),
   router: RouterConfigSchema.optional(),
   runtimeMode: RuntimeModeSchema,
   machine: MachineConfigSchema.optional(),

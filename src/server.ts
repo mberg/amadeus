@@ -85,6 +85,9 @@ console.log(`[Server] Starting in ${getRuntimeMode()} mode as "${machineConfig.n
 let machineRegistry: MachineRegistry | null = null;
 if (isHubMode() || isStandaloneMode()) {
   machineRegistry = new MachineRegistry();
+  if (REALM_CONFIG?.machines) {
+    machineRegistry.loadFromConfig(REALM_CONFIG.machines);
+  }
 }
 
 // Machine components (machine or standalone mode)

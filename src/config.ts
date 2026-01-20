@@ -260,7 +260,7 @@ export function getSecurityConfig(): SecurityConfig {
   if (REALM_CONFIG) {
     return REALM_CONFIG.global.security;
   }
-  return { enableAgentMessaging: false };
+  return { enableAgentMessaging: false, publicDashboard: false };
 }
 
 /**
