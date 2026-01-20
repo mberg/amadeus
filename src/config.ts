@@ -305,6 +305,17 @@ export function getServerPort(): number {
 }
 
 /**
+ * Get Sprite URL for a team key, if configured.
+ * Returns the URL to forward webhooks to, or null for local processing.
+ */
+export function getSpriteUrlForTeam(teamKey: string): string | null {
+  if (!REALM_CONFIG) return null;
+
+  const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
+  return entry?.project.spriteUrl ?? null;
+}
+
+/**
  * Get the raw YAML configuration content.
  */
 export { getConfigYaml, validateConfigYaml };

@@ -14,6 +14,7 @@ import {
   reloadConfig,
   isSpriteMode,
   getServerPort,
+  getSpriteUrlForTeam,
 } from "./config";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { verifyLinearSignature } from "./signature";
@@ -437,6 +438,70 @@ async function handleCommentWebhook(
   await orchestrator.sendMessage(agentKey, buildCommentPrompt(comment));
 }
 
+/**
+ * Forward a webhook to a Sprite URL (fire and forget).
+ */
+async function forwardWebhookToSprite(
+  spriteUrl: string,
+  payload: string,
+  signature: string | null,
+  teamKey: string
+): Promise<void> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Forward Linear signature for verification
+    if (signature) {
+      headers["linear-signature"] = signature;
+    }
+
+    // Forward router secret if configured
+    const routerConfig = getRouterConfig();
+    if (routerConfig) {
+      headers["X-Amadeus-Secret"] = routerConfig.secret;
+    }
+
+    const response = await fetch(`${spriteUrl}/webhook`, {
+      method: "POST",
+      headers,
+      body: payload,
+    });
+
+    if (!response.ok) {
+      console.warn(
+        `[SpriteForward] Failed to forward webhook to ${spriteUrl} for ${teamKey}: HTTP ${response.status}`
+      );
+    } else {
+      console.log(
+        `[SpriteForward] Forwarded webhook to ${spriteUrl} for ${teamKey}`
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[SpriteForward] Error forwarding webhook to ${spriteUrl} for ${teamKey}: ${
+        err instanceof Error ? err.message : "Unknown error"
+      }`
+    );
+  }
+}
+
+/**
+ * Get team key from webhook payload.
+ */
+function getTeamKeyFromPayload(payload: LinearWebhookPayload): string | null {
+  const { type, data } = payload;
+
+  if (type === "Issue" && !isComment(data)) {
+    return data.identifier?.split("-")[0] ?? null;
+  } else if (type === "Comment" && isComment(data)) {
+    return data.issue?.identifier?.split("-")[0] ?? null;
+  }
+
+  return null;
+}
+
 async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
   const { action, type, data } = payload;
 
@@ -580,7 +645,20 @@ export const server = Bun.serve({
         return new Response("Unauthorized", { status: 401 });
       }
 
-      // Process async, respond immediately
+      // Check if this project should be forwarded to a Sprite
+      const teamKey = getTeamKeyFromPayload(data);
+      if (teamKey) {
+        const spriteUrl = getSpriteUrlForTeam(teamKey);
+        if (spriteUrl) {
+          // Forward to Sprite (fire and forget)
+          forwardWebhookToSprite(spriteUrl, payload, signature, teamKey).catch((err) => {
+            console.error("[SpriteForward] Error:", err);
+          });
+          return new Response("OK", { status: 200 });
+        }
+      }
+
+      // Process locally (async, respond immediately)
       handleWebhook(data).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
       });

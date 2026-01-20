@@ -21,13 +21,16 @@ realms:
 
     # Projects in this realm
     projects:
+      # Local project - agents run on this machine
       - teamKey: ONA
         path: /path/to/ona/project
         profile: base  # optional, falls back to global.defaultProfile
 
+      # Sprite project - webhooks forwarded to a Sprite VM
       - teamKey: DESIGN
         path: /path/to/design/project
         profile: frontend
+        spriteUrl: https://amadeus-design-abc123.sprites.app  # optional: forward to Sprite
 
   # Example of a second realm for a different Linear workspace
   # recode:

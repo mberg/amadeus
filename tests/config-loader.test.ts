@@ -200,6 +200,54 @@ global:
       expect(() => loadConfig(testDir)).toThrow(/Invalid configuration/);
     });
 
+    it("accepts spriteUrl for project forwarding", () => {
+      process.env.LINEAR_API_KEY_TEST = "test-key";
+      process.env.LINEAR_WEBHOOK_SECRET_TEST = "test-secret";
+
+      const configYaml = `
+realms:
+  test:
+    linearWorkspace: test
+    apiKeyEnvVar: LINEAR_API_KEY_TEST
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_TEST
+    projects:
+      - teamKey: LOCAL
+        path: /local
+      - teamKey: REMOTE
+        path: /remote
+        spriteUrl: https://amadeus-remote-abc123.sprites.app
+`;
+      writeFileSync(join(testDir, "amadeus.config.yaml"), configYaml);
+
+      const config = loadConfig(testDir);
+
+      const localProject = config.projectByTeamKey.get("LOCAL");
+      const remoteProject = config.projectByTeamKey.get("REMOTE");
+
+      expect(localProject?.project.spriteUrl).toBeUndefined();
+      expect(remoteProject?.project.spriteUrl).toBe("https://amadeus-remote-abc123.sprites.app");
+    });
+
+    it("rejects invalid spriteUrl", () => {
+      process.env.LINEAR_API_KEY_TEST = "test-key";
+      process.env.LINEAR_WEBHOOK_SECRET_TEST = "test-secret";
+
+      const configYaml = `
+realms:
+  test:
+    linearWorkspace: test
+    apiKeyEnvVar: LINEAR_API_KEY_TEST
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_TEST
+    projects:
+      - teamKey: TEST
+        path: /test
+        spriteUrl: not-a-valid-url
+`;
+      writeFileSync(join(testDir, "amadeus.config.yaml"), configYaml);
+
+      expect(() => loadConfig(testDir)).toThrow(/Invalid configuration/);
+    });
+
     it("throws when env var is not set", () => {
       const configYaml = `
 realms:
