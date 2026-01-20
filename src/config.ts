@@ -280,22 +280,50 @@ export function getRuntimeMode(): RuntimeMode {
   if (REALM_CONFIG) {
     return REALM_CONFIG.global.runtimeMode;
   }
-  return "machine";
+  return "standalone";
 }
 
 /**
- * Check if running in Sprite mode.
+ * Check if running in hub mode (routing + aggregate dashboard only).
  */
-export function isSpriteMode(): boolean {
-  return getRuntimeMode() === "sprite";
+export function isHubMode(): boolean {
+  return getRuntimeMode() === "hub";
+}
+
+/**
+ * Check if running in machine mode (agent execution + local dashboard only).
+ */
+export function isMachineMode(): boolean {
+  return getRuntimeMode() === "machine";
+}
+
+/**
+ * Check if running in standalone mode (hub + machine combined).
+ */
+export function isStandaloneMode(): boolean {
+  return getRuntimeMode() === "standalone";
+}
+
+/**
+ * Get machine configuration with defaults.
+ */
+export function getMachineConfig(): { name: string; hubUrl?: string; heartbeat: boolean } {
+  if (REALM_CONFIG?.global.machine) {
+    return REALM_CONFIG.global.machine;
+  }
+  // Default machine config for standalone/legacy mode
+  return {
+    name: process.env.HOSTNAME ?? "Local",
+    heartbeat: false,
+  };
 }
 
 /**
  * Get the effective server port.
- * In Sprite mode, PORT env var takes precedence.
+ * In machine mode, PORT env var takes precedence.
  */
 export function getServerPort(): number {
-  if (isSpriteMode()) {
+  if (isMachineMode()) {
     const portEnv = process.env.PORT;
     if (portEnv) {
       const port = parseInt(portEnv, 10);

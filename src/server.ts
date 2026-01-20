@@ -12,7 +12,7 @@ import {
   getConfigYaml,
   validateConfigYaml,
   reloadConfig,
-  isSpriteMode,
+  getMachineConfig,
   getServerPort,
   getSpriteUrlForProject,
 } from "./config";
@@ -141,18 +141,19 @@ const healthMonitor = new HealthMonitor({
 // Start health monitoring
 healthMonitor.start();
 
-// Initialize router heartbeat if configured (skip in Sprite mode)
+// Initialize router heartbeat if configured and enabled in machine config
 let routerHeartbeat: RouterHeartbeat | null = null;
 const routerConfig = getRouterConfig();
-if (routerConfig && !isSpriteMode()) {
+const machineConfig = getMachineConfig();
+if (routerConfig && machineConfig.heartbeat) {
   routerHeartbeat = new RouterHeartbeat({
     routerUrl: routerConfig.url,
     machineName: routerConfig.machineName,
     secret: routerConfig.secret,
   });
   routerHeartbeat.start();
-} else if (routerConfig && isSpriteMode()) {
-  console.log("[RouterHeartbeat] Skipping heartbeat in Sprite mode (Sprites wake on demand)");
+} else if (routerConfig && !machineConfig.heartbeat) {
+  console.log("[RouterHeartbeat] Heartbeat disabled in machine config");
 }
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
