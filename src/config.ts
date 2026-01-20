@@ -12,7 +12,7 @@ import {
   type ResolvedRealm,
   type ConfigValidationResult,
 } from "./config-loader";
-import type { SecurityConfig } from "./config-schema";
+import type { SecurityConfig, RuntimeMode } from "./config-schema";
 
 /**
  * Legacy CONFIG interface for backward compatibility.
@@ -268,6 +268,40 @@ export function getRouterConfig(): { url: string; machineName: string; secret: s
     return REALM_CONFIG.router;
   }
   return null;
+}
+
+/**
+ * Get the current runtime mode.
+ */
+export function getRuntimeMode(): RuntimeMode {
+  if (REALM_CONFIG) {
+    return REALM_CONFIG.global.runtimeMode;
+  }
+  return "machine";
+}
+
+/**
+ * Check if running in Sprite mode.
+ */
+export function isSpriteMode(): boolean {
+  return getRuntimeMode() === "sprite";
+}
+
+/**
+ * Get the effective server port.
+ * In Sprite mode, PORT env var takes precedence.
+ */
+export function getServerPort(): number {
+  if (isSpriteMode()) {
+    const portEnv = process.env.PORT;
+    if (portEnv) {
+      const port = parseInt(portEnv, 10);
+      if (!isNaN(port) && port > 0) {
+        return port;
+      }
+    }
+  }
+  return CONFIG.port;
 }
 
 /**

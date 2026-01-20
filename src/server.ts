@@ -12,6 +12,8 @@ import {
   getConfigYaml,
   validateConfigYaml,
   reloadConfig,
+  isSpriteMode,
+  getServerPort,
 } from "./config";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { verifyLinearSignature } from "./signature";
@@ -134,16 +136,18 @@ const healthMonitor = new HealthMonitor({
 // Start health monitoring
 healthMonitor.start();
 
-// Initialize router heartbeat if configured
+// Initialize router heartbeat if configured (skip in Sprite mode)
 let routerHeartbeat: RouterHeartbeat | null = null;
 const routerConfig = getRouterConfig();
-if (routerConfig) {
+if (routerConfig && !isSpriteMode()) {
   routerHeartbeat = new RouterHeartbeat({
     routerUrl: routerConfig.url,
     machineName: routerConfig.machineName,
     secret: routerConfig.secret,
   });
   routerHeartbeat.start();
+} else if (routerConfig && isSpriteMode()) {
+  console.log("[RouterHeartbeat] Skipping heartbeat in Sprite mode (Sprites wake on demand)");
 }
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
@@ -510,8 +514,10 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
   }
 }
 
+const serverPort = getServerPort();
+
 export const server = Bun.serve({
-  port: CONFIG.port,
+  port: serverPort,
 
   routes: {
     "/dashboard": dashboardHtml,

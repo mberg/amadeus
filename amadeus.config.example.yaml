@@ -39,7 +39,13 @@ realms:
   #       path: /path/to/recode/project
 
 global:
-  # Server port
+  # Runtime mode: 'machine' (default), 'sprite', or 'local'
+  # - machine: Running on a local machine with router heartbeat
+  # - sprite: Running in a Sprite VM (no heartbeat, PORT env var override)
+  # - local: Local development (no heartbeat, no router)
+  runtimeMode: machine
+
+  # Server port (in sprite mode, PORT env var takes precedence)
   port: 5678
 
   # Workflow states that trigger agent spawn

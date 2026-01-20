@@ -52,6 +52,16 @@ export const RouterConfigSchema = z.object({
 export type RouterConfig = z.infer<typeof RouterConfigSchema>;
 
 /**
+ * Runtime mode for the Amadeus server.
+ * - 'machine': Running on a local machine with heartbeat (default)
+ * - 'sprite': Running in a Sprite VM (no heartbeat, uses PORT env var)
+ * - 'local': Local development mode (no heartbeat, no router)
+ */
+export const RuntimeModeSchema = z.enum(["machine", "sprite", "local"]).default("machine");
+
+export type RuntimeMode = z.infer<typeof RuntimeModeSchema>;
+
+/**
  * Schema for global configuration settings.
  */
 export const GlobalConfigSchema = z.object({
@@ -67,6 +77,7 @@ export const GlobalConfigSchema = z.object({
   healthCheckTimeoutMs: z.number().int().positive().default(5000),
   security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false }),
   router: RouterConfigSchema.optional(),
+  runtimeMode: RuntimeModeSchema,
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
