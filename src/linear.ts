@@ -74,48 +74,6 @@ export async function fetchIssueComments(
 }
 
 /**
- * Creates a comment on an issue using the Linear API.
- */
-export async function createIssueComment(
-  issueId: string,
-  body: string,
-  apiKey: string
-): Promise<boolean> {
-  const mutation = `
-    mutation CreateComment($issueId: String!, $body: String!) {
-      commentCreate(input: { issueId: $issueId, body: $body }) {
-        success
-      }
-    }
-  `;
-
-  try {
-    const response = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: apiKey,
-      },
-      body: JSON.stringify({
-        query: mutation,
-        variables: { issueId, body },
-      }),
-    });
-
-    if (!response.ok) {
-      console.warn(`[Linear] Failed to create comment: ${response.status}`);
-      return false;
-    }
-
-    const data = await response.json();
-    return data?.data?.commentCreate?.success ?? false;
-  } catch (err) {
-    console.warn("[Linear] Error creating comment:", err);
-    return false;
-  }
-}
-
-/**
  * Fetches full issue details from the Linear API.
  * Use this when webhook data is incomplete (e.g., comment webhooks don't include labels/state).
  */
