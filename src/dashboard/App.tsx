@@ -8,6 +8,7 @@ import { TaskTable } from "./components/TaskTable";
 import { MessagePanel } from "./components/MessagePanel";
 import { SearchFilterBar } from "./components/SearchFilterBar";
 import { SettingsPage } from "./components/SettingsPage";
+import { MachinesView } from "./components/MachinesView";
 import { useStatus } from "./hooks/useStatus";
 import { useAuth } from "./components/AuthProvider";
 import { collectUniqueSkills } from "./lib/filter";
@@ -114,6 +115,8 @@ export function App() {
               </div>
             </div>
           )}
+
+          {activeNav === "machines" && <MachinesView />}
 
           {activeNav === "settings" && (
             <SettingsPage setup={config.setup} />

@@ -1,12 +1,12 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
 // ABOUTME: Contains logo, navigation items, theme toggle, and user menu.
 
-import { ListTodo, Settings, Blocks, Sun, Moon } from "lucide-react";
+import { ListTodo, Settings, Blocks, Sun, Moon, Server } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { UserMenu, SignOutButton } from "./UserMenu";
 
-export type NavItem = "tasks" | "settings";
+export type NavItem = "tasks" | "machines" | "settings";
 
 interface SidebarProps {
   activeItem: NavItem;
@@ -61,6 +61,20 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
             >
               <ListTodo className="h-4 w-4 shrink-0" />
               {!collapsed && "Tasks"}
+            </button>
+            <button
+              onClick={() => onNavigate("machines")}
+              title="Machines"
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                activeItem === "machines"
+                  ? "bg-muted/50 text-foreground"
+                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                collapsed && "justify-center px-2"
+              )}
+            >
+              <Server className="h-4 w-4 shrink-0" />
+              {!collapsed && "Machines"}
             </button>
             <button
               onClick={() => onNavigate("settings")}
