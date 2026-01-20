@@ -49,8 +49,12 @@ export interface SetupData {
   global: SetupGlobal;
 }
 
+export type RuntimeMode = "standalone" | "hub" | "machine" | "sprite";
+
 export interface DashboardConfig {
   linearWorkspace?: string;
+  machineName?: string;
+  runtimeMode?: RuntimeMode;
   setup?: SetupData | null;
 }
 

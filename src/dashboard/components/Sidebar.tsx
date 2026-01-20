@@ -13,9 +13,10 @@ interface SidebarProps {
   onNavigate: (item: NavItem) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  machineName?: string;
 }
 
-export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, machineName }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -26,7 +27,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
       )}
     >
       <div className="flex h-full flex-col">
-        {/* Logo - clickable to toggle */}
+        {/* Logo and machine name - clickable to toggle */}
         <button
           onClick={onToggleCollapse}
           className={cn(
@@ -36,7 +37,12 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse }:
         >
           <Blocks className="h-5 w-5 text-foreground shrink-0" />
           {!collapsed && (
-            <span className="text-base font-semibold tracking-tight">Amadeus</span>
+            <div className="flex flex-col items-start">
+              <span className="text-base font-semibold tracking-tight leading-tight">Amadeus</span>
+              {machineName && (
+                <span className="text-xs text-muted-foreground leading-tight">{machineName}</span>
+              )}
+            </div>
           )}
         </button>
 

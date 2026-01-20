@@ -64,6 +64,7 @@ export function App() {
         onNavigate={setActiveNav}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        machineName={config.machineName}
       />
 
       {/* Main content area - offset by sidebar width */}

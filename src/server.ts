@@ -901,6 +901,8 @@ export const server = Bun.serve({
 
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
+        machineName: machineConfig.name,
+        runtimeMode: getRuntimeMode(),
         setup,
       });
     }
