@@ -75,6 +75,16 @@ export const MachineConfigSchema = z.object({
 export type MachineConfig = z.infer<typeof MachineConfigSchema>;
 
 /**
+ * Schema for a static machine entry (for hub config).
+ */
+export const StaticMachineSchema = z.object({
+  name: z.string().min(1, "Machine name cannot be empty"),
+  url: z.string().url("Machine URL must be valid"),
+});
+
+export type StaticMachine = z.infer<typeof StaticMachineSchema>;
+
+/**
  * Schema for global configuration settings.
  */
 export const GlobalConfigSchema = z.object({
@@ -93,6 +103,7 @@ export const GlobalConfigSchema = z.object({
   router: RouterConfigSchema.optional(),
   runtimeMode: RuntimeModeSchema,
   machine: MachineConfigSchema.optional(),
+  machines: z.array(StaticMachineSchema).optional(),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;

@@ -1,8 +1,8 @@
 // ABOUTME: Tests for Amadeus configuration schema validation.
-// ABOUTME: Verifies RuntimeModeSchema and MachineConfigSchema behavior.
+// ABOUTME: Verifies RuntimeModeSchema, MachineConfigSchema, and StaticMachineSchema behavior.
 
 import { describe, test, expect } from "bun:test";
-import { RuntimeModeSchema, MachineConfigSchema, AmadeusConfigSchema } from "./config-schema";
+import { RuntimeModeSchema, MachineConfigSchema, StaticMachineSchema, AmadeusConfigSchema } from "./config-schema";
 
 describe("RuntimeModeSchema", () => {
   test("accepts 'standalone' mode", () => {
@@ -65,5 +65,24 @@ describe("MachineConfigSchema", () => {
 
   test("requires non-empty name", () => {
     expect(() => MachineConfigSchema.parse({ name: "" })).toThrow();
+  });
+});
+
+describe("StaticMachineSchema", () => {
+  test("validates static machine with name and url", () => {
+    const result = StaticMachineSchema.parse({
+      name: "Frank",
+      url: "https://frank.example.com",
+    });
+    expect(result.name).toBe("Frank");
+    expect(result.url).toBe("https://frank.example.com");
+  });
+
+  test("requires non-empty name", () => {
+    expect(() => StaticMachineSchema.parse({ name: "", url: "https://example.com" })).toThrow();
+  });
+
+  test("requires valid URL", () => {
+    expect(() => StaticMachineSchema.parse({ name: "Test", url: "not-a-url" })).toThrow();
   });
 });
