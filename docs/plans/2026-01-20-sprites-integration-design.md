@@ -145,13 +145,22 @@ Each Linear issue gets a dedicated Sprite:
 
 ### Recommendation
 
-**Option B (Sprite-per-Project) is recommended** for production use. It provides a good balance:
-- Better isolation than per-realm (project boundaries)
-- Simpler than per-issue (no external orchestration needed)
-- Aligns with router's project-based routing
-- Clear ownership and cost attribution
+**Default to Sprite-per-Project, with configurable consolidation.**
 
-**For the PoC, start with a single Sprite for the ONA project** to validate the integration pattern before expanding to other projects.
+The router config supports assigning multiple projects to a single Sprite, giving users flexibility:
+
+| Strategy | When to use |
+|----------|-------------|
+| One project per Sprite (default) | Maximum isolation, clear cost attribution |
+| Multiple projects per Sprite | Cost savings, shared context between related projects |
+
+This approach provides:
+- Better isolation than per-realm by default
+- User control over the isolation/cost tradeoff
+- Simple configuration via router's existing `projects` array
+- No code changes needed - just config
+
+**For the PoC, start with a single Sprite for the ONA project** to validate the integration pattern before expanding.
 
 ## Components
 
@@ -201,7 +210,9 @@ wait
 
 ### 3. Router Config Updates
 
-Update Cloudflare Worker to route to Sprite URLs (one Sprite per project):
+Update Cloudflare Worker to route to Sprite URLs. **Default: one Sprite per project**, but users can assign multiple projects to a single Sprite via config.
+
+**Default configuration (one project per Sprite):**
 
 ```json
 {
@@ -223,7 +234,30 @@ Update Cloudflare Worker to route to Sprite URLs (one Sprite per project):
 }
 ```
 
-Each project routes to its dedicated Sprite. The router matches the issue's project to the appropriate Sprite URL.
+**Consolidated configuration (multiple projects per Sprite):**
+
+Users can group related projects into a single Sprite to reduce costs or share resources:
+
+```json
+{
+  "machines": {
+    "amadeus-frontend": {
+      "url": "https://amadeus-frontend-abc123.sprites.app",
+      "projects": ["ONA", "DESIGN", "MOBILE"]
+    },
+    "amadeus-backend": {
+      "url": "https://amadeus-backend-def456.sprites.app",
+      "projects": ["API", "INFRA", "ML"]
+    }
+  },
+  "secret": "<shared-secret>"
+}
+```
+
+The router matches the issue's project to the Sprite that lists it. This gives users flexibility to:
+- Start with isolated per-project Sprites (maximum isolation)
+- Consolidate projects later to reduce costs
+- Group related projects that share dependencies or context
 
 ### 4. Health Monitoring Adaptation
 
@@ -439,7 +473,7 @@ runtime:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Isolation model | Sprite-per-Project | Better isolation than per-realm; aligns with router's project routing |
+| Isolation model | Sprite-per-Project (default), configurable | Default to max isolation; allow consolidation via config for cost savings |
 | Sprite port | 8080 | Sprites route public URL to 8080 by default |
 | Heartbeat strategy | None for Sprites | Sprites wake on demand; always "available" |
 | Initial setup | Manual | Keep simple; automate in Phase 4 |
