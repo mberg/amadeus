@@ -44,6 +44,7 @@ import {
   parseIssueFromMessage,
 } from "./telegram";
 import { fetchIssueDetails, fetchTeamWorkflowStates } from "./linear";
+import { getSystemResources } from "./machine/resources";
 
 async function requireViewer(req: Request): Promise<Response | null> {
   const security = getSecurityConfig();
@@ -1057,6 +1058,19 @@ export const server = Bun.serve({
       await orchestrator.stopAgent(agentKey, "stopped");
       healthMonitor.notifyAgentCountChanged();
       return Response.json({ success: true });
+    }
+
+    // Machine resource monitoring endpoint
+    if (req.method === "GET" && url.pathname === "/machine/resources") {
+      if (isHubMode()) {
+        return new Response("Not available in hub mode", { status: 404 });
+      }
+
+      const authError = await requireViewer(req);
+      if (authError) return authError;
+
+      const resources = await getSystemResources();
+      return Response.json(resources);
     }
 
     return new Response("Not Found", { status: 404 });
