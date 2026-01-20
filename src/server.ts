@@ -779,6 +779,64 @@ export const server = Bun.serve({
       });
     }
 
+    // Hub status endpoint (returns all machines and their agents)
+    if (req.method === "GET" && url.pathname === "/hub/status") {
+      if (!isHubMode() && !isStandaloneMode()) {
+        return new Response("Not available in machine mode", { status: 404 });
+      }
+
+      const authError = await requireViewer(req);
+      if (authError) return authError;
+
+      const machines = machineRegistry?.getAll() ?? [];
+
+      // Fetch status from each machine (with timeout)
+      const machineStatuses = await Promise.all(
+        machines.map(async (machine) => {
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+
+            const res = await fetch(`${machine.url}/status`, {
+              signal: controller.signal,
+            });
+            clearTimeout(timeout);
+
+            if (res.ok) {
+              const data = await res.json();
+              return {
+                ...machine,
+                status: "healthy" as const,
+                agents: data.agents,
+                agentCount: data.agents?.length ?? 0,
+              };
+            }
+            return { ...machine, status: "unhealthy" as const, agents: [], agentCount: 0 };
+          } catch {
+            return { ...machine, status: "unhealthy" as const, agents: [], agentCount: 0 };
+          }
+        })
+      );
+
+      // Include local machine if in standalone mode
+      let localStatus = null;
+      if (isStandaloneMode() && orchestrator) {
+        const agents = await orchestrator.getStatusWithMemory();
+        localStatus = {
+          name: machineConfig.name,
+          url: `http://localhost:${serverPort}`,
+          status: "healthy" as const,
+          agents,
+          agentCount: agents.length,
+        };
+      }
+
+      return Response.json({
+        machines: localStatus ? [localStatus, ...machineStatuses] : machineStatuses,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     // Completed tasks history
     if (req.method === "GET" && url.pathname === "/status/history") {
       const authError = await requireViewer(req);
