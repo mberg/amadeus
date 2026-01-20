@@ -316,6 +316,32 @@ export function getSpriteUrlForTeam(teamKey: string): string | null {
 }
 
 /**
+ * Get Sprite URL for a project, checking by Linear project name first, then team key.
+ * Returns the URL to forward webhooks to, or null for local processing.
+ */
+export function getSpriteUrlForProject(projectName: string | undefined, teamKey: string | undefined): string | null {
+  if (!REALM_CONFIG) return null;
+
+  // Search all realms for a matching project
+  for (const realm of REALM_CONFIG.realms) {
+    for (const project of realm.projects) {
+      // Match by Linear project name (case-insensitive)
+      if (projectName && project.linearProject?.toLowerCase() === projectName.toLowerCase()) {
+        return project.spriteUrl ?? null;
+      }
+    }
+  }
+
+  // Fall back to team key lookup
+  if (teamKey) {
+    const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
+    return entry?.project.spriteUrl ?? null;
+  }
+
+  return null;
+}
+
+/**
  * Get the raw YAML configuration content.
  */
 export { getConfigYaml, validateConfigYaml };

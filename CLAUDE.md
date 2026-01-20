@@ -109,3 +109,77 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Sprites (Remote Execution)
+
+Amadeus can forward webhooks to [Sprites](https://sprites.dev/) VMs for isolated agent execution.
+
+### Setup
+
+```bash
+# Install Sprites CLI
+curl -fsSL https://sprites.dev/install.sh | bash
+
+# Authenticate with your token
+sprite auth setup --token "org/123/token-id/token-value"
+
+# Or add token to .env
+SPRITES_TOKEN=org/123/token-id/token-value
+```
+
+### Managing Sprites
+
+```bash
+# List sprites
+sprite list
+
+# Create a new sprite
+sprite exec -s <sprite-name> -- <command>
+
+# Open interactive console
+sprite console -s <sprite-name>
+
+# Run command on sprite
+sprite exec -s <sprite-name> -- ls -la
+
+# Use HTTP mode if websocket fails
+sprite exec -s amadeus-zonewise -http-post -- <command>
+```
+
+### Provisioning a Sprite
+
+```bash
+# Use the provisioning script
+bun scripts/provision-sprite-api.ts <sprite-name> [project-repo-url]
+
+# Example
+bun scripts/provision-sprite-api.ts amadeus-zonewise https://github.com/mberg/timehopper
+```
+
+### SSH Keys for GitHub
+
+```bash
+# Generate SSH key on sprite
+bun scripts/setup-sprite-ssh.ts <sprite-name>
+
+# Add the output public key to GitHub Settings > SSH Keys
+```
+
+### Sprite Config
+
+On the sprite, set `runtimeMode: sprite` in amadeus.config.yaml:
+
+```yaml
+global:
+  runtimeMode: sprite
+  port: 8080
+```
+
+### Claude Login on Sprite
+
+Sprites need Claude authentication:
+
+```bash
+sprite console -s <sprite-name>
+claude login
+```

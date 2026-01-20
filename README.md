@@ -686,6 +686,130 @@ global:
 
 Note: Without worktrees, multiple agents on the same project may conflict with each other's file changes.
 
+## Sprites (Remote Execution)
+
+Amadeus can forward webhooks to [Sprites](https://sprites.dev/) VMs for hardware-isolated agent execution. This is useful for:
+
+- Running untrusted code in isolation
+- Offloading work from your local machine
+- Running agents 24/7 without keeping your laptop open
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              LINEAR                                         │
+│                     Issue moved to "Planning"                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     LOCAL AMADEUS (localhost:5678)                          │
+│                                                                             │
+│  Checks config: Does this project have a spriteUrl?                         │
+│  - No  → Spawn local agent (existing behavior)                              │
+│  - Yes → Forward webhook to sprite (fire and forget)                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ (if spriteUrl configured)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     SPRITE VM (Firecracker microVM)                         │
+│                     https://amadeus-project.sprites.app                     │
+│                                                                             │
+│  Runs its own Amadeus instance (runtimeMode: sprite)                        │
+│  Spawns Claude Code agent in isolated environment                           │
+│  Agent works on cloned repo, pushes PRs back to GitHub                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration
+
+Add `spriteUrl` to any project that should run on a Sprite:
+
+```yaml
+realms:
+  recode:
+    linearWorkspace: recodelabs
+    apiKeyEnvVar: LINEAR_API_KEY_RECODE
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_RECODE
+    projects:
+      - teamKey: REC
+        linearProject: ZoneWise
+        path: /Volumes/local/path  # Local path (for reference)
+        githubRepoUrl: https://github.com/org/repo
+        spriteUrl: https://amadeus-zonewise-abc123.sprites.app  # Forward to Sprite
+```
+
+### Setting Up a Sprite
+
+1. **Install Sprites CLI:**
+   ```bash
+   curl -fsSL https://sprites.dev/install.sh | bash
+   sprite auth setup --token "your-token"
+   ```
+
+2. **Create and provision a sprite:**
+   ```bash
+   # Add SPRITES_TOKEN to .env first
+   bun scripts/provision-sprite-api.ts amadeus-myproject https://github.com/org/repo
+   ```
+
+3. **Set up SSH for GitHub access:**
+   ```bash
+   bun scripts/setup-sprite-ssh.ts amadeus-myproject
+   # Add the output public key to GitHub Settings > SSH Keys
+   ```
+
+4. **Login to Claude on the sprite:**
+   ```bash
+   sprite console -s amadeus-myproject
+   claude login
+   ```
+
+5. **Start Amadeus on the sprite:**
+   ```bash
+   sprite exec -s amadeus-myproject -http-post -- bash -c "cd /home/sprite/amadeus && nohup ~/.bun/bin/bun run src/server.ts > /tmp/amadeus.log 2>&1 &"
+   ```
+
+6. **Update local config** with the sprite URL and restart local Amadeus.
+
+### Sprite Lifecycle
+
+Sprites hibernate after 30 seconds of inactivity:
+
+```
+[Dormant] ──webhook──► [Waking ~200ms] ──ready──► [Active]
+                                                      │
+                                                 30s idle
+                                                      │
+                                                      ▼
+                                                 [Dormant]
+```
+
+Webhooks automatically wake dormant sprites. You only pay for compute when agents are actively working.
+
+### Managing Sprites
+
+```bash
+# List your sprites
+sprite list
+
+# Open interactive console
+sprite console -s amadeus-myproject
+
+# Run a command
+sprite exec -s amadeus-myproject -- cat /tmp/amadeus.log
+
+# Check sprite status via API
+curl -H "Authorization: Bearer $SPRITES_TOKEN" https://api.sprites.dev/v1/sprites/amadeus-myproject
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `SPRITES_TOKEN` | API token for Sprites (add to local .env) |
+
 ## Endpoints
 
 ### Public Endpoints

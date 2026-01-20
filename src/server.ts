@@ -14,7 +14,7 @@ import {
   reloadConfig,
   isSpriteMode,
   getServerPort,
-  getSpriteUrlForTeam,
+  getSpriteUrlForProject,
 } from "./config";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { verifyLinearSignature } from "./signature";
@@ -502,6 +502,19 @@ function getTeamKeyFromPayload(payload: LinearWebhookPayload): string | null {
   return null;
 }
 
+/**
+ * Get project name from webhook payload.
+ */
+function getProjectNameFromPayload(payload: LinearWebhookPayload): string | null {
+  const { type, data } = payload;
+
+  if (type === "Issue" && !isComment(data)) {
+    return data.project?.name ?? null;
+  }
+
+  return null;
+}
+
 async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
   const { action, type, data } = payload;
 
@@ -647,15 +660,15 @@ export const server = Bun.serve({
 
       // Check if this project should be forwarded to a Sprite
       const teamKey = getTeamKeyFromPayload(data);
-      if (teamKey) {
-        const spriteUrl = getSpriteUrlForTeam(teamKey);
-        if (spriteUrl) {
-          // Forward to Sprite (fire and forget)
-          forwardWebhookToSprite(spriteUrl, payload, signature, teamKey).catch((err) => {
-            console.error("[SpriteForward] Error:", err);
-          });
-          return new Response("OK", { status: 200 });
-        }
+      const projectName = getProjectNameFromPayload(data);
+      const spriteUrl = getSpriteUrlForProject(projectName, teamKey);
+      if (spriteUrl) {
+        // Forward to Sprite (fire and forget)
+        const identifier = projectName ?? teamKey ?? "unknown";
+        forwardWebhookToSprite(spriteUrl, payload, signature, identifier).catch((err) => {
+          console.error("[SpriteForward] Error:", err);
+        });
+        return new Response("OK", { status: 200 });
       }
 
       // Process locally (async, respond immediately)
