@@ -15,7 +15,13 @@ import {
   getMachineConfig,
   getServerPort,
   getSpriteUrlForProject,
+  getRuntimeMode,
+  isHubMode,
+  isMachineMode,
+  isStandaloneMode,
 } from "./config";
+import { MachineRegistry } from "./hub/registry";
+import { routeWebhook } from "./hub/router";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { verifyLinearSignature } from "./signature";
 import { requireAuth as checkAuth, getAuthInfo, isClerkEnabled } from "./auth";
@@ -70,81 +76,97 @@ async function requireAdmin(req: Request): Promise<Response | null> {
   return result.authorized ? null : result.response;
 }
 
-// Initialize persistence layer
-const persistence = new AgentPersistence(CONFIG.dbPath);
+// Mode-based initialization
+const machineConfig = getMachineConfig();
+console.log(`[Server] Starting in ${getRuntimeMode()} mode as "${machineConfig.name}"`);
 
-// Handle agent death - persist state for recovery
-function handleAgentDeath(info: AgentDeathInfo): void {
-  console.log(
-    `[AgentDeath] Agent ${info.key} died (${info.reason}, exit code: ${info.exitCode})`
-  );
-  persistence.markAgentDead(info.issueId);
+// Hub components (hub or standalone mode)
+let machineRegistry: MachineRegistry | null = null;
+if (isHubMode() || isStandaloneMode()) {
+  machineRegistry = new MachineRegistry();
 }
 
-// Handle agent completion - save to history
-function handleAgentComplete(info: AgentCompletionInfo): void {
-  console.log(
-    `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
-  );
-  persistence.saveCompletedTask({
-    key: info.key,
-    issueId: info.issueId,
-    issueIdentifier: info.issueIdentifier,
-    issueTitle: info.issueTitle,
-    linearProject: info.linearProject,
-    completedAt: new Date(),
-    completionReason: info.completionReason,
-    finalLinearState: info.finalLinearState,
-    duration: info.duration,
-  });
-}
+// Machine components (machine or standalone mode)
+let persistence: AgentPersistence | null = null;
+let orchestrator: ClaudeOrchestrator | null = null;
+let healthMonitor: HealthMonitor | null = null;
 
-const orchestrator = new ClaudeOrchestrator({
-  projectPaths: CONFIG.projectPaths,
-  triggerStates: CONFIG.triggerStates,
-  claudeBotUserId: CONFIG.claudeBotUserId,
-  useWorktrees: CONFIG.useWorktrees,
-  worktreesDir: CONFIG.worktreesDir,
-  onAgentDeath: handleAgentDeath,
-  onAgentComplete: handleAgentComplete,
-  linearWorkspace: CONFIG.linearWorkspace,
-  agentName: CONFIG.agentName,
-  profilesDir: CONFIG.profilesDir,
-  defaultProfile: CONFIG.defaultProfile,
-  teamProfiles: CONFIG.teamProfiles,
-});
+if (isMachineMode() || isStandaloneMode()) {
+  // Initialize persistence layer
+  persistence = new AgentPersistence(CONFIG.dbPath);
 
-// Initialize health monitor
-const healthMonitor = new HealthMonitor({
-  persistence,
-  getAgents: () =>
-    orchestrator.getStatus().map((status) => ({
-      key: status.key,
-      issueId: status.issueId,
-      issueIdentifier: status.issueIdentifier,
-      issueTitle: status.issueTitle,
-      projectPath: "", // Not exposed in status, health monitor doesn't need it
-      port: status.port,
-      linearState: status.linearState,
-      worktreePath: status.worktreePath,
-    })),
-  onAgentUnresponsive: (info) => {
+  // Handle agent death - persist state for recovery
+  const handleAgentDeath = (info: AgentDeathInfo): void => {
     console.log(
-      `[HealthMonitor] Agent ${info.key} unresponsive: ${info.error}`
+      `[AgentDeath] Agent ${info.key} died (${info.reason}, exit code: ${info.exitCode})`
     );
-    persistence.markAgentDead(info.issueId);
-  },
-  checkIntervalMs: CONFIG.healthCheckIntervalMs,
-  timeoutMs: CONFIG.healthCheckTimeoutMs,
-});
+    persistence!.markAgentDead(info.issueId);
+  };
 
-// Start health monitoring
-healthMonitor.start();
+  // Handle agent completion - save to history
+  const handleAgentComplete = (info: AgentCompletionInfo): void => {
+    console.log(
+      `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
+    );
+    persistence!.saveCompletedTask({
+      key: info.key,
+      issueId: info.issueId,
+      issueIdentifier: info.issueIdentifier,
+      issueTitle: info.issueTitle,
+      linearProject: info.linearProject,
+      completedAt: new Date(),
+      completionReason: info.completionReason,
+      finalLinearState: info.finalLinearState,
+      duration: info.duration,
+    });
+  };
+
+  orchestrator = new ClaudeOrchestrator({
+    projectPaths: CONFIG.projectPaths,
+    triggerStates: CONFIG.triggerStates,
+    claudeBotUserId: CONFIG.claudeBotUserId,
+    useWorktrees: CONFIG.useWorktrees,
+    worktreesDir: CONFIG.worktreesDir,
+    onAgentDeath: handleAgentDeath,
+    onAgentComplete: handleAgentComplete,
+    linearWorkspace: CONFIG.linearWorkspace,
+    agentName: CONFIG.agentName,
+    profilesDir: CONFIG.profilesDir,
+    defaultProfile: CONFIG.defaultProfile,
+    teamProfiles: CONFIG.teamProfiles,
+  });
+
+  // Initialize health monitor
+  healthMonitor = new HealthMonitor({
+    persistence,
+    getAgents: () =>
+      orchestrator!.getStatus().map((status) => ({
+        key: status.key,
+        issueId: status.issueId,
+        issueIdentifier: status.issueIdentifier,
+        issueTitle: status.issueTitle,
+        projectPath: "", // Not exposed in status, health monitor doesn't need it
+        port: status.port,
+        linearState: status.linearState,
+        worktreePath: status.worktreePath,
+      })),
+    onAgentUnresponsive: (info) => {
+      console.log(
+        `[HealthMonitor] Agent ${info.key} unresponsive: ${info.error}`
+      );
+      persistence!.markAgentDead(info.issueId);
+    },
+    checkIntervalMs: CONFIG.healthCheckIntervalMs,
+    timeoutMs: CONFIG.healthCheckTimeoutMs,
+  });
+
+  // Start health monitoring
+  healthMonitor.start();
+}
 
 // Initialize router heartbeat if configured and enabled in machine config
 let routerHeartbeat: RouterHeartbeat | null = null;
 const routerConfig = getRouterConfig();
-const machineConfig = getMachineConfig();
 if (routerConfig && machineConfig.heartbeat) {
   routerHeartbeat = new RouterHeartbeat({
     routerUrl: routerConfig.url,
@@ -274,6 +296,12 @@ async function handleIssueWebhook(
   action: string,
   issue: LinearIssue
 ): Promise<void> {
+  // Guard: Machine components required
+  if (!orchestrator || !healthMonitor) {
+    console.error("[Webhook] Machine components not initialized");
+    return;
+  }
+
   // Skip draft issues
   if (isDraft(issue)) {
     console.log(
@@ -346,6 +374,12 @@ async function handleCommentWebhook(
   action: string,
   comment: LinearComment
 ): Promise<void> {
+  // Guard: Machine components required
+  if (!orchestrator || !healthMonitor || !persistence) {
+    console.error("[Webhook] Machine components not initialized");
+    return;
+  }
+
   // Only handle new comments
   if (action !== "create") return;
 
@@ -554,6 +588,9 @@ const DONE_STATE_ID = "edbec4af-dc30-4d27-a122-84395ac3b885";
 const PR_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function checkMergedPRsAndUpdateLinear(): Promise<void> {
+  // Skip in hub mode - no local agents
+  if (!orchestrator) return;
+
   const reviewAgents = orchestrator.getAgentsInReviewState();
 
   if (reviewAgents.length === 0) {
@@ -683,10 +720,29 @@ export const server = Bun.serve({
         return new Response("Unauthorized", { status: 401 });
       }
 
-      // Check if this project should be forwarded to a Sprite
+      // In hub mode, route to machines
+      if (isHubMode()) {
+        const route = routeWebhook(data);
+        if (route.machineUrl) {
+          forwardWebhookToSprite(route.machineUrl, payload, signature, route.machineName ?? "unknown").catch((err) => {
+            console.error("[HubForward] Error:", err);
+          });
+          return new Response("OK", { status: 200 });
+        }
+        // No routing configured - return error in hub mode
+        console.warn(`[Webhook] Hub mode but no machine routing configured: ${route.reason}`);
+        return new Response("No machine configured for this webhook", { status: 422 });
+      }
+
+      // Machine or standalone mode - process locally
+      if (!orchestrator) {
+        return new Response("Machine components not initialized", { status: 500 });
+      }
+
+      // Check if this project should be forwarded to a Sprite (standalone mode only)
       const teamKey = getTeamKeyFromPayload(data);
       const projectName = getProjectNameFromPayload(data);
-      const spriteUrl = getSpriteUrlForProject(projectName, teamKey);
+      const spriteUrl = getSpriteUrlForProject(projectName ?? undefined, teamKey ?? undefined);
       if (spriteUrl) {
         // Forward to Sprite (fire and forget)
         const identifier = projectName ?? teamKey ?? "unknown";
@@ -714,10 +770,12 @@ export const server = Bun.serve({
       const authError = await requireViewer(req);
       if (authError) return authError;
 
-      const agents = await orchestrator.getStatusWithMemory();
+      // In hub mode, return empty agents (aggregate from machines in future)
+      const agents = orchestrator ? await orchestrator.getStatusWithMemory() : [];
       return Response.json({
         agents,
         timestamp: new Date().toISOString(),
+        mode: getRuntimeMode(),
       });
     }
 
@@ -725,6 +783,16 @@ export const server = Bun.serve({
     if (req.method === "GET" && url.pathname === "/status/history") {
       const authError = await requireViewer(req);
       if (authError) return authError;
+
+      // In hub mode, no local history (aggregate from machines in future)
+      if (!persistence) {
+        return Response.json({
+          completedTasks: [],
+          total: 0,
+          limit: 20,
+          offset: 0,
+        });
+      }
 
       const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
       const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
@@ -827,6 +895,10 @@ export const server = Bun.serve({
       const authError = await requireOperator(req);
       if (authError) return authError;
 
+      if (!orchestrator) {
+        return new Response("Machine components not initialized", { status: 500 });
+      }
+
       try {
         const { agentKey, message } = await req.json();
         if (!agentKey || !message) {
@@ -890,6 +962,10 @@ export const server = Bun.serve({
       const authError = await requireViewer(req);
       if (authError) return authError;
 
+      if (!orchestrator) {
+        return new Response("Machine components not initialized", { status: 500 });
+      }
+
       const agentKey = decodeURIComponent(messagesMatch[1]);
       const agent = orchestrator.getStatus().find((a) => a.key === agentKey);
 
@@ -911,6 +987,10 @@ export const server = Bun.serve({
     if (req.method === "POST" && stopMatch) {
       const authError = await requireOperator(req);
       if (authError) return authError;
+
+      if (!orchestrator || !healthMonitor) {
+        return new Response("Machine components not initialized", { status: 500 });
+      }
 
       const agentKey = decodeURIComponent(stopMatch[1]);
       console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
@@ -937,7 +1017,9 @@ async function shutdown(): Promise<void> {
   console.log("\nShutting down...");
 
   // Stop health monitoring
-  healthMonitor.stop();
+  if (healthMonitor) {
+    healthMonitor.stop();
+  }
 
   // Stop router heartbeat if running
   if (routerHeartbeat) {
@@ -949,12 +1031,16 @@ async function shutdown(): Promise<void> {
   }
 
   // Stop all agents
-  for (const status of orchestrator.getStatus()) {
-    await orchestrator.stopAgent(status.key);
+  if (orchestrator) {
+    for (const status of orchestrator.getStatus()) {
+      await orchestrator.stopAgent(status.key);
+    }
   }
 
   // Close persistence connection
-  persistence.close();
+  if (persistence) {
+    persistence.close();
+  }
 
   server.stop();
   process.exit(0);
