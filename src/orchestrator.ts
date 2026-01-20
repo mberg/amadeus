@@ -12,7 +12,7 @@ import { getGitHubRepoUrl } from "./git-utils";
 import { getRealmByTeamKey } from "./config";
 import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
-import { fetchIssueComments } from "./linear";
+import { fetchIssueComments, fetchTeamWorkflowStates } from "./linear";
 
 export interface AgentDeathInfo {
   key: string;
@@ -543,7 +543,16 @@ export class ClaudeOrchestrator {
       }
     }
 
-    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments));
+    // Fetch workflow states for dynamic state ID generation
+    let workflowStates;
+    if (realmInfo?.apiKey && issue.team?.key) {
+      workflowStates = await fetchTeamWorkflowStates(issue.team.key, realmInfo.apiKey);
+      if (workflowStates.length > 0) {
+        console.log(`[Agent] Fetched ${workflowStates.length} workflow states for team ${issue.team.key}`);
+      }
+    }
+
+    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments, workflowStates));
   }
 
   private setupExitHandler(

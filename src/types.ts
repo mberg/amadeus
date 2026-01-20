@@ -98,3 +98,10 @@ export interface McpServerConfig {
   args?: string[];
   env?: Record<string, string>;
 }
+
+export interface WorkflowState {
+  id: string;
+  name: string;
+  type: string; // "unstarted" | "started" | "completed" | "canceled"
+  position: number;
+}

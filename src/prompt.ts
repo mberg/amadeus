@@ -1,9 +1,44 @@
 // ABOUTME: Builds Claude prompts from Linear issue data.
 // ABOUTME: Formats issue details into actionable instructions for the agent.
 
-import type { LinearIssue, LinearComment, AgentProfile } from "./types";
+import type { LinearIssue, LinearComment, AgentProfile, WorkflowState } from "./types";
 import type { PersistedAgentState } from "./persistence";
 import type { FetchedComment } from "./linear";
+
+/**
+ * Build the state ID table from workflow states.
+ * Maps common workflow state names to their IDs.
+ */
+function buildStateIdTable(states: WorkflowState[]): string {
+  // Define the states we care about showing in the prompt
+  const stateNames = ["Planning", "Feedback Needed", "Building", "Review", "Done"];
+
+  const rows = stateNames
+    .map(name => {
+      const state = states.find(s => s.name.toLowerCase() === name.toLowerCase());
+      if (state) {
+        return `| ${name} | \`${state.id}\` |`;
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  if (rows.length === 0) {
+    return `*State IDs not available. Use \`linear-cli statuses list --team <team>\` to find them.*`;
+  }
+
+  return `| Status | State ID |
+|--------|----------|
+${rows.join("\n")}`
+}
+
+/**
+ * Get state ID by name, with fallback placeholder.
+ */
+function getStateId(states: WorkflowState[] | undefined, name: string): string {
+  const state = states?.find(s => s.name.toLowerCase() === name.toLowerCase());
+  return state?.id ?? `<${name.toLowerCase().replace(/\s+/g, "-")}-state-id>`;
+}
 
 export function isYoloMode(issue: LinearIssue): boolean {
   return issue.description?.toLowerCase().includes("yolo") ?? false;
@@ -19,13 +54,14 @@ export function buildPrompt(
   workspace?: string,
   agentName: string = "Amadeus",
   githubRepoUrl?: string,
-  existingComments?: FetchedComment[]
+  existingComments?: FetchedComment[],
+  workflowStates?: WorkflowState[]
 ): string {
   const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
   const ultrathink = hasUltrathinkLabel(issue);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
-  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace);
+  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace, workflowStates);
   const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
   const commentHistorySection = buildCommentHistorySection(existingComments);
   const ultrathinkPrefix = ultrathink ? "ultrathink\n\n" : "";
@@ -57,13 +93,7 @@ linear-cli issues update ${issue.identifier} --state "<state-id>"
 \`\`\`
 
 **State IDs:**
-| Status | State ID |
-|--------|----------|
-| Planning | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
-| Feedback Needed | \`38ab3462-5550-4dcf-a1dd-6845e3a1e963\` |
-| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
-| Review | \`e5708707-32a0-4ede-9f24-fb525d92b3d4\` |
-| Done | \`edbec4af-dc30-4d27-a122-84395ac3b885\` |
+${workflowStates?.length ? buildStateIdTable(workflowStates) : `*Use \`linear-cli statuses list --team <team>\` to find state IDs.*`}
 
 **Issue details:**
 - Issue ID: ${issue.id}
@@ -101,7 +131,7 @@ The user can ONLY see messages you post to Linear. Your thoughts, questions, rea
 ${commentHistorySection}${profileSection}`.trim();
 }
 
-function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string, workspace?: string): string {
+function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string, workspace?: string, workflowStates?: WorkflowState[]): string {
   const reviewNotificationSection = workspace ? `
 **Step 7:** Notify the issue creator by assigning the issue to them:
 \`\`\`bash
@@ -151,7 +181,7 @@ Proceeding to implementation (YOLO mode)." ${issue.identifier}
 
 **Step 3:** Set status to Building and proceed to implement immediately:
 \`\`\`bash
-linear-cli issues update ${issue.identifier} --state "0aab3254-cc63-4979-84ab-eda800979c94"
+linear-cli issues update ${issue.identifier} --state "${getStateId(workflowStates, "Building")}"
 \`\`\`
 
 **Step 4:** Implement the plan - write code, tests, commit changes
@@ -166,7 +196,7 @@ Linear: https://linear.app/ona/issue/${issue.identifier}" 2>/dev/null || echo "P
 
 **Step 6:** Set status to Review:
 \`\`\`bash
-linear-cli issues update ${issue.identifier} --state "e5708707-32a0-4ede-9f24-fb525d92b3d4"
+linear-cli issues update ${issue.identifier} --state "${getStateId(workflowStates, "Review")}"
 linear-cli comments create --body "**🤖 ${agentName}:** Implementation complete. PR created/updated and ready for review." ${issue.identifier}
 \`\`\`
 ${reviewNotificationSection}
@@ -210,7 +240,7 @@ Please review and let me know if you'd like any changes to this plan." ${issue.i
 
 **Step 3:** Set status to Feedback Needed and STOP:
 \`\`\`bash
-linear-cli issues update ${issue.identifier} --state "38ab3462-5550-4dcf-a1dd-6845e3a1e963"
+linear-cli issues update ${issue.identifier} --state "${getStateId(workflowStates, "Feedback Needed")}"
 \`\`\`
 ${notificationSection}
 **IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
@@ -332,7 +362,8 @@ export function buildRecoveryPrompt(
   issue: LinearIssue,
   savedState: PersistedAgentState,
   profile?: AgentProfile,
-  agentName: string = "Amadeus"
+  agentName: string = "Amadeus",
+  workflowStates?: WorkflowState[]
 ): string {
   const profileSection = buildProfileSection(profile);
 
@@ -386,13 +417,7 @@ linear-cli issues update ${issue.identifier} --state "<state-id>"
 \`\`\`
 
 **State IDs:**
-| Status | State ID |
-|--------|----------|
-| Planning | \`260a76bf-dc1f-46ee-9c59-518c9558e7bb\` |
-| Feedback Needed | \`38ab3462-5550-4dcf-a1dd-6845e3a1e963\` |
-| Building | \`0aab3254-cc63-4979-84ab-eda800979c94\` |
-| Review | \`e5708707-32a0-4ede-9f24-fb525d92b3d4\` |
-| Done | \`edbec4af-dc30-4d27-a122-84395ac3b885\` |
+${workflowStates?.length ? buildStateIdTable(workflowStates) : `*Use \`linear-cli statuses list --team <team>\` to find state IDs.*`}
 
 ### Git Branch
 

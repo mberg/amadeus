@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt, isYoloMode, hasUltrathinkLabel } from "../src/prompt";
-import type { LinearIssue, LinearComment, AgentProfile } from "../src/types";
+import type { LinearIssue, LinearComment, AgentProfile, WorkflowState } from "../src/types";
 import type { PersistedAgentState } from "../src/persistence";
 
 describe("buildPrompt", () => {
@@ -129,9 +129,35 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt(issue);
 
     // In Planning workflow, posting the plan comment should precede the Feedback Needed state change
+    // When no workflow states provided, uses placeholder format
     const planThenFeedbackRegex =
-      /linear-cli comments create.*plan[\s\S]*?linear-cli issues update.*--state "38ab3462/;
+      /linear-cli comments create.*plan[\s\S]*?linear-cli issues update.*--state "<feedback-needed-state-id>"/;
     expect(prompt).toMatch(planThenFeedbackRegex);
+  });
+
+  it("uses dynamic state IDs when workflow states are provided", () => {
+    const issue: LinearIssue = {
+      id: "issue-123",
+      identifier: "REC-42",
+      title: "Test issue",
+    };
+
+    const workflowStates: WorkflowState[] = [
+      { id: "state-planning-123", name: "Planning", type: "started", position: 1 },
+      { id: "state-feedback-456", name: "Feedback Needed", type: "started", position: 2 },
+      { id: "state-building-789", name: "Building", type: "started", position: 3 },
+      { id: "state-review-abc", name: "Review", type: "completed", position: 4 },
+      { id: "state-done-xyz", name: "Done", type: "completed", position: 5 },
+    ];
+
+    const prompt = buildPrompt(issue, undefined, undefined, "TestAgent", undefined, undefined, workflowStates);
+
+    // Should contain actual state IDs from workflow states
+    expect(prompt).toContain("state-feedback-456");
+    expect(prompt).toContain("| Planning | `state-planning-123` |");
+    expect(prompt).toContain("| Feedback Needed | `state-feedback-456` |");
+    // Should NOT contain placeholder format
+    expect(prompt).not.toContain("<feedback-needed-state-id>");
   });
 
   it("instructs agent to stop after setting Feedback Needed", () => {
@@ -436,8 +462,8 @@ describe("buildPrompt YOLO mode", () => {
 
     const prompt = buildPrompt(issue);
 
-    // Should contain Building state in the workflow
-    expect(prompt).toContain("0aab3254-cc63-4979-84ab-eda800979c94");
+    // Should contain Building state placeholder in the workflow (when no workflow states provided)
+    expect(prompt).toContain("<building-state-id>");
     expect(prompt).toMatch(/proceed.*implement|implement.*immediately/i);
   });
 

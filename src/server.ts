@@ -37,7 +37,7 @@ import {
   notifyReviewReadyTelegram,
   parseIssueFromMessage,
 } from "./telegram";
-import { fetchIssueDetails } from "./linear";
+import { fetchIssueDetails, fetchTeamWorkflowStates } from "./linear";
 
 async function requireViewer(req: Request): Promise<Response | null> {
   const security = getSecurityConfig();
@@ -322,9 +322,15 @@ async function handleIssueWebhook(
 
   if (orchestrator.shouldStartAgent(issue)) {
     if (orchestrator.hasAgent(agentKey)) {
+      // Fetch workflow states for dynamic state IDs
+      let workflowStates;
+      const realmInfo = issue.team?.key ? getRealmByTeamKey(issue.team.key) : undefined;
+      if (realmInfo?.apiKey && issue.team?.key) {
+        workflowStates = await fetchTeamWorkflowStates(issue.team.key, realmInfo.apiKey);
+      }
       await orchestrator.sendMessage(
         agentKey,
-        buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName)
+        buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName, undefined, undefined, workflowStates)
       );
     } else {
       await orchestrator.startAgent(issue);
@@ -416,8 +422,14 @@ async function handleCommentWebhook(
         return;
       }
 
+      // Fetch workflow states for dynamic state IDs in recovery prompt
+      let workflowStates;
+      if (realmInfo?.apiKey && issue.team?.key) {
+        workflowStates = await fetchTeamWorkflowStates(issue.team.key, realmInfo.apiKey);
+      }
+
       // Send recovery prompt with context, then the comment
-      const recoveryPrompt = buildRecoveryPrompt(comment.issue, savedState, undefined, CONFIG.agentName);
+      const recoveryPrompt = buildRecoveryPrompt(comment.issue, savedState, undefined, CONFIG.agentName, workflowStates);
       await orchestrator.sendMessage(agentKey, recoveryPrompt);
 
       // Mark agent as alive again in persistence

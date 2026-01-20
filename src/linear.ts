@@ -1,7 +1,7 @@
 // ABOUTME: Linear API utilities for fetching issue data.
 // ABOUTME: Provides functions to fetch comments and other issue details.
 
-import type { LinearComment, LinearIssue } from "./types";
+import type { LinearIssue, WorkflowState } from "./types";
 
 export interface FetchedComment {
   id: string;
@@ -146,5 +146,64 @@ export async function fetchIssueDetails(
   } catch (err) {
     console.warn("[Linear] Error fetching issue details:", err);
     return null;
+  }
+}
+
+/**
+ * Fetches workflow states for a team from the Linear API.
+ * Returns states sorted by position.
+ */
+export async function fetchTeamWorkflowStates(
+  teamKey: string,
+  apiKey: string
+): Promise<WorkflowState[]> {
+  const query = `
+    query TeamWorkflowStates($teamKey: String!) {
+      team(key: $teamKey) {
+        states {
+          nodes {
+            id
+            name
+            type
+            position
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({
+        query,
+        variables: { teamKey },
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[Linear] Failed to fetch workflow states: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const states = data?.data?.team?.states?.nodes ?? [];
+
+    // Sort by position and return
+    return states
+      .sort((a: WorkflowState, b: WorkflowState) => a.position - b.position)
+      .map((s: { id: string; name: string; type: string; position: number }) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        position: s.position,
+      }));
+  } catch (err) {
+    console.warn("[Linear] Error fetching workflow states:", err);
+    return [];
   }
 }
