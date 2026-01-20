@@ -514,6 +514,9 @@ function getProjectNameFromPayload(payload: LinearWebhookPayload): string | null
 
   if (type === "Issue" && !isComment(data)) {
     return data.project?.name ?? null;
+  } else if (type === "Comment" && isComment(data)) {
+    // Comment webhooks have project info nested in issue
+    return data.issue?.project?.name ?? null;
   }
 
   return null;
