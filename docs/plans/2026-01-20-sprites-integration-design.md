@@ -2,7 +2,9 @@
 
 ## Overview
 
-Integrate [Sprites](https://sprites.dev/) as the sandbox runtime environment for Amadeus agents. Each Sprite runs its own Amadeus server, providing hardware-isolated execution for Claude Code agents. The existing Cloudflare Worker router forwards webhooks to Sprites instead of bare machines.
+Integrate [Sprites](https://sprites.dev/) as an **optional** sandbox runtime environment for Amadeus agents. Each Sprite runs its own Amadeus server, providing hardware-isolated execution for Claude Code agents. The existing Cloudflare Worker router forwards webhooks to Sprites alongside (not instead of) existing local machine endpoints.
+
+**This is additive, not a replacement.** Existing local machine setups continue to work unchanged. Users can run Sprites, local machines, or both simultaneously.
 
 ## Goals
 
@@ -11,6 +13,8 @@ Integrate [Sprites](https://sprites.dev/) as the sandbox runtime environment for
 - **Seamless integration**: Leverage existing router architecture for webhook routing
 - **Persistent development state**: Preserve git repos, packages, and config between sessions
 - **Checkpoint recovery**: Enable rollback after failed agent operations
+- **Backward compatibility**: Existing local machine setups continue to work unchanged
+- **Hybrid support**: Mix Sprites and local machines in the same router config
 
 ## Architecture
 
@@ -259,18 +263,56 @@ The router matches the issue's project to the Sprite that lists it. This gives u
 - Consolidate projects later to reduce costs
 - Group related projects that share dependencies or context
 
+**Hybrid configuration (Sprites + local machines):**
+
+Users can mix Sprites and local machines in the same config. This supports scenarios where:
+- Some projects need Sprite isolation (untrusted code, experiments)
+- Some projects run on a local machine (faster iteration, GPU access, existing setup)
+
+```json
+{
+  "machines": {
+    "amadeus-ona": {
+      "url": "https://amadeus-ona-abc123.sprites.app",
+      "projects": ["ONA"],
+      "type": "sprite"
+    },
+    "macbook": {
+      "url": "https://macbook.tailnet-abc.ts.net",
+      "projects": ["PERSONAL", "EXPERIMENTS"],
+      "type": "machine"
+    },
+    "gpu-workstation": {
+      "url": "https://gpu-beast.tailnet-abc.ts.net",
+      "projects": ["ML", "TRAINING"],
+      "type": "machine",
+      "labels": ["gpu"]
+    }
+  },
+  "secret": "<shared-secret>"
+}
+```
+
+The optional `type` field helps the router apply appropriate health checking:
+- `"sprite"` - Skip heartbeat checks (Sprites wake on demand)
+- `"machine"` - Require heartbeats (existing behavior)
+- If omitted, router infers from URL pattern (`.sprites.app` = sprite)
+
 ### 4. Health Monitoring Adaptation
 
-Sprites don't need heartbeats in the same way machines do:
+The router needs to handle both Sprites and machines:
 
-**Current behavior (machines):**
+**Local machines (existing behavior):**
 - Amadeus sends heartbeat every 60s
 - Router marks machine offline if heartbeat stale
+- Offline machines get a Linear comment explaining unavailability
 
-**New behavior (Sprites):**
-- Sprites are always "available" (they wake on request)
-- Router can probe Sprite status via Sprites API (optional)
-- Remove heartbeat requirement for Sprite-based endpoints
+**Sprites (new behavior):**
+- No heartbeat required (Sprites wake on demand)
+- Router can optionally probe Sprite status via Sprites API
+- Sprites are always considered "available"
+
+**Implementation:** Router checks the `type` field (or infers from URL) to decide whether to enforce heartbeat requirements for each endpoint.
 
 ### 5. Amadeus Server Modifications
 
@@ -474,8 +516,10 @@ runtime:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Isolation model | Sprite-per-Project (default), configurable | Default to max isolation; allow consolidation via config for cost savings |
+| Backward compatibility | Full support for local machines | Existing setups continue unchanged; Sprites are additive |
+| Hybrid support | Mix Sprites + machines in same config | Users choose per-project; router handles both endpoint types |
 | Sprite port | 8080 | Sprites route public URL to 8080 by default |
-| Heartbeat strategy | None for Sprites | Sprites wake on demand; always "available" |
+| Heartbeat strategy | Type-aware (machines: required, Sprites: none) | Sprites wake on demand; machines need health monitoring |
 | Initial setup | Manual | Keep simple; automate in Phase 4 |
 | Agent isolation | Process-level (within Sprite) | Same as current; Sprite provides outer boundary |
 | Checkpoint strategy | Manual + golden state | Start simple; automate later |
