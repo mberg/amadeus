@@ -12,7 +12,7 @@ import { getGitHubRepoUrl } from "./git-utils";
 import { getRealmByTeamKey } from "./config";
 import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
-import { fetchIssueComments } from "./linear";
+import { fetchIssueComments, createIssueComment } from "./linear";
 
 export interface AgentDeathInfo {
   key: string;
@@ -352,15 +352,16 @@ export class ClaudeOrchestrator {
     const name = this.config.agentName ?? "Amadeus";
     const message = `**🤖 ${name}:** I've received the issue. Beginning the planning process.`;
     console.log(`[Agent] Acknowledging issue ${issue.identifier}`);
-    try {
-      // Use realm-specific API key if provided
-      // linear-cli expects LINEAR_TOKEN, so set both for compatibility
-      const env = apiKey
-        ? { ...process.env, LINEAR_API_KEY: apiKey, LINEAR_TOKEN: apiKey }
-        : process.env;
-      await Bun.$`linear-cli comments create --body ${message} ${issue.identifier}`.env(env).quiet();
-    } catch (err) {
-      console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}:`, err);
+
+    const key = apiKey ?? process.env.LINEAR_API_KEY;
+    if (!key) {
+      console.error(`[Agent] No API key available to acknowledge issue ${issue.identifier}`);
+      return;
+    }
+
+    const success = await createIssueComment(issue.id, message, key);
+    if (!success) {
+      console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}`);
     }
   }
 
