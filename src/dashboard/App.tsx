@@ -80,10 +80,10 @@ export function App() {
       <main className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-52")}>
         {/* Machine identity header */}
         {config.machineName && (
-          <div className="flex items-center justify-end px-8 py-3 border-b border-border bg-muted/30">
+          <div className="flex items-center justify-end px-8 py-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{config.machineName}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                 {getMachineTypeLabel(config.runtimeMode)}
               </span>
             </div>
