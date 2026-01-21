@@ -78,11 +78,15 @@ realms:
 
     projects:
       - teamKey: ENG           # Linear team key (from issue IDs like ENG-123)
-        path: /path/to/repo    # Local repository path
-        profile: base          # Agent profile to use
+        linearProject: Backend  # Route by project name within team
+        path: /path/to/backend
+        githubRepoUrl: https://github.com/mycompany/backend
+        profile: base
 
-      - teamKey: DESIGN
-        path: /path/to/design-repo
+      - teamKey: ENG
+        linearProject: Frontend
+        path: /path/to/frontend
+        githubRepoUrl: https://github.com/mycompany/frontend
         profile: frontend
         spriteUrl: https://my-sprite.sprites.dev  # Forward to Sprite instead of local
 
@@ -94,6 +98,7 @@ realms:
     projects:
       - teamKey: SIDE
         path: /path/to/sidegig
+        githubRepoUrl: https://github.com/user/sidegig
 ```
 
 ### Projects
@@ -101,7 +106,9 @@ realms:
 Each project maps a Linear team to a local repository:
 
 - **teamKey** - The Linear team prefix (e.g., `ENG` for issues like `ENG-123`)
+- **linearProject** - Route by Linear project name within team (optional)
 - **path** - Absolute path to the git repository
+- **githubRepoUrl** - GitHub repository URL for PR links
 - **profile** - Agent profile to use (optional, falls back to `defaultProfile`)
 - **spriteUrl** - Forward webhooks to a Sprite VM instead of running locally (optional)
 
