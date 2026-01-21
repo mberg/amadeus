@@ -73,4 +73,51 @@ describe("MachineRegistry", () => {
     ]);
     expect(registry.getAll().length).toBe(2);
   });
+
+  test("tracks agent idle start time", () => {
+    registry.register("Frank", "http://frank.local:5678");
+
+    // First heartbeat with idle state
+    const agents = [{ key: "agent-1", linearState: "Needs Feedback" }] as any[];
+    registry.updateStatus("Frank", "healthy", agents);
+
+    const idleInfo = registry.getAgentIdleInfo("Frank", "agent-1");
+    expect(idleInfo?.idleStartTime).toBeDefined();
+    expect(idleInfo?.linearState).toBe("Needs Feedback");
+  });
+
+  test("clears idle time when agent leaves idle state", () => {
+    registry.register("Frank", "http://frank.local:5678");
+
+    // Start idle
+    registry.updateStatus("Frank", "healthy", [
+      { key: "agent-1", linearState: "Needs Feedback" } as any,
+    ]);
+    expect(registry.getAgentIdleInfo("Frank", "agent-1")?.idleStartTime).toBeDefined();
+
+    // Leave idle state
+    registry.updateStatus("Frank", "healthy", [
+      { key: "agent-1", linearState: "In Progress" } as any,
+    ]);
+    expect(registry.getAgentIdleInfo("Frank", "agent-1")?.idleStartTime).toBeUndefined();
+  });
+
+  test("getIdleAgents returns agents idle longer than threshold", () => {
+    registry.register("Frank", "http://frank.local:5678");
+
+    registry.updateStatus("Frank", "healthy", [
+      { key: "agent-1", linearState: "Needs Feedback" } as any,
+    ]);
+
+    // Manually backdate idle start time
+    const info = registry.getAgentIdleInfo("Frank", "agent-1");
+    if (info) {
+      info.idleStartTime = new Date(Date.now() - 20 * 60 * 1000); // 20 min ago
+    }
+
+    const idleAgents = registry.getIdleAgents(["Needs Feedback"], 15 * 60 * 1000);
+    expect(idleAgents.length).toBe(1);
+    expect(idleAgents[0].agentKey).toBe("agent-1");
+    expect(idleAgents[0].machineName).toBe("Frank");
+  });
 });
