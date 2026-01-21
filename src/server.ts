@@ -833,7 +833,7 @@ export const server = Bun.serve({
         const agents = await orchestrator.getStatusWithMemory();
         localStatus = {
           name: machineConfig.name,
-          url: `http://localhost:${serverPort}`,
+          url: "", // Empty URL signals to dashboard this is local (no proxy needed)
           status: "healthy" as const,
           agents,
           agentCount: agents.length,
