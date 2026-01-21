@@ -13,7 +13,16 @@ import { useStatus } from "./hooks/useStatus";
 import { useAuth } from "./components/AuthProvider";
 import { collectUniqueSkills } from "./lib/filter";
 import { cn } from "./lib/utils";
-import type { Task } from "./types";
+import type { Task, RuntimeMode } from "./types";
+
+function getMachineTypeLabel(mode?: RuntimeMode): string {
+  switch (mode) {
+    case "machine": return "Sprite";
+    case "hub": return "Hub";
+    case "standalone": return "Local";
+    default: return "Local";
+  }
+}
 
 export function App() {
   const { tasks, completedTasks, completedTotal, config, lastUpdated, loadMoreCompleted, hasMoreCompleted } = useStatus();
@@ -64,11 +73,22 @@ export function App() {
         onNavigate={setActiveNav}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
-        machineName={config.machineName}
+        runtimeMode={config.runtimeMode}
       />
 
       {/* Main content area - offset by sidebar width */}
       <main className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-52")}>
+        {/* Machine identity header */}
+        {config.machineName && (
+          <div className="flex items-center justify-end px-8 py-3 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{config.machineName}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                {getMachineTypeLabel(config.runtimeMode)}
+              </span>
+            </div>
+          </div>
+        )}
         <div className="min-h-screen p-8">
           {activeNav === "tasks" && (
             <div className="space-y-6">

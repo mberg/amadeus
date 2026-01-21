@@ -5,6 +5,7 @@ import { ListTodo, Settings, Blocks, Sun, Moon, Server } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { UserMenu, SignOutButton } from "./UserMenu";
+import type { RuntimeMode } from "../types";
 
 export type NavItem = "tasks" | "machines" | "settings";
 
@@ -13,10 +14,11 @@ interface SidebarProps {
   onNavigate: (item: NavItem) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  machineName?: string;
+  runtimeMode?: RuntimeMode;
 }
 
-export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, machineName }: SidebarProps) {
+export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, runtimeMode }: SidebarProps) {
+  const showMachinesNav = runtimeMode !== "machine";
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -37,12 +39,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, m
         >
           <Blocks className="h-5 w-5 text-foreground shrink-0" />
           {!collapsed && (
-            <div className="flex flex-col items-start">
-              <span className="text-base font-semibold tracking-tight leading-tight">Amadeus</span>
-              {machineName && (
-                <span className="text-xs text-muted-foreground leading-tight">{machineName}</span>
-              )}
-            </div>
+            <span className="text-base font-semibold tracking-tight leading-tight">Amadeus</span>
           )}
         </button>
 
@@ -68,20 +65,22 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, m
               <ListTodo className="h-4 w-4 shrink-0" />
               {!collapsed && "Tasks"}
             </button>
-            <button
-              onClick={() => onNavigate("machines")}
-              title="Machines"
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                activeItem === "machines"
-                  ? "bg-muted/50 text-foreground"
-                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
-                collapsed && "justify-center px-2"
-              )}
-            >
-              <Server className="h-4 w-4 shrink-0" />
-              {!collapsed && "Machines"}
-            </button>
+            {showMachinesNav && (
+              <button
+                onClick={() => onNavigate("machines")}
+                title="Machines"
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  activeItem === "machines"
+                    ? "bg-muted/50 text-foreground"
+                    : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                  collapsed && "justify-center px-2"
+                )}
+              >
+                <Server className="h-4 w-4 shrink-0" />
+                {!collapsed && "Machines"}
+              </button>
+            )}
             <button
               onClick={() => onNavigate("settings")}
               title="Settings"
