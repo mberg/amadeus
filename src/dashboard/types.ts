@@ -15,6 +15,7 @@ export interface Task {
   uptime: number;
   worktreePath?: string;
   memoryMB?: number;
+  machineName?: string;
 }
 
 export interface Message {

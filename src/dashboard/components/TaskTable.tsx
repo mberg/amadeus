@@ -119,6 +119,12 @@ export function TaskTable({
     [completedTasks, searchQuery, selectedStates]
   );
 
+  // Show machine column when tasks have machineName (aggregated from hub)
+  const showMachineColumn = useMemo(() =>
+    tasks.some(t => t.machineName),
+    [tasks]
+  );
+
   const handleStopConfirm = useCallback(() => {
     if (taskToStop) {
       onStopTask(taskToStop.key);
@@ -144,6 +150,19 @@ export function TaskTable({
           {row.getValue("issueIdentifier")}
         </span>
       ),
+    },
+    {
+      accessorKey: "machineName",
+      header: "Machine",
+      cell: ({ row }) => {
+        const machineName = row.getValue("machineName") as string | undefined;
+        if (!machineName) return <span className="text-muted-foreground">-</span>;
+        return (
+          <span className="text-muted-foreground text-sm">
+            {machineName}
+          </span>
+        );
+      },
     },
     {
       accessorKey: "pid",
@@ -349,6 +368,9 @@ export function TaskTable({
     state: {
       sorting,
       columnFilters,
+      columnVisibility: {
+        machineName: showMachineColumn,
+      },
     },
   });
 
