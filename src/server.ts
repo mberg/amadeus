@@ -848,13 +848,11 @@ export const server = Bun.serve({
     }
 
     // Hub proxy for remote machine agent messages
+    // No browser auth required - hub handles machine auth using stored API keys
     if (req.method === "POST" && url.pathname === "/hub/proxy/messages") {
       if (!isHubMode() && !isStandaloneMode()) {
         return new Response("Not available in machine mode", { status: 404 });
       }
-
-      const authError = await requireViewer(req);
-      if (authError) return authError;
 
       const body = await req.json();
       const { machineUrl, taskKey } = body as { machineUrl: string; taskKey: string };
@@ -891,13 +889,11 @@ export const server = Bun.serve({
     }
 
     // Hub proxy for remote machine agent stop
+    // No browser auth required - hub handles machine auth using stored API keys
     if (req.method === "POST" && url.pathname === "/hub/proxy/stop") {
       if (!isHubMode() && !isStandaloneMode()) {
         return new Response("Not available in machine mode", { status: 404 });
       }
-
-      const authError = await requireViewer(req);
-      if (authError) return authError;
 
       const body = await req.json();
       const { machineUrl, taskKey } = body as { machineUrl: string; taskKey: string };
@@ -935,13 +931,11 @@ export const server = Bun.serve({
     }
 
     // Hub proxy for remote machine trigger (send message to agent)
+    // No browser auth required - hub handles machine auth using stored API keys
     if (req.method === "POST" && url.pathname === "/hub/proxy/trigger") {
       if (!isHubMode() && !isStandaloneMode()) {
         return new Response("Not available in machine mode", { status: 404 });
       }
-
-      const authError = await requireViewer(req);
-      if (authError) return authError;
 
       const body = await req.json();
       const { machineUrl, agentKey, message } = body as { machineUrl: string; agentKey: string; message: string };

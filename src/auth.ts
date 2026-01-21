@@ -168,6 +168,11 @@ export async function requireAuth(
   }
 
   if (context.mode === "simple") {
+    // Machine-to-machine auth already grants the appropriate role
+    if (context.userId === "machine" && hasRole(context.role, requiredRole)) {
+      return { authorized: true, context };
+    }
+
     const hasApiToken = options.apiToken && req.headers.get("X-Amadeus-Token") === options.apiToken;
 
     if (requiredRole === "admin") {
