@@ -45,11 +45,6 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, r
 
         {/* Navigation */}
         <nav className="flex-1 flex flex-col px-3 pt-4">
-          {!collapsed && (
-            <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
-              Menu
-            </div>
-          )}
           <div className="space-y-1">
             <button
               onClick={() => onNavigate("tasks")}
