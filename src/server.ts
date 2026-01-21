@@ -134,6 +134,11 @@ if (isMachineMode() || isStandaloneMode()) {
     worktreesDir: CONFIG.worktreesDir,
     onAgentDeath: handleAgentDeath,
     onAgentComplete: handleAgentComplete,
+    onAgentChange: () => {
+      // Notify hub heartbeat immediately when agents change
+      hubHeartbeat?.notifyAgentChange();
+      healthMonitor?.notifyAgentCountChanged();
+    },
     linearWorkspace: CONFIG.linearWorkspace,
     agentName: CONFIG.agentName,
     profilesDir: CONFIG.profilesDir,

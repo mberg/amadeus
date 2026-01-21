@@ -46,6 +46,7 @@ export interface OrchestratorConfig {
   worktreesDir?: string;
   onAgentDeath?: (info: AgentDeathInfo) => void;
   onAgentComplete?: (info: AgentCompletionInfo) => void;
+  onAgentChange?: () => void; // Called immediately when agent list changes
   linearWorkspace?: string;
   agentName?: string;
 }
@@ -491,6 +492,9 @@ export class ClaudeOrchestrator {
       startedAt: new Date(),
     });
 
+    // Notify immediately when agent is added (before waiting for ready)
+    this.config.onAgentChange?.();
+
     // Set up exit handler for unexpected deaths
     this.setupExitHandler(key, proc, issue.id, issue.identifier);
 
@@ -505,6 +509,7 @@ export class ClaudeOrchestrator {
         await removeWorktree({ repoPath: projectPath, worktreePath });
       }
       this.agents.delete(key);
+      this.config.onAgentChange?.();
       return;
     }
 
@@ -576,6 +581,7 @@ export class ClaudeOrchestrator {
 
       // Remove from agents map
       this.agents.delete(key);
+      this.config.onAgentChange?.();
 
       // Call the death handler if configured
       if (this.config.onAgentDeath) {
@@ -793,5 +799,6 @@ export class ClaudeOrchestrator {
     this.clearPendingMessages(key);
 
     this.agents.delete(key);
+    this.config.onAgentChange?.();
   }
 }
