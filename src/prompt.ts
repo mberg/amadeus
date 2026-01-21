@@ -135,11 +135,11 @@ function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSec
   const reviewNotificationSection = workspace ? `
 **Step 7:** Notify the issue creator by assigning the issue to them:
 \`\`\`bash
-linear-cli issues get ${issue.identifier} -o json
+linear-cli users list
 \`\`\`
-Find the creator's email and assign:
+Find the creator's user ID (UUID), then assign:
 \`\`\`bash
-linear-cli issues update ${issue.identifier} --assignee "<email>"
+linear-cli issues update ${issue.identifier} --assignee "<user-uuid>"
 \`\`\`
 
 This triggers an inbox notification that the PR is ready for review.
@@ -323,16 +323,14 @@ function buildNotificationSection(
   return `
 **Notify the issue creator:** After posting your plan, assign the issue to the creator to trigger an inbox notification:
 
-1. Get the issue creator's info:
+1. List users to find the creator's UUID:
 \`\`\`bash
-linear-cli issues get ${issueIdentifier ?? "<identifier>"} -o json
+linear-cli users list
 \`\`\`
 
-2. Find the creator's email (e.g., \`mberg@ona.io\`)
-
-3. Assign the issue to them:
+2. Assign the issue using their UUID:
 \`\`\`bash
-linear-cli issues update ${issueIdentifier ?? "<identifier>"} --assignee "<email>"
+linear-cli issues update ${issueIdentifier ?? "<identifier>"} --assignee "<user-uuid>"
 \`\`\`
 
 This triggers a reliable inbox notification for the user.

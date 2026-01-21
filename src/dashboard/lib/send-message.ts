@@ -8,7 +8,8 @@ export interface SendMessageResult {
 
 export async function sendMessage(
   agentKey: string,
-  message: string
+  message: string,
+  machineUrl?: string
 ): Promise<SendMessageResult> {
   const trimmedMessage = message.trim();
 
@@ -17,16 +18,23 @@ export async function sendMessage(
   }
 
   try {
-    const response = await fetch("/trigger", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        agentKey,
-        message: trimmedMessage,
-      }),
-    });
+    let response: Response;
+
+    if (machineUrl) {
+      // Remote task - use hub proxy
+      response = await fetch("/hub/proxy/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ machineUrl, agentKey, message: trimmedMessage }),
+      });
+    } else {
+      // Local task
+      response = await fetch("/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentKey, message: trimmedMessage }),
+      });
+    }
 
     if (!response.ok) {
       return { success: false, error: "Failed to send message" };

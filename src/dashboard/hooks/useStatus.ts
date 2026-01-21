@@ -7,6 +7,16 @@ import type { Task, CompletedTask, DashboardConfig, StatusResponse, HistoryRespo
 const POLL_INTERVAL = 2000; // 2 seconds
 const HISTORY_PAGE_SIZE = 20;
 
+interface HubStatusResponse {
+  machines: Array<{
+    name: string;
+    url: string;
+    status: "healthy" | "unhealthy" | "unknown";
+    agents: Task[];
+  }>;
+  timestamp: string;
+}
+
 interface UseStatusReturn {
   tasks: Task[];
   completedTasks: CompletedTask[];
@@ -44,13 +54,37 @@ export function useStatus(): UseStatusReturn {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const response = await fetch("/status");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // In hub/standalone mode, aggregate tasks from all machines
+      const isAggregateMode = config.runtimeMode === "hub" || config.runtimeMode === "standalone";
+
+      if (isAggregateMode) {
+        const response = await fetch("/hub/status");
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data: HubStatusResponse = await response.json();
+
+        // Flatten all machines' agents with machine name and URL
+        const allTasks: Task[] = data.machines.flatMap(machine =>
+          machine.agents.map(agent => ({
+            ...agent,
+            machineName: machine.name,
+            machineUrl: machine.url,
+          }))
+        );
+
+        setTasks(allTasks);
+        setLastUpdated(new Date(data.timestamp));
+      } else {
+        // Machine mode or unknown - fetch local only
+        const response = await fetch("/status");
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data: StatusResponse = await response.json();
+        setTasks(data.agents);
+        setLastUpdated(new Date(data.timestamp));
       }
-      const data: StatusResponse = await response.json();
-      setTasks(data.agents);
-      setLastUpdated(new Date(data.timestamp));
       setError(null);
     } catch (err) {
       console.error("Failed to fetch status:", err);
@@ -58,7 +92,7 @@ export function useStatus(): UseStatusReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [config.runtimeMode]);
 
   const fetchHistory = useCallback(async (offset: number = 0) => {
     try {

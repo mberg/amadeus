@@ -55,13 +55,35 @@ export type RouterConfig = z.infer<typeof RouterConfigSchema>;
 
 /**
  * Runtime mode for the Amadeus server.
- * - 'machine': Running on a local machine with heartbeat (default)
- * - 'sprite': Running in a Sprite VM (no heartbeat, uses PORT env var)
- * - 'local': Local development mode (no heartbeat, no router)
+ * - 'standalone': Hub + Machine combined (default, for solo users)
+ * - 'hub': Routing + aggregate dashboard only (no agent execution)
+ * - 'machine': Agent execution + local dashboard only
  */
-export const RuntimeModeSchema = z.enum(["machine", "sprite", "local"]).default("machine");
+export const RuntimeModeSchema = z.enum(["standalone", "hub", "machine"]).default("standalone");
 
 export type RuntimeMode = z.infer<typeof RuntimeModeSchema>;
+
+/**
+ * Schema for machine identity and settings.
+ */
+export const MachineConfigSchema = z.object({
+  name: z.string().min(1, "Machine name cannot be empty"),
+  hubUrl: z.string().url().optional(),
+  heartbeat: z.boolean().default(false),
+});
+
+export type MachineConfig = z.infer<typeof MachineConfigSchema>;
+
+/**
+ * Schema for a static machine entry (for hub config).
+ */
+export const StaticMachineSchema = z.object({
+  name: z.string().min(1, "Machine name cannot be empty"),
+  url: z.string().url("Machine URL must be valid"),
+  apiKey: z.string().optional(),
+});
+
+export type StaticMachine = z.infer<typeof StaticMachineSchema>;
 
 /**
  * Schema for global configuration settings.
@@ -78,9 +100,11 @@ export const GlobalConfigSchema = z.object({
   healthCheckIntervalMs: z.number().int().positive().default(30000),
   healthCheckTimeoutMs: z.number().int().positive().default(5000),
   disablePRCheck: z.boolean().default(false), // Disable periodic PR merge checking
-  security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false }),
+  security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false, publicDashboard: false }),
   router: RouterConfigSchema.optional(),
   runtimeMode: RuntimeModeSchema,
+  machine: MachineConfigSchema.optional(),
+  machines: z.array(StaticMachineSchema).optional(),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
@@ -124,6 +148,7 @@ export interface ResolvedConfig {
   realms: ResolvedRealm[];
   global: GlobalConfig;
   router?: ResolvedRouterConfig;
+  machines?: Array<{ name: string; url: string; apiKey?: string }>;
   // Convenience lookups
   realmByWorkspace: Map<string, ResolvedRealm>;
   realmByTeamKey: Map<string, ResolvedRealm>;

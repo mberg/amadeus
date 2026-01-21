@@ -8,11 +8,21 @@ import { TaskTable } from "./components/TaskTable";
 import { MessagePanel } from "./components/MessagePanel";
 import { SearchFilterBar } from "./components/SearchFilterBar";
 import { SettingsPage } from "./components/SettingsPage";
+import { MachinesView } from "./components/MachinesView";
 import { useStatus } from "./hooks/useStatus";
 import { useAuth } from "./components/AuthProvider";
 import { collectUniqueSkills } from "./lib/filter";
 import { cn } from "./lib/utils";
-import type { Task } from "./types";
+import type { Task, RuntimeMode } from "./types";
+
+function getMachineTypeLabel(mode?: RuntimeMode): string {
+  switch (mode) {
+    case "machine": return "Sprite";
+    case "hub": return "Hub";
+    case "standalone": return "Local";
+    default: return "Local";
+  }
+}
 
 export function App() {
   const { tasks, completedTasks, completedTotal, config, lastUpdated, loadMoreCompleted, hasMoreCompleted } = useStatus();
@@ -34,11 +44,24 @@ export function App() {
     setSelectedTask(null);
   }, []);
 
-  const handleStopTask = useCallback(async (taskKey: string) => {
+  const handleStopTask = useCallback(async (taskKey: string, machineUrl?: string) => {
     try {
-      const response = await fetch(`/agents/${encodeURIComponent(taskKey)}/stop`, {
-        method: "POST",
-      });
+      let response: Response;
+
+      if (machineUrl) {
+        // Remote task - use hub proxy
+        response = await fetch("/hub/proxy/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineUrl, taskKey }),
+        });
+      } else {
+        // Local task
+        response = await fetch(`/agents/${encodeURIComponent(taskKey)}/stop`, {
+          method: "POST",
+        });
+      }
+
       if (!response.ok) {
         console.error("Failed to stop task:", response.status);
         alert("Failed to stop task");
@@ -63,10 +86,22 @@ export function App() {
         onNavigate={setActiveNav}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        runtimeMode={config.runtimeMode}
       />
 
       {/* Main content area - offset by sidebar width */}
       <main className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-52")}>
+        {/* Machine identity header */}
+        {config.machineName && (
+          <div className="flex items-center justify-end px-8 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{config.machineName}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-500 text-white shadow-[0_0_8px_rgba(34,197,94,0.6)] dark:shadow-[0_0_10px_rgba(34,197,94,0.5)]">
+                {getMachineTypeLabel(config.runtimeMode)}
+              </span>
+            </div>
+          </div>
+        )}
         <div className="min-h-screen p-8">
           {activeNav === "tasks" && (
             <div className="space-y-6">
@@ -114,6 +149,8 @@ export function App() {
               </div>
             </div>
           )}
+
+          {activeNav === "machines" && <MachinesView />}
 
           {activeNav === "settings" && (
             <SettingsPage setup={config.setup} />

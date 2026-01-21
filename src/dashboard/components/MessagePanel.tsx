@@ -64,7 +64,7 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 export function MessagePanel({ task, onClose }: MessagePanelProps) {
-  const { messages, isLoading, error } = useMessages(task?.key ?? null);
+  const { messages, isLoading, error } = useMessages(task?.key ?? null, task?.machineUrl);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -127,7 +127,7 @@ export function MessagePanel({ task, onClose }: MessagePanelProps) {
     if (!task || !inputText.trim() || isSending) return;
 
     setIsSending(true);
-    const result = await sendMessage(task.key, inputText);
+    const result = await sendMessage(task.key, inputText, task.machineUrl);
     setIsSending(false);
 
     if (result.success) {

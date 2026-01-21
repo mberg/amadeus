@@ -130,53 +130,53 @@ realms:
       expect(config.global.defaultProfile).toBe("base");
       expect(config.global.healthCheckIntervalMs).toBe(30000);
       expect(config.global.healthCheckTimeoutMs).toBe(5000);
+      expect(config.global.runtimeMode).toBe("standalone");
+    });
+
+    it("accepts hub runtime mode", () => {
+      process.env.LINEAR_API_KEY_TEST = "test-key";
+      process.env.LINEAR_WEBHOOK_SECRET_TEST = "test-secret";
+
+      const configYaml = `
+realms:
+  test:
+    linearWorkspace: test
+    apiKeyEnvVar: LINEAR_API_KEY_TEST
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_TEST
+    projects:
+      - teamKey: TEST
+        path: /test
+global:
+  runtimeMode: hub
+`;
+      writeFileSync(join(testDir, "amadeus.config.yaml"), configYaml);
+
+      const config = loadConfig(testDir);
+
+      expect(config.global.runtimeMode).toBe("hub");
+    });
+
+    it("accepts machine runtime mode", () => {
+      process.env.LINEAR_API_KEY_TEST = "test-key";
+      process.env.LINEAR_WEBHOOK_SECRET_TEST = "test-secret";
+
+      const configYaml = `
+realms:
+  test:
+    linearWorkspace: test
+    apiKeyEnvVar: LINEAR_API_KEY_TEST
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_TEST
+    projects:
+      - teamKey: TEST
+        path: /test
+global:
+  runtimeMode: machine
+`;
+      writeFileSync(join(testDir, "amadeus.config.yaml"), configYaml);
+
+      const config = loadConfig(testDir);
+
       expect(config.global.runtimeMode).toBe("machine");
-    });
-
-    it("accepts sprite runtime mode", () => {
-      process.env.LINEAR_API_KEY_TEST = "test-key";
-      process.env.LINEAR_WEBHOOK_SECRET_TEST = "test-secret";
-
-      const configYaml = `
-realms:
-  test:
-    linearWorkspace: test
-    apiKeyEnvVar: LINEAR_API_KEY_TEST
-    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_TEST
-    projects:
-      - teamKey: TEST
-        path: /test
-global:
-  runtimeMode: sprite
-`;
-      writeFileSync(join(testDir, "amadeus.config.yaml"), configYaml);
-
-      const config = loadConfig(testDir);
-
-      expect(config.global.runtimeMode).toBe("sprite");
-    });
-
-    it("accepts local runtime mode", () => {
-      process.env.LINEAR_API_KEY_TEST = "test-key";
-      process.env.LINEAR_WEBHOOK_SECRET_TEST = "test-secret";
-
-      const configYaml = `
-realms:
-  test:
-    linearWorkspace: test
-    apiKeyEnvVar: LINEAR_API_KEY_TEST
-    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_TEST
-    projects:
-      - teamKey: TEST
-        path: /test
-global:
-  runtimeMode: local
-`;
-      writeFileSync(join(testDir, "amadeus.config.yaml"), configYaml);
-
-      const config = loadConfig(testDir);
-
-      expect(config.global.runtimeMode).toBe("local");
     });
 
     it("rejects invalid runtime mode", () => {

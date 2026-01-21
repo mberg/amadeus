@@ -15,6 +15,8 @@ export interface Task {
   uptime: number;
   worktreePath?: string;
   memoryMB?: number;
+  machineName?: string;
+  machineUrl?: string;
 }
 
 export interface Message {
@@ -49,8 +51,12 @@ export interface SetupData {
   global: SetupGlobal;
 }
 
+export type RuntimeMode = "standalone" | "hub" | "machine" | "sprite";
+
 export interface DashboardConfig {
   linearWorkspace?: string;
+  machineName?: string;
+  runtimeMode?: RuntimeMode;
   setup?: SetupData | null;
 }
 
