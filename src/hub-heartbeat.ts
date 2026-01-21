@@ -19,7 +19,7 @@ export class HubHeartbeat {
   private config: Required<Omit<HubHeartbeatConfig, "apiKey">> & { apiKey?: string };
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private getAgents: () => Promise<AgentStatus[]>;
-  private lastAgentCount = 0;
+  private lastAgentCount = -1; // -1 means unknown (first run)
   private idleStartTime: number | null = null;
   private isStopped = false;
 
@@ -73,8 +73,11 @@ export class HubHeartbeat {
         this.idleStartTime = null;
       }
 
-      // Adjust interval if agent count changed between active/idle
-      if ((previousCount === 0 && agents.length > 0) || (previousCount > 0 && agents.length === 0)) {
+      // Adjust interval on first run or if agent count changed between active/idle
+      const isFirstRun = previousCount === -1;
+      const becameActive = previousCount === 0 && agents.length > 0;
+      const becameIdle = previousCount > 0 && agents.length === 0;
+      if (isFirstRun || becameActive || becameIdle) {
         this.updateInterval();
       }
     } catch (err) {
