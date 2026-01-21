@@ -8,13 +8,11 @@ Amadeus is an AI agent orchestration system that uses Linear and GitHub as a con
 
 - **Leverage tools we already use** - I wanted a way to leverage tools we already use—Linear and GitHub—to manage the software development process. All decisions and conversations with Claude Code can be incorporated in these for others (including agents) to see.
 
-- **Fire off issues, address papercuts** - I want to be able to fire off issues from polished Linear and GitHub interfaces instead of building my own. Being able to fire off issues to claude from phone whether it's scoping a new idea or addressing papercuts is a huge win.
+- **Fire off issues, address papercuts** - I wantaz to be able to fire off issues from polished Linear and GitHub interfaces instead of building my own. Being able to create new taks from my phone whether it's scoping a new idea or addressing papercuts is a huge win.
 
 - **No token costs** - I wanted to leverage my Claude Max account and not pay for extra tokens. The ability to leverage the AgentAPI instead of using Claude's Agent SDK makes this possible.
 
-- **Flexible deployment** - I want to be able to run my agents on my local machines (via Tailscale Funnel) for projects that have complex setups or need a lot of CPU, or via Sprites (sandbox VMs).
-
-- **Portability** - Related to the above—I want to be increasingly portable. I want to be able to work from my phone or SSH into Claude Code if needed, without a heavy dev setup.
+- **Flexible deployment** - I wantaz to be able to run my agents on my local machines (via Tailscale Funnel) for projects that have complex setups or need a lot of CPU, or via Sprites (sandbox VMs).
 
 - **Skills and agent profiles** - I wanted to be able to create different profiles for the Claude Code agents I call, with different skills that can be preconfigured on the fly.
 
