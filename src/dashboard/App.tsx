@@ -83,7 +83,7 @@ export function App() {
           <div className="flex items-center justify-end px-8 py-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{config.machineName}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-500 text-white shadow-[0_0_8px_rgba(34,197,94,0.6)] dark:shadow-[0_0_10px_rgba(34,197,94,0.5)]">
                 {getMachineTypeLabel(config.runtimeMode)}
               </span>
             </div>
