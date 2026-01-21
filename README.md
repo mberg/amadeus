@@ -1,6 +1,6 @@
 # Amadeus
 
-An AI agent orchestration system that uses Linear and GitHub as a control plane. Fire off issues, let Claude Code agents work them in parallel, and check back when they're ready for review.
+Amadeus is an AI agent orchestration system that uses Linear and GitHub as a control plane. Fire off issues, let Claude Code agents work them in parallel, and check back when feedback is needed or they are ready for review.
 
 ## Why Amadeus?
 
