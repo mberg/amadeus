@@ -44,11 +44,24 @@ export function App() {
     setSelectedTask(null);
   }, []);
 
-  const handleStopTask = useCallback(async (taskKey: string) => {
+  const handleStopTask = useCallback(async (taskKey: string, machineUrl?: string) => {
     try {
-      const response = await fetch(`/agents/${encodeURIComponent(taskKey)}/stop`, {
-        method: "POST",
-      });
+      let response: Response;
+
+      if (machineUrl) {
+        // Remote task - use hub proxy
+        response = await fetch("/hub/proxy/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineUrl, taskKey }),
+        });
+      } else {
+        // Local task
+        response = await fetch(`/agents/${encodeURIComponent(taskKey)}/stop`, {
+          method: "POST",
+        });
+      }
+
       if (!response.ok) {
         console.error("Failed to stop task:", response.status);
         alert("Failed to stop task");

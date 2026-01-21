@@ -12,7 +12,7 @@ interface UseMessagesReturn {
   error: string | null;
 }
 
-export function useMessages(taskKey: string | null): UseMessagesReturn {
+export function useMessages(taskKey: string | null, machineUrl?: string): UseMessagesReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,9 +21,20 @@ export function useMessages(taskKey: string | null): UseMessagesReturn {
     if (!taskKey) return;
 
     try {
-      const response = await fetch(
-        `/agents/${encodeURIComponent(taskKey)}/messages`
-      );
+      let response: Response;
+
+      if (machineUrl) {
+        // Remote task - use hub proxy
+        response = await fetch("/hub/proxy/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineUrl, taskKey }),
+        });
+      } else {
+        // Local task
+        response = await fetch(`/agents/${encodeURIComponent(taskKey)}/messages`);
+      }
+
       if (!response.ok) {
         if (response.status === 404) {
           setError("Task not found");
@@ -40,7 +51,7 @@ export function useMessages(taskKey: string | null): UseMessagesReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [taskKey]);
+  }, [taskKey, machineUrl]);
 
   // Reset when taskKey changes
   useEffect(() => {

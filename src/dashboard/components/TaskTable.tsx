@@ -43,7 +43,7 @@ interface TaskTableProps {
   onToggleCompleted: () => void;
   linearWorkspace?: string;
   onSelectTask: (task: Task) => void;
-  onStopTask: (taskKey: string) => void;
+  onStopTask: (taskKey: string, machineUrl?: string) => void;
   onLoadMoreCompleted: () => void;
   hasMoreCompleted: boolean;
   searchQuery?: string;
@@ -127,7 +127,7 @@ export function TaskTable({
 
   const handleStopConfirm = useCallback(() => {
     if (taskToStop) {
-      onStopTask(taskToStop.key);
+      onStopTask(taskToStop.key, taskToStop.machineUrl);
       setTaskToStop(null);
     }
   }, [taskToStop, onStopTask]);

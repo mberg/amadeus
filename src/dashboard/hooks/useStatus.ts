@@ -10,6 +10,7 @@ const HISTORY_PAGE_SIZE = 20;
 interface HubStatusResponse {
   machines: Array<{
     name: string;
+    url: string;
     status: "healthy" | "unhealthy" | "unknown";
     agents: Task[];
   }>;
@@ -63,11 +64,12 @@ export function useStatus(): UseStatusReturn {
         }
         const data: HubStatusResponse = await response.json();
 
-        // Flatten all machines' agents with machine name
+        // Flatten all machines' agents with machine name and URL
         const allTasks: Task[] = data.machines.flatMap(machine =>
           machine.agents.map(agent => ({
             ...agent,
             machineName: machine.name,
+            machineUrl: machine.url,
           }))
         );
 

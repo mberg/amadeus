@@ -847,6 +847,138 @@ export const server = Bun.serve({
       });
     }
 
+    // Hub proxy for remote machine agent messages
+    if (req.method === "POST" && url.pathname === "/hub/proxy/messages") {
+      if (!isHubMode() && !isStandaloneMode()) {
+        return new Response("Not available in machine mode", { status: 404 });
+      }
+
+      const authError = await requireViewer(req);
+      if (authError) return authError;
+
+      const body = await req.json();
+      const { machineUrl, taskKey } = body as { machineUrl: string; taskKey: string };
+
+      if (!machineUrl || !taskKey) {
+        return new Response("Missing machineUrl or taskKey", { status: 400 });
+      }
+
+      // Find machine to get API key
+      const machine = machineRegistry?.getAll().find(m => m.url === machineUrl);
+      const headers: Record<string, string> = {};
+      if (machine?.apiKey) {
+        headers["Authorization"] = `Bearer ${machine.apiKey}`;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+
+        const res = await fetch(`${machineUrl}/agents/${encodeURIComponent(taskKey)}/messages`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          return new Response(await res.text(), { status: res.status });
+        }
+        return Response.json(await res.json());
+      } catch (err) {
+        console.error("[Hub] Proxy messages error:", err);
+        return new Response("Failed to fetch messages from remote machine", { status: 502 });
+      }
+    }
+
+    // Hub proxy for remote machine agent stop
+    if (req.method === "POST" && url.pathname === "/hub/proxy/stop") {
+      if (!isHubMode() && !isStandaloneMode()) {
+        return new Response("Not available in machine mode", { status: 404 });
+      }
+
+      const authError = await requireViewer(req);
+      if (authError) return authError;
+
+      const body = await req.json();
+      const { machineUrl, taskKey } = body as { machineUrl: string; taskKey: string };
+
+      if (!machineUrl || !taskKey) {
+        return new Response("Missing machineUrl or taskKey", { status: 400 });
+      }
+
+      // Find machine to get API key
+      const machine = machineRegistry?.getAll().find(m => m.url === machineUrl);
+      const headers: Record<string, string> = {};
+      if (machine?.apiKey) {
+        headers["Authorization"] = `Bearer ${machine.apiKey}`;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+
+        const res = await fetch(`${machineUrl}/agents/${encodeURIComponent(taskKey)}/stop`, {
+          method: "POST",
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          return new Response(await res.text(), { status: res.status });
+        }
+        return Response.json(await res.json());
+      } catch (err) {
+        console.error("[Hub] Proxy stop error:", err);
+        return new Response("Failed to stop agent on remote machine", { status: 502 });
+      }
+    }
+
+    // Hub proxy for remote machine trigger (send message to agent)
+    if (req.method === "POST" && url.pathname === "/hub/proxy/trigger") {
+      if (!isHubMode() && !isStandaloneMode()) {
+        return new Response("Not available in machine mode", { status: 404 });
+      }
+
+      const authError = await requireViewer(req);
+      if (authError) return authError;
+
+      const body = await req.json();
+      const { machineUrl, agentKey, message } = body as { machineUrl: string; agentKey: string; message: string };
+
+      if (!machineUrl || !agentKey) {
+        return new Response("Missing machineUrl or agentKey", { status: 400 });
+      }
+
+      // Find machine to get API key
+      const machine = machineRegistry?.getAll().find(m => m.url === machineUrl);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (machine?.apiKey) {
+        headers["Authorization"] = `Bearer ${machine.apiKey}`;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+
+        const res = await fetch(`${machineUrl}/trigger`, {
+          method: "POST",
+          signal: controller.signal,
+          headers,
+          body: JSON.stringify({ agentKey, message }),
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          return new Response(await res.text(), { status: res.status });
+        }
+        return Response.json(await res.json());
+      } catch (err) {
+        console.error("[Hub] Proxy trigger error:", err);
+        return new Response("Failed to trigger agent on remote machine", { status: 502 });
+      }
+    }
+
     // Completed tasks history
     if (req.method === "GET" && url.pathname === "/status/history") {
       const authError = await requireViewer(req);

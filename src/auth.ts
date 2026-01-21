@@ -56,7 +56,7 @@ function checkMachineApiKey(req: Request): AuthContext | null {
       mode: "simple",
       authenticated: true,
       userId: "machine",
-      role: "viewer",
+      role: "operator",
     };
   }
   return null;

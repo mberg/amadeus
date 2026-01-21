@@ -16,6 +16,7 @@ export interface Task {
   worktreePath?: string;
   memoryMB?: number;
   machineName?: string;
+  machineUrl?: string;
 }
 
 export interface Message {
