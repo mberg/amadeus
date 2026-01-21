@@ -36,11 +36,30 @@ export interface AuthContext {
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 const CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY;
+const MACHINE_API_KEY = process.env.MACHINE_API_KEY;
 
 let clerkClient: ReturnType<typeof createClerkClient> | null = null;
 
 if (CLERK_SECRET_KEY && CLERK_PUBLISHABLE_KEY) {
   clerkClient = createClerkClient({ secretKey: CLERK_SECRET_KEY });
+}
+
+/**
+ * Check if request has valid machine-to-machine API key.
+ */
+function checkMachineApiKey(req: Request): AuthContext | null {
+  if (!MACHINE_API_KEY) return null;
+
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ") && authHeader.slice(7) === MACHINE_API_KEY) {
+    return {
+      mode: "simple",
+      authenticated: true,
+      userId: "machine",
+      role: "viewer",
+    };
+  }
+  return null;
 }
 
 export function getAuthMode(): AuthMode {
@@ -110,6 +129,10 @@ export async function getAuthContext(
   req: Request,
   apiToken?: string
 ): Promise<AuthContext> {
+  // Check machine-to-machine API key first (works regardless of Clerk)
+  const machineAuth = checkMachineApiKey(req);
+  if (machineAuth) return machineAuth;
+
   if (isClerkEnabled()) {
     return getClerkAuth(req);
   }

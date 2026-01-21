@@ -106,6 +106,7 @@ function buildResolvedConfig(config: AmadeusConfig): ResolvedConfig {
   const machines = config.global.machines?.map((m) => ({
     name: m.name,
     url: m.url,
+    apiKey: m.apiKey,
   }));
 
   return {

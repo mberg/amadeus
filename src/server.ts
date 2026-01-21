@@ -801,8 +801,14 @@ export const server = Bun.serve({
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 5000);
 
+            const headers: Record<string, string> = {};
+            if (machine.apiKey) {
+              headers["Authorization"] = `Bearer ${machine.apiKey}`;
+            }
+
             const res = await fetch(`${machine.url}/status`, {
               signal: controller.signal,
+              headers,
             });
             clearTimeout(timeout);
 

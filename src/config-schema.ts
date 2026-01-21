@@ -80,6 +80,7 @@ export type MachineConfig = z.infer<typeof MachineConfigSchema>;
 export const StaticMachineSchema = z.object({
   name: z.string().min(1, "Machine name cannot be empty"),
   url: z.string().url("Machine URL must be valid"),
+  apiKey: z.string().optional(),
 });
 
 export type StaticMachine = z.infer<typeof StaticMachineSchema>;
@@ -147,7 +148,7 @@ export interface ResolvedConfig {
   realms: ResolvedRealm[];
   global: GlobalConfig;
   router?: ResolvedRouterConfig;
-  machines?: Array<{ name: string; url: string }>;
+  machines?: Array<{ name: string; url: string; apiKey?: string }>;
   // Convenience lookups
   realmByWorkspace: Map<string, ResolvedRealm>;
   realmByTeamKey: Map<string, ResolvedRealm>;

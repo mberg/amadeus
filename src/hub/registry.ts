@@ -4,6 +4,7 @@
 export interface MachineInfo {
   name: string;
   url: string;
+  apiKey?: string;
   lastSeen?: Date;
   agentCount?: number;
   status: "unknown" | "healthy" | "unhealthy";
@@ -15,10 +16,11 @@ export class MachineRegistry {
   /**
    * Register or update a machine.
    */
-  register(name: string, url: string): void {
+  register(name: string, url: string, apiKey?: string): void {
     this.machines.set(name, {
       name,
       url,
+      apiKey,
       lastSeen: new Date(),
       status: "unknown",
     });
@@ -53,9 +55,9 @@ export class MachineRegistry {
   /**
    * Load machines from static config.
    */
-  loadFromConfig(machines: Array<{ name: string; url: string }>): void {
+  loadFromConfig(machines: Array<{ name: string; url: string; apiKey?: string }>): void {
     for (const m of machines) {
-      this.register(m.name, m.url);
+      this.register(m.name, m.url, m.apiKey);
     }
   }
 }
