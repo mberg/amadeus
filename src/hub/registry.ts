@@ -64,7 +64,7 @@ export class MachineRegistry {
    */
   getCachedStatus(): Array<MachineInfo & { agents: AgentStatus[] }> {
     const now = Date.now();
-    const DORMANT_THRESHOLD_MS = 120_000; // 2 minutes
+    const DORMANT_THRESHOLD_MS = 5_000; // 5 seconds (machines already wait 2 min before stopping)
 
     return Array.from(this.machines.values()).map(m => ({
       ...m,
