@@ -37,10 +37,33 @@ describe("MachineRegistry", () => {
 
   test("updateStatus updates machine health", () => {
     registry.register("Frank", "http://frank.local:5678");
-    registry.updateStatus("Frank", "healthy", 3);
+    const mockAgents = [
+      { key: "agent-1", status: "working" },
+      { key: "agent-2", status: "idle" },
+      { key: "agent-3", status: "working" },
+    ] as any[];
+    registry.updateStatus("Frank", "healthy", mockAgents);
     const machine = registry.get("Frank");
     expect(machine?.status).toBe("healthy");
     expect(machine?.agentCount).toBe(3);
+    expect(machine?.agents).toHaveLength(3);
+  });
+
+  test("getCachedStatus returns machines with dormant detection", () => {
+    registry.register("Frank", "http://frank.local:5678");
+
+    // Machine with recent heartbeat
+    registry.updateStatus("Frank", "healthy", []);
+    let cached = registry.getCachedStatus();
+    expect(cached[0].status).toBe("healthy");
+
+    // Manually set old heartbeat to test dormant detection
+    const machine = registry.get("Frank");
+    if (machine) {
+      machine.lastHeartbeat = new Date(Date.now() - 130_000); // 2+ minutes ago
+    }
+    cached = registry.getCachedStatus();
+    expect(cached[0].status).toBe("dormant");
   });
 
   test("loadFromConfig registers multiple machines", () => {

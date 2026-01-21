@@ -23,6 +23,7 @@ import {
 import { MachineRegistry } from "./hub/registry";
 import { routeWebhook } from "./hub/router";
 import { RouterHeartbeat } from "./router-heartbeat";
+import { HubHeartbeat } from "./hub-heartbeat";
 import { verifyLinearSignature } from "./signature";
 import { requireAuth as checkAuth, getAuthInfo, isClerkEnabled } from "./auth";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
@@ -30,7 +31,7 @@ import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
 import { isBotComment } from "./comment-filter";
 import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
-import type { LinearWebhookPayload, LinearIssue, LinearComment } from "./types";
+import type { LinearWebhookPayload, LinearIssue, LinearComment, AgentStatus } from "./types";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged, deleteBranch } from "./github";
 import {
@@ -182,6 +183,27 @@ if (routerConfig && machineConfig.heartbeat) {
   console.log("[RouterHeartbeat] Heartbeat disabled in machine config");
 }
 
+// Initialize hub heartbeat if machine has hubUrl configured
+let hubHeartbeat: HubHeartbeat | null = null;
+if (isMachineMode() && machineConfig.hubUrl) {
+  const getAgents = async () => {
+    return orchestrator ? await orchestrator.getStatusWithMemory() : [];
+  };
+
+  hubHeartbeat = new HubHeartbeat(
+    {
+      hubUrl: machineConfig.hubUrl,
+      machineName: machineConfig.name,
+      machineUrl: `http://localhost:${getServerPort()}`,
+      apiKey: process.env.AMADEUS_API_KEY,
+    },
+    getAgents
+  );
+
+  hubHeartbeat.start();
+  console.log(`[HubHeartbeat] Pushing status to ${machineConfig.hubUrl}`);
+}
+
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
   return "body" in data && "issueId" in data;
 }
@@ -323,6 +345,7 @@ async function handleIssueWebhook(
   if (action === "remove") {
     await orchestrator.stopAgent(agentKey, "canceled");
     healthMonitor.notifyAgentCountChanged();
+    hubHeartbeat?.notifyAgentChange();
     return;
   }
 
@@ -340,6 +363,7 @@ async function handleIssueWebhook(
       );
       await orchestrator.stopAgent(existingKey, reason);
       healthMonitor.notifyAgentCountChanged();
+    hubHeartbeat?.notifyAgentChange();
     }
     return;
   }
@@ -370,6 +394,7 @@ async function handleIssueWebhook(
     } else {
       await orchestrator.startAgent(issue);
       healthMonitor.notifyAgentCountChanged();
+    hubHeartbeat?.notifyAgentChange();
     }
   }
 }
@@ -456,6 +481,7 @@ async function handleCommentWebhook(
       // Start a new agent
       await orchestrator.startAgent(comment.issue);
       healthMonitor.notifyAgentCountChanged();
+    hubHeartbeat?.notifyAgentChange();
       agentKey = orchestrator.findAgentByIssueId(comment.issueId);
 
       if (!agentKey) {
@@ -484,6 +510,7 @@ async function handleCommentWebhook(
       );
       await orchestrator.startAgent(comment.issue);
       healthMonitor.notifyAgentCountChanged();
+    hubHeartbeat?.notifyAgentChange();
       agentKey = orchestrator.findAgentByIssueId(comment.issueId);
 
       if (!agentKey) {
@@ -783,7 +810,7 @@ export const server = Bun.serve({
       });
     }
 
-    // Hub status endpoint (returns all machines and their agents)
+    // Hub status endpoint (returns all machines and their agents from cache)
     if (req.method === "GET" && url.pathname === "/hub/status") {
       if (!isHubMode() && !isStandaloneMode()) {
         return new Response("Not available in machine mode", { status: 404 });
@@ -792,41 +819,8 @@ export const server = Bun.serve({
       const authError = await requireViewer(req);
       if (authError) return authError;
 
-      const machines = machineRegistry?.getAll() ?? [];
-
-      // Fetch status from each machine (with timeout)
-      const machineStatuses = await Promise.all(
-        machines.map(async (machine) => {
-          try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000);
-
-            const headers: Record<string, string> = {};
-            if (machine.apiKey) {
-              headers["Authorization"] = `Bearer ${machine.apiKey}`;
-            }
-
-            const res = await fetch(`${machine.url}/status`, {
-              signal: controller.signal,
-              headers,
-            });
-            clearTimeout(timeout);
-
-            if (res.ok) {
-              const data = await res.json();
-              return {
-                ...machine,
-                status: "healthy" as const,
-                agents: data.agents,
-                agentCount: data.agents?.length ?? 0,
-              };
-            }
-            return { ...machine, status: "unhealthy" as const, agents: [], agentCount: 0 };
-          } catch {
-            return { ...machine, status: "unhealthy" as const, agents: [], agentCount: 0 };
-          }
-        })
-      );
+      // Get cached status from registry (no fan-out to machines!)
+      const machineStatuses = machineRegistry?.getCachedStatus() ?? [];
 
       // Include local machine if in standalone mode
       let localStatus = null;
@@ -845,6 +839,44 @@ export const server = Bun.serve({
         machines: localStatus ? [localStatus, ...machineStatuses] : machineStatuses,
         timestamp: new Date().toISOString(),
       });
+    }
+
+    // Receive status heartbeat from machines (push-based)
+    if (req.method === "POST" && url.pathname === "/hub/heartbeat") {
+      if (!isHubMode() && !isStandaloneMode()) {
+        return new Response("Not available in machine mode", { status: 404 });
+      }
+
+      // Authenticate machine via API key
+      const authHeader = req.headers.get("Authorization");
+      const token = authHeader?.replace("Bearer ", "");
+
+      const body = await req.json();
+      const { machineName, machineUrl, agents } = body as {
+        machineName: string;
+        machineUrl?: string;
+        agents?: AgentStatus[];
+      };
+
+      if (!machineName) {
+        return new Response("Missing machineName", { status: 400 });
+      }
+
+      // Verify machine is registered and token matches
+      const machine = machineRegistry?.get(machineName);
+      if (!machine) {
+        return new Response("Unknown machine", { status: 403 });
+      }
+      if (machine.apiKey && machine.apiKey !== token) {
+        return new Response("Invalid token", { status: 403 });
+      }
+
+      // Update cached status in registry
+      machineRegistry?.updateStatus(machineName, "healthy", agents ?? []);
+
+      console.log(`[Hub] Heartbeat from ${machineName}: ${agents?.length ?? 0} agents`);
+
+      return new Response("OK", { status: 200 });
     }
 
     // Hub proxy for remote machine agent messages
@@ -1194,6 +1226,7 @@ export const server = Bun.serve({
       console.log(`[${new Date().toISOString()}] Manual stop requested for agent: ${agentKey}`);
       await orchestrator.stopAgent(agentKey, "stopped");
       healthMonitor.notifyAgentCountChanged();
+    hubHeartbeat?.notifyAgentChange();
       return Response.json({ success: true });
     }
 
@@ -1235,6 +1268,11 @@ async function shutdown(): Promise<void> {
   // Stop router heartbeat if running
   if (routerHeartbeat) {
     routerHeartbeat.stop();
+  }
+
+  // Stop hub heartbeat if running
+  if (hubHeartbeat) {
+    hubHeartbeat.stop();
   }
 
   if (prCheckInterval) {
