@@ -966,7 +966,9 @@ export const server = Bun.serve({
         if (!res.ok) {
           return new Response(await res.text(), { status: res.status });
         }
-        return Response.json(await res.json());
+        // Trigger returns plain text "Sent", not JSON
+        const text = await res.text();
+        return new Response(text, { status: res.status });
       } catch (err) {
         console.error("[Hub] Proxy trigger error:", err);
         return new Response("Failed to trigger agent on remote machine", { status: 502 });
