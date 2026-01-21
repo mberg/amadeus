@@ -13,12 +13,15 @@ export interface HubHeartbeatConfig {
 
 const DEFAULT_INTERVAL_MS = 2000; // Match dashboard poll rate for real-time feel
 const IDLE_INTERVAL_MS = 60_000; // Slower when no agents to allow hibernation
+const IDLE_STOP_THRESHOLD_MS = 120_000; // Stop heartbeats after 2 minutes idle
 
 export class HubHeartbeat {
   private config: Required<Omit<HubHeartbeatConfig, "apiKey">> & { apiKey?: string };
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private getAgents: () => Promise<AgentStatus[]>;
   private lastAgentCount = 0;
+  private idleStartTime: number | null = null;
+  private isStopped = false;
 
   constructor(config: HubHeartbeatConfig, getAgents: () => Promise<AgentStatus[]>) {
     this.config = {
@@ -57,6 +60,19 @@ export class HubHeartbeat {
       const previousCount = this.lastAgentCount;
       this.lastAgentCount = agents.length;
 
+      // Track idle time
+      if (agents.length === 0) {
+        if (this.idleStartTime === null) {
+          this.idleStartTime = Date.now();
+        } else if (Date.now() - this.idleStartTime > IDLE_STOP_THRESHOLD_MS) {
+          // Been idle for 2+ minutes, stop heartbeats entirely
+          this.stopForIdle();
+          return;
+        }
+      } else {
+        this.idleStartTime = null;
+      }
+
       // Adjust interval if agent count changed between active/idle
       if ((previousCount === 0 && agents.length > 0) || (previousCount > 0 && agents.length === 0)) {
         this.updateInterval();
@@ -67,10 +83,26 @@ export class HubHeartbeat {
   }
 
   /**
-   * Called when agent count changes - send immediate heartbeat.
+   * Called when agent count changes - send immediate heartbeat and resume if stopped.
    */
   notifyAgentChange(): void {
+    // Resume heartbeats if they were stopped due to idle
+    if (this.isStopped) {
+      this.isStopped = false;
+      this.idleStartTime = null;
+      this.start();
+      console.log("[HubHeartbeat] Resumed after agent activity detected");
+    }
     this.sendHeartbeat();
+  }
+
+  private stopForIdle(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.isStopped = true;
+    console.log("[HubHeartbeat] Stopped after 2 minutes idle (allowing hibernation)");
   }
 
   private updateInterval(): void {
