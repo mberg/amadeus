@@ -12,7 +12,7 @@ Amadeus is an AI agent orchestration system that uses Linear and GitHub as a con
 
 - **No token costs** - I wanted to leverage my Claude Max account and not pay for extra tokens. The ability to leverage the AgentAPI instead of using Claude's Agent SDK makes this possible.
 
-- **Flexible deployment** - I wantaz to be able to run my agents on my local machines (via Tailscale Funnel) for projects that have complex setups or need a lot of CPU, or via Sprites (sandbox VMs).
+- **Flexible deployment** - I wantaz to be able to run my agents on my local machines (via Tailscale Funnel) for projects that have complex setups or need a lot of CPU, or via [Sprites](https://sprites.dev/) (sandbox VMs).
 
 - **Skills and agent profiles** - I wanted to be able to create different profiles for the Claude Code agents I call, with different skills that can be preconfigured on the fly.
 
@@ -52,7 +52,7 @@ Amadeus can run in three modes:
 
 - **Hub** - Coordinates multiple remote machines. Receives webhooks and forwards to machines running agents. Aggregates status from all machines.
 
-- **Machine/Sprite** - Runs agents only, registers with a hub. Can be a local machine (via Tailscale Funnel) or a Sprites sandbox VM.
+- **Machine/Sprite** - Runs agents only, registers with a hub. Can be a local machine (via Tailscale Funnel) or a [Sprites](https://sprites.dev/) sandbox VM.
 
 ## Configuration
 
@@ -324,9 +324,9 @@ Run Amadeus on your local machine, exposed via Tailscale Funnel:
    ```
 5. Set your Linear webhook URL to `https://your-machine.ts.net/webhook`
 
-### Sprites (Sandbox VMs)
+### [Sprites](https://sprites.dev/) (Sandbox VMs)
 
-Run agents on isolated Sprites VMs:
+Run agents on isolated [Sprites](https://sprites.dev/) VMs:
 
 1. Install the Sprites CLI:
    ```bash
@@ -393,3 +393,4 @@ tailscale funnel --bg 5678
 - **[linear-cli](https://github.com/Finesssee/linear-cli)** by Finesssee - CLI for Linear
 - **[Claude Code](https://claude.com/claude-code)** by Anthropic - The AI assistant powering agents
 - **[Linear](https://linear.app)** - Issue tracker serving as the control plane
+- **[Sprites](https://sprites.dev/)** - Sandbox VMs for isolated agent execution
