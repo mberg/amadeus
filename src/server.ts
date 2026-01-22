@@ -21,6 +21,7 @@ import {
   isStandaloneMode,
 } from "./config";
 import { MachineRegistry } from "./hub/registry";
+import { IdleScanner } from "./hub/idle-scanner";
 import { routeWebhook } from "./hub/router";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { HubHeartbeat } from "./hub-heartbeat";
@@ -207,6 +208,51 @@ if (isMachineMode() && machineConfig.hubUrl) {
 
   hubHeartbeat.start();
   console.log(`[HubHeartbeat] Pushing status to ${machineConfig.hubUrl}`);
+}
+
+// Initialize idle scanner for hub/standalone mode
+let idleScanner: IdleScanner | null = null;
+
+if ((isHubMode() || isStandaloneMode()) && machineRegistry) {
+  const idleConfig = REALM_CONFIG?.global?.idleTermination ?? {
+    enabled: true,
+    timeoutMinutes: 15,
+    idleStates: ["Needs Feedback"],
+    scanIntervalSeconds: 60,
+  };
+
+  const stopRemoteAgent = async (machineUrl: string, agentKey: string) => {
+    // For local machine (empty URL), stop directly
+    if (!machineUrl && orchestrator) {
+      await orchestrator.stopAgent(agentKey, "stopped");
+      return;
+    }
+
+    // For remote machines, use proxy
+    const machine = machineRegistry!.getAll().find(m => m.url === machineUrl);
+    if (!machine) {
+      throw new Error(`Machine not found for URL: ${machineUrl}`);
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (machine.apiKey) {
+      headers["Authorization"] = `Bearer ${machine.apiKey}`;
+    }
+
+    const res = await fetch(`${machineUrl}/agents/${encodeURIComponent(agentKey)}/stop`, {
+      method: "POST",
+      headers,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  };
+
+  idleScanner = new IdleScanner(idleConfig, machineRegistry, stopRemoteAgent);
+  idleScanner.start();
 }
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
@@ -1278,6 +1324,11 @@ async function shutdown(): Promise<void> {
   // Stop hub heartbeat if running
   if (hubHeartbeat) {
     hubHeartbeat.stop();
+  }
+
+  // Stop idle scanner if running
+  if (idleScanner) {
+    idleScanner.stop();
   }
 
   if (prCheckInterval) {
