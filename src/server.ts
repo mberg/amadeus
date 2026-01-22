@@ -763,17 +763,24 @@ export const server = Bun.serve({
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
-      // Verify authentication: either router secret (from hub) or Linear signature (direct)
+      // Verify authentication: either API key (from hub) or Linear signature (direct)
       let verifiedRealm: string | null = null;
+      const machineApiKey = process.env.AMADEUS_API_KEY;
+      const hubSecret = req.headers.get("X-Amadeus-Secret");
 
-      if (routerConfig) {
-        // Machine mode: verify router secret from hub (hub already verified Linear signature)
-        const routerSecret = req.headers.get("X-Amadeus-Secret");
-        if (routerSecret !== routerConfig.secret) {
+      if (machineApiKey && hubSecret) {
+        // Machine mode: verify API key from hub (hub already verified Linear signature)
+        if (hubSecret !== machineApiKey) {
+          console.warn("[Webhook] Invalid hub secret");
+          return new Response("Unauthorized", { status: 401 });
+        }
+        // Hub secret valid - trusted from hub
+      } else if (routerConfig) {
+        // Legacy router mode: verify router secret
+        if (hubSecret !== routerConfig.secret) {
           console.warn("[Webhook] Invalid router secret");
           return new Response("Unauthorized", { status: 401 });
         }
-        // Router secret valid - trusted from hub
       } else {
         // Direct mode: verify Linear signature
         const secrets = getAllWebhookSecrets();
