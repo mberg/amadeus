@@ -14,7 +14,7 @@ import {
   reloadConfig,
   getMachineConfig,
   getServerPort,
-  getSpriteUrlForProject,
+  getMachineUrlForProject,
   getRuntimeMode,
   isHubMode,
   isMachineMode,
@@ -90,6 +90,14 @@ if (isHubMode() || isStandaloneMode()) {
   if (REALM_CONFIG?.machines) {
     machineRegistry.loadFromConfig(REALM_CONFIG.machines);
   }
+}
+
+/**
+ * Get API key for a machine by URL (for forwarding webhooks).
+ */
+function getMachineApiKeyForUrl(url: string): string | null {
+  const machine = machineRegistry?.getAll().find(m => m.url === url);
+  return machine?.apiKey ?? null;
 }
 
 // Machine components (machine or standalone mode)
@@ -577,13 +585,13 @@ async function handleCommentWebhook(
 }
 
 /**
- * Forward a webhook to a Sprite URL (fire and forget).
+ * Forward a webhook to a remote machine (fire and forget).
  */
-async function forwardWebhookToSprite(
-  spriteUrl: string,
+async function forwardWebhookToMachine(
+  machineUrl: string,
   payload: string,
   signature: string | null,
-  teamKey: string
+  identifier: string
 ): Promise<void> {
   try {
     const headers: Record<string, string> = {
@@ -595,13 +603,13 @@ async function forwardWebhookToSprite(
       headers["linear-signature"] = signature;
     }
 
-    // Forward router secret if configured
-    const routerConfig = getRouterConfig();
-    if (routerConfig) {
-      headers["X-Amadeus-Secret"] = routerConfig.secret;
+    // Forward API key for machine authentication
+    const machineApiKey = getMachineApiKeyForUrl(machineUrl);
+    if (machineApiKey) {
+      headers["X-Amadeus-Secret"] = machineApiKey;
     }
 
-    const response = await fetch(`${spriteUrl}/webhook`, {
+    const response = await fetch(`${machineUrl}/webhook`, {
       method: "POST",
       headers,
       body: payload,
@@ -609,16 +617,16 @@ async function forwardWebhookToSprite(
 
     if (!response.ok) {
       console.warn(
-        `[SpriteForward] Failed to forward webhook to ${spriteUrl} for ${teamKey}: HTTP ${response.status}`
+        `[WebhookForward] Failed to forward to ${machineUrl} for ${identifier}: HTTP ${response.status}`
       );
     } else {
       console.log(
-        `[SpriteForward] Forwarded webhook to ${spriteUrl} for ${teamKey}`
+        `[WebhookForward] Forwarded to ${machineUrl} for ${identifier}`
       );
     }
   } catch (err) {
     console.warn(
-      `[SpriteForward] Error forwarding webhook to ${spriteUrl} for ${teamKey}: ${
+      `[WebhookForward] Error forwarding to ${machineUrl} for ${identifier}: ${
         err instanceof Error ? err.message : "Unknown error"
       }`
     );
@@ -816,8 +824,8 @@ export const server = Bun.serve({
       if (isHubMode()) {
         const route = routeWebhook(data);
         if (route.machineUrl) {
-          forwardWebhookToSprite(route.machineUrl, payload, signature, route.machineName ?? "unknown").catch((err) => {
-            console.error("[HubForward] Error:", err);
+          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown").catch((err) => {
+            console.error("[WebhookForward] Error:", err);
           });
           return new Response("OK", { status: 200 });
         }
@@ -831,15 +839,15 @@ export const server = Bun.serve({
         return new Response("Machine components not initialized", { status: 500 });
       }
 
-      // Check if this project should be forwarded to a Sprite (standalone mode only)
+      // Check if this project should be forwarded to another machine (standalone mode only)
       const teamKey = getTeamKeyFromPayload(data);
       const projectName = getProjectNameFromPayload(data);
-      const spriteUrl = getSpriteUrlForProject(projectName ?? undefined, teamKey ?? undefined);
-      if (spriteUrl) {
-        // Forward to Sprite (fire and forget)
+      const machineUrl = getMachineUrlForProject(projectName ?? undefined, teamKey ?? undefined);
+      if (machineUrl) {
+        // Forward to machine (fire and forget)
         const identifier = projectName ?? teamKey ?? "unknown";
-        forwardWebhookToSprite(spriteUrl, payload, signature, identifier).catch((err) => {
-          console.error("[SpriteForward] Error:", err);
+        forwardWebhookToMachine(machineUrl, payload, signature, identifier).catch((err) => {
+          console.error("[WebhookForward] Error:", err);
         });
         return new Response("OK", { status: 200 });
       }

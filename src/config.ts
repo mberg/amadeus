@@ -339,18 +339,18 @@ export function getServerPort(): number {
  * Get Sprite URL for a team key, if configured.
  * Returns the URL to forward webhooks to, or null for local processing.
  */
-export function getSpriteUrlForTeam(teamKey: string): string | null {
+export function getMachineUrlForTeam(teamKey: string): string | null {
   if (!REALM_CONFIG) return null;
 
   const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
-  return entry?.project.spriteUrl ?? null;
+  return entry?.project.machineUrl ?? null;
 }
 
 /**
- * Get Sprite URL for a project, checking by Linear project name first, then team key.
+ * Get machine URL for a project, checking by Linear project name first, then team key.
  * Returns the URL to forward webhooks to, or null for local processing.
  */
-export function getSpriteUrlForProject(projectName: string | undefined, teamKey: string | undefined): string | null {
+export function getMachineUrlForProject(projectName: string | undefined, teamKey: string | undefined): string | null {
   if (!REALM_CONFIG) return null;
 
   // Search all realms for a matching project
@@ -358,7 +358,7 @@ export function getSpriteUrlForProject(projectName: string | undefined, teamKey:
     for (const project of realm.projects) {
       // Match by Linear project name (case-insensitive)
       if (projectName && project.linearProject?.toLowerCase() === projectName.toLowerCase()) {
-        return project.spriteUrl ?? null;
+        return project.machineUrl ?? null;
       }
     }
   }
@@ -366,7 +366,7 @@ export function getSpriteUrlForProject(projectName: string | undefined, teamKey:
   // Fall back to team key lookup
   if (teamKey) {
     const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
-    return entry?.project.spriteUrl ?? null;
+    return entry?.project.machineUrl ?? null;
   }
 
   return null;

@@ -14,5 +14,5 @@ export {
   getSecurityConfig,
   getRouterConfig,
   getServerPort,
-  getSpriteUrlForProject,
+  getMachineUrlForProject,
 } from "../config";

@@ -13,7 +13,7 @@ export const ProjectSchema = z.object({
   path: z.string().min(1, "Project path cannot be empty"),
   profile: z.string().optional(),
   githubRepoUrl: z.string().optional(),
-  spriteUrl: z.string().url().optional(), // Forward webhooks to this Sprite URL instead of spawning locally
+  machineUrl: z.string().url().optional(), // Forward webhooks to this machine instead of spawning locally
 });
 
 export type Project = z.infer<typeof ProjectSchema>;
