@@ -763,31 +763,34 @@ export const server = Bun.serve({
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
-      // Verify router secret if router is configured
+      // Verify authentication: either router secret (from hub) or Linear signature (direct)
+      let verifiedRealm: string | null = null;
+
       if (routerConfig) {
+        // Machine mode: verify router secret from hub (hub already verified Linear signature)
         const routerSecret = req.headers.get("X-Amadeus-Secret");
         if (routerSecret !== routerConfig.secret) {
           console.warn("[Webhook] Invalid router secret");
           return new Response("Unauthorized", { status: 401 });
         }
-      }
+        // Router secret valid - trusted from hub
+      } else {
+        // Direct mode: verify Linear signature
+        const secrets = getAllWebhookSecrets();
+        let verified = false;
 
-      // Try each realm's webhook secret for verification
-      const secrets = getAllWebhookSecrets();
-      let verified = false;
-      let verifiedRealm: string | null = null;
-
-      for (const { secret, realmName } of secrets) {
-        if (await verifyLinearSignature(payload, signature, secret)) {
-          verified = true;
-          verifiedRealm = realmName;
-          break;
+        for (const { secret, realmName } of secrets) {
+          if (await verifyLinearSignature(payload, signature, secret)) {
+            verified = true;
+            verifiedRealm = realmName;
+            break;
+          }
         }
-      }
 
-      if (!verified) {
-        console.warn("[Webhook] Invalid signature - no matching realm secret");
-        return new Response("Unauthorized", { status: 401 });
+        if (!verified) {
+          console.warn("[Webhook] Invalid signature - no matching realm secret");
+          return new Response("Unauthorized", { status: 401 });
+        }
       }
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
