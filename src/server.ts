@@ -21,6 +21,7 @@ import {
   isStandaloneMode,
 } from "./config";
 import { MachineRegistry } from "./hub/registry";
+import { IdleScanner } from "./hub/idle-scanner";
 import { routeWebhook } from "./hub/router";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { HubHeartbeat } from "./hub-heartbeat";
@@ -207,6 +208,51 @@ if (isMachineMode() && machineConfig.hubUrl) {
 
   hubHeartbeat.start();
   console.log(`[HubHeartbeat] Pushing status to ${machineConfig.hubUrl}`);
+}
+
+// Initialize idle scanner for hub/standalone mode
+let idleScanner: IdleScanner | null = null;
+
+if ((isHubMode() || isStandaloneMode()) && machineRegistry) {
+  const idleConfig = REALM_CONFIG?.global?.idleTermination ?? {
+    enabled: true,
+    timeoutMinutes: 15,
+    idleStates: ["Needs Feedback"],
+    scanIntervalSeconds: 60,
+  };
+
+  const stopRemoteAgent = async (machineUrl: string, agentKey: string) => {
+    // For local machine (empty URL), stop directly
+    if (!machineUrl && orchestrator) {
+      await orchestrator.stopAgent(agentKey, "stopped");
+      return;
+    }
+
+    // For remote machines, use proxy
+    const machine = machineRegistry!.getAll().find(m => m.url === machineUrl);
+    if (!machine) {
+      throw new Error(`Machine not found for URL: ${machineUrl}`);
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (machine.apiKey) {
+      headers["Authorization"] = `Bearer ${machine.apiKey}`;
+    }
+
+    const res = await fetch(`${machineUrl}/agents/${encodeURIComponent(agentKey)}/stop`, {
+      method: "POST",
+      headers,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  };
+
+  idleScanner = new IdleScanner(idleConfig, machineRegistry, stopRemoteAgent);
+  idleScanner.start();
 }
 
 function isComment(data: LinearIssue | LinearComment): data is LinearComment {
@@ -717,31 +763,41 @@ export const server = Bun.serve({
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
-      // Verify router secret if router is configured
-      if (routerConfig) {
-        const routerSecret = req.headers.get("X-Amadeus-Secret");
-        if (routerSecret !== routerConfig.secret) {
+      // Verify authentication: either API key (from hub) or Linear signature (direct)
+      let verifiedRealm: string | null = null;
+      const machineApiKey = process.env.AMADEUS_API_KEY;
+      const hubSecret = req.headers.get("X-Amadeus-Secret");
+
+      if (machineApiKey && hubSecret) {
+        // Machine mode: verify API key from hub (hub already verified Linear signature)
+        if (hubSecret !== machineApiKey) {
+          console.warn("[Webhook] Invalid hub secret");
+          return new Response("Unauthorized", { status: 401 });
+        }
+        // Hub secret valid - trusted from hub
+      } else if (routerConfig) {
+        // Legacy router mode: verify router secret
+        if (hubSecret !== routerConfig.secret) {
           console.warn("[Webhook] Invalid router secret");
           return new Response("Unauthorized", { status: 401 });
         }
-      }
+      } else {
+        // Direct mode: verify Linear signature
+        const secrets = getAllWebhookSecrets();
+        let verified = false;
 
-      // Try each realm's webhook secret for verification
-      const secrets = getAllWebhookSecrets();
-      let verified = false;
-      let verifiedRealm: string | null = null;
-
-      for (const { secret, realmName } of secrets) {
-        if (await verifyLinearSignature(payload, signature, secret)) {
-          verified = true;
-          verifiedRealm = realmName;
-          break;
+        for (const { secret, realmName } of secrets) {
+          if (await verifyLinearSignature(payload, signature, secret)) {
+            verified = true;
+            verifiedRealm = realmName;
+            break;
+          }
         }
-      }
 
-      if (!verified) {
-        console.warn("[Webhook] Invalid signature - no matching realm secret");
-        return new Response("Unauthorized", { status: 401 });
+        if (!verified) {
+          console.warn("[Webhook] Invalid signature - no matching realm secret");
+          return new Response("Unauthorized", { status: 401 });
+        }
       }
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
@@ -1278,6 +1334,11 @@ async function shutdown(): Promise<void> {
   // Stop hub heartbeat if running
   if (hubHeartbeat) {
     hubHeartbeat.stop();
+  }
+
+  // Stop idle scanner if running
+  if (idleScanner) {
+    idleScanner.stop();
   }
 
   if (prCheckInterval) {

@@ -86,6 +86,18 @@ export const StaticMachineSchema = z.object({
 export type StaticMachine = z.infer<typeof StaticMachineSchema>;
 
 /**
+ * Schema for idle agent termination settings.
+ */
+export const IdleTerminationConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  timeoutMinutes: z.number().int().positive().default(15),
+  idleStates: z.array(z.string()).default(["Needs Feedback"]),
+  scanIntervalSeconds: z.number().int().positive().default(60),
+});
+
+export type IdleTerminationConfig = z.infer<typeof IdleTerminationConfigSchema>;
+
+/**
  * Schema for global configuration settings.
  */
 export const GlobalConfigSchema = z.object({
@@ -105,6 +117,12 @@ export const GlobalConfigSchema = z.object({
   runtimeMode: RuntimeModeSchema,
   machine: MachineConfigSchema.optional(),
   machines: z.array(StaticMachineSchema).optional(),
+  idleTermination: IdleTerminationConfigSchema.optional().default({
+    enabled: true,
+    timeoutMinutes: 15,
+    idleStates: ["Needs Feedback"],
+    scanIntervalSeconds: 60,
+  }),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
