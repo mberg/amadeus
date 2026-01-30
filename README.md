@@ -88,7 +88,7 @@ realms:
         path: /path/to/frontend
         githubRepoUrl: https://github.com/mycompany/frontend
         profile: frontend
-        spriteUrl: https://my-sprite.sprites.dev  # Forward to Sprite instead of local
+        machineUrl: https://my-sprite.sprites.dev  # Forward to remote machine instead of local
 
   # Second realm for a different workspace
   sidegig:
@@ -110,7 +110,7 @@ Each project maps a Linear team to a local repository:
 - **path** - Absolute path to the git repository
 - **githubRepoUrl** - GitHub repository URL for PR links
 - **profile** - Agent profile to use (optional, falls back to `defaultProfile`)
-- **spriteUrl** - Forward webhooks to a Sprite VM instead of running locally (optional)
+- **machineUrl** - Forward webhooks to a remote machine instead of running locally (optional)
 
 ### Global Settings
 

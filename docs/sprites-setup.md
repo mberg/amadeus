@@ -227,7 +227,7 @@ Each Sprite has 8GB RAM, supporting ~2-4 concurrent Claude Code agents. If runni
 
 ### Single-User Mode (Local + Sprites)
 
-For single-user setups, you can run Amadeus locally and forward specific projects to Sprites without needing the router. Add `spriteUrl` to any project that should run in a Sprite:
+For single-user setups, you can run Amadeus locally and forward specific projects to Sprites without needing the router. Add `machineUrl` to any project that should run on a remote machine:
 
 ```yaml
 realms:
@@ -243,12 +243,12 @@ realms:
       # This project forwards to a Sprite
       - teamKey: ONA
         path: /path/to/ona
-        spriteUrl: https://amadeus-ona-abc123.sprites.app
+        machineUrl: https://amadeus-ona-abc123.sprites.app
 
       # Another Sprite project
       - teamKey: ML
         path: /path/to/ml
-        spriteUrl: https://amadeus-ml-def456.sprites.app
+        machineUrl: https://amadeus-ml-def456.sprites.app
 
 global:
   runtimeMode: local  # No router heartbeat needed
@@ -256,8 +256,8 @@ global:
 
 **How it works:**
 1. Linear sends webhooks to your local Amadeus (via Tailscale or similar)
-2. Amadeus checks if the project has a `spriteUrl`
-3. If yes, forwards the webhook to the Sprite (fire and forget)
+2. Amadeus checks if the project has a `machineUrl`
+3. If yes, forwards the webhook to the remote machine (fire and forget)
 4. If no, spawns a local agent (existing behavior)
 
 This setup is ideal for individual developers who want Sprite isolation for some projects without running a shared router.

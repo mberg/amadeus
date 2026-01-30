@@ -320,37 +320,25 @@ export function getMachineConfig(): { name: string; hubUrl?: string; heartbeat: 
 
 /**
  * Get the effective server port.
- * In machine mode, PORT env var takes precedence.
+ * PORT env var takes precedence over config, allowing platforms like Railway
+ * to assign the port dynamically. Falls back to config port (default 5678).
  */
 export function getServerPort(): number {
-  if (isMachineMode()) {
-    const portEnv = process.env.PORT;
-    if (portEnv) {
-      const port = parseInt(portEnv, 10);
-      if (!isNaN(port) && port > 0) {
-        return port;
-      }
+  const portEnv = process.env.PORT;
+  if (portEnv) {
+    const port = parseInt(portEnv, 10);
+    if (!isNaN(port) && port > 0) {
+      return port;
     }
   }
   return CONFIG.port;
 }
 
 /**
- * Get Sprite URL for a team key, if configured.
+ * Get machine URL for a project, checking by Linear project name first, then team key.
  * Returns the URL to forward webhooks to, or null for local processing.
  */
-export function getSpriteUrlForTeam(teamKey: string): string | null {
-  if (!REALM_CONFIG) return null;
-
-  const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
-  return entry?.project.spriteUrl ?? null;
-}
-
-/**
- * Get Sprite URL for a project, checking by Linear project name first, then team key.
- * Returns the URL to forward webhooks to, or null for local processing.
- */
-export function getSpriteUrlForProject(projectName: string | undefined, teamKey: string | undefined): string | null {
+export function getMachineUrlForProject(projectName: string | undefined, teamKey: string | undefined): string | null {
   if (!REALM_CONFIG) return null;
 
   // Search all realms for a matching project
@@ -358,7 +346,7 @@ export function getSpriteUrlForProject(projectName: string | undefined, teamKey:
     for (const project of realm.projects) {
       // Match by Linear project name (case-insensitive)
       if (projectName && project.linearProject?.toLowerCase() === projectName.toLowerCase()) {
-        return project.spriteUrl ?? null;
+        return project.machineUrl ?? null;
       }
     }
   }
@@ -366,7 +354,7 @@ export function getSpriteUrlForProject(projectName: string | undefined, teamKey:
   // Fall back to team key lookup
   if (teamKey) {
     const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
-    return entry?.project.spriteUrl ?? null;
+    return entry?.project.machineUrl ?? null;
   }
 
   return null;

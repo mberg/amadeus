@@ -14,7 +14,7 @@ import {
   reloadConfig,
   getMachineConfig,
   getServerPort,
-  getSpriteUrlForProject,
+  getMachineUrlForProject,
   getRuntimeMode,
   isHubMode,
   isMachineMode,
@@ -577,10 +577,10 @@ async function handleCommentWebhook(
 }
 
 /**
- * Forward a webhook to a Sprite URL (fire and forget).
+ * Forward a webhook to a remote machine (fire and forget).
  */
-async function forwardWebhookToSprite(
-  spriteUrl: string,
+async function forwardWebhookToMachine(
+  machineUrl: string,
   payload: string,
   signature: string | null,
   teamKey: string
@@ -601,7 +601,7 @@ async function forwardWebhookToSprite(
       headers["X-Amadeus-Secret"] = routerConfig.secret;
     }
 
-    const response = await fetch(`${spriteUrl}/webhook`, {
+    const response = await fetch(`${machineUrl}/webhook`, {
       method: "POST",
       headers,
       body: payload,
@@ -609,16 +609,16 @@ async function forwardWebhookToSprite(
 
     if (!response.ok) {
       console.warn(
-        `[SpriteForward] Failed to forward webhook to ${spriteUrl} for ${teamKey}: HTTP ${response.status}`
+        `[WebhookForward] Failed to forward webhook to ${machineUrl} for ${teamKey}: HTTP ${response.status}`
       );
     } else {
       console.log(
-        `[SpriteForward] Forwarded webhook to ${spriteUrl} for ${teamKey}`
+        `[WebhookForward] Forwarded webhook to ${machineUrl} for ${teamKey}`
       );
     }
   } catch (err) {
     console.warn(
-      `[SpriteForward] Error forwarding webhook to ${spriteUrl} for ${teamKey}: ${
+      `[WebhookForward] Error forwarding webhook to ${machineUrl} for ${teamKey}: ${
         err instanceof Error ? err.message : "Unknown error"
       }`
     );
@@ -816,7 +816,7 @@ export const server = Bun.serve({
       if (isHubMode()) {
         const route = routeWebhook(data);
         if (route.machineUrl) {
-          forwardWebhookToSprite(route.machineUrl, payload, signature, route.machineName ?? "unknown").catch((err) => {
+          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown").catch((err) => {
             console.error("[HubForward] Error:", err);
           });
           return new Response("OK", { status: 200 });
@@ -831,15 +831,14 @@ export const server = Bun.serve({
         return new Response("Machine components not initialized", { status: 500 });
       }
 
-      // Check if this project should be forwarded to a Sprite (standalone mode only)
+      // Check if this project should be forwarded to a remote machine
       const teamKey = getTeamKeyFromPayload(data);
       const projectName = getProjectNameFromPayload(data);
-      const spriteUrl = getSpriteUrlForProject(projectName ?? undefined, teamKey ?? undefined);
-      if (spriteUrl) {
-        // Forward to Sprite (fire and forget)
+      const machineUrl = getMachineUrlForProject(projectName ?? undefined, teamKey ?? undefined);
+      if (machineUrl) {
         const identifier = projectName ?? teamKey ?? "unknown";
-        forwardWebhookToSprite(spriteUrl, payload, signature, identifier).catch((err) => {
-          console.error("[SpriteForward] Error:", err);
+        forwardWebhookToMachine(machineUrl, payload, signature, identifier).catch((err) => {
+          console.error("[WebhookForward] Error:", err);
         });
         return new Response("OK", { status: 200 });
       }

@@ -60,9 +60,9 @@ export function routeWebhook(payload: LinearWebhookPayload): RouteResult {
     for (const project of realm.projects) {
       // Match by Linear project name (case-insensitive)
       if (projectName && project.linearProject?.toLowerCase() === projectName.toLowerCase()) {
-        if (project.spriteUrl) {
+        if (project.machineUrl) {
           return {
-            machineUrl: project.spriteUrl,
+            machineUrl: project.machineUrl,
             machineName: project.linearProject ?? teamKey ?? "unknown",
             reason: `Matched project "${projectName}"`,
           };
@@ -74,9 +74,9 @@ export function routeWebhook(payload: LinearWebhookPayload): RouteResult {
   // Fall back to team key lookup
   if (teamKey) {
     const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
-    if (entry?.project.spriteUrl) {
+    if (entry?.project.machineUrl) {
       return {
-        machineUrl: entry.project.spriteUrl,
+        machineUrl: entry.project.machineUrl,
         machineName: teamKey,
         reason: `Matched team "${teamKey}"`,
       };

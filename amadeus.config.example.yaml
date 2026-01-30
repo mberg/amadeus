@@ -35,7 +35,7 @@ realms:
       - teamKey: DESIGN
         path: /path/to/design/project
         profile: frontend
-        spriteUrl: https://amadeus-design-abc123.sprites.app  # optional: forward to Sprite
+        machineUrl: https://amadeus-design-abc123.sprites.app  # optional: forward to remote machine
 
   # Example of a second realm for a different Linear workspace
   # recode:
