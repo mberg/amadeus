@@ -20,8 +20,17 @@ const CONFIG_FILE_NAMES = ["amadeus.config.yaml", "amadeus.config.yml", "amadeus
 
 /**
  * Find the config file in the given directory.
+ * AMADEUS_CONFIG_FILE env var overrides the default search.
  */
 function findConfigFile(baseDir: string): string | null {
+  const envFile = process.env.AMADEUS_CONFIG_FILE;
+  if (envFile) {
+    const filePath = join(baseDir, envFile);
+    if (existsSync(filePath)) {
+      return filePath;
+    }
+  }
+
   for (const fileName of CONFIG_FILE_NAMES) {
     const filePath = join(baseDir, fileName);
     if (existsSync(filePath)) {
