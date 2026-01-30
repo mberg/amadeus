@@ -1,0 +1,62 @@
+# ABOUTME: Hub-mode Amadeus configuration for Railway deployment.
+# ABOUTME: Routes webhooks to remote machines, serves aggregate dashboard.
+#
+# Secrets (API keys, webhook secrets) must be set as Railway environment variables.
+
+realms:
+  ona:
+    linearWorkspace: ona
+    apiKeyEnvVar: LINEAR_API_KEY_ONA
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_ONA
+
+    projects:
+      - teamKey: ONA
+        linearProject: Amadeus
+        path: /hub/ona/amadeus
+        profile: base
+        machineUrl: https://onas-mac-mini.tail029c85.ts.net
+      - teamKey: ONA
+        linearProject: Engage Analytics
+        path: /hub/ona/engage-analytics
+        githubRepoUrl: https://github.com/onaio/engage-analytics
+        profile: base
+        machineUrl: https://onas-mac-mini.tail029c85.ts.net
+      - teamKey: ONA
+        linearProject: True Cover
+        path: /hub/ona/truecover
+        githubRepoUrl: https://github.com/onaio/truecover
+        profile: base
+        machineUrl: https://onas-mac-mini.tail029c85.ts.net
+
+  recode:
+    linearWorkspace: recodelabs
+    apiKeyEnvVar: LINEAR_API_KEY_RECODE
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_RECODE
+
+    projects:
+      - teamKey: REC
+        linearProject: ZoneWise
+        path: /hub/recode/timehopper
+        githubRepoUrl: https://github.com/mberg/timehopper
+        machineUrl: https://onas-mac-mini.tail029c85.ts.net
+        profile: base
+      - teamKey: REC
+        linearProject: Intershack
+        path: /hub/recode/intershack
+        githubRepoUrl: https://github.com/mberg/intershack
+        machineUrl: https://onas-mac-mini.tail029c85.ts.net
+        profile: base
+
+global:
+  runtimeMode: hub
+  agentName: Amadeus
+
+  machines:
+    - name: "Claudius"
+      url: "https://onas-mac-mini.tail029c85.ts.net"
+
+  triggerStates:
+    - Planning
+
+  security:
+    publicDashboard: true
