@@ -11,7 +11,8 @@
     "./auth": "./src/auth.ts",
     "./org": "./src/org.ts",
     "./types": "./src/types.ts",
-    "./dashboard/*": "./src/dashboard/*"
+    "./dashboard/*": "./src/dashboard/*",
+    "./src/*": "./src/*"
   },
   "scripts": {
     "start": "bun run src/server.ts",
