@@ -21,7 +21,14 @@ import {
   isMachineMode,
   isStandaloneMode,
 } from "./config";
-import { getMachines, updateMachineLastSeen, authenticateMachine } from "./db";
+import {
+  getMachines,
+  updateMachineLastSeen,
+  authenticateMachine,
+  recordCompletedTask,
+  getCompletedTasks,
+  getCompletedTaskCount,
+} from "./db";
 import { getRequestOrgId } from "./org";
 import { MachineRegistry } from "./hub/registry";
 import { IdleScanner } from "./hub/idle-scanner";
@@ -117,12 +124,12 @@ if (isMachineMode() || isStandaloneMode()) {
     persistence!.markAgentDead(info.issueId);
   };
 
-  // Handle agent completion - save to history
+  // Handle agent completion - save to Postgres
   const handleAgentComplete = (info: AgentCompletionInfo): void => {
     console.log(
       `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
     );
-    persistence!.saveCompletedTask({
+    recordCompletedTask("default", {
       key: info.key,
       issueId: info.issueId,
       issueIdentifier: info.issueIdentifier,
@@ -132,6 +139,8 @@ if (isMachineMode() || isStandaloneMode()) {
       completionReason: info.completionReason,
       finalLinearState: info.finalLinearState,
       duration: info.duration,
+    }).catch((err) => {
+      console.error("[AgentComplete] Failed to persist to database:", err);
     });
   };
 
@@ -1090,29 +1099,20 @@ export const server = Bun.serve({
       }
     }
 
-    // Completed tasks history
+    // Completed tasks history (from Postgres)
     if (req.method === "GET" && url.pathname === "/status/history") {
       const authError = await requireViewer(req);
       if (authError) return authError;
 
-      // In hub mode, no local history (aggregate from machines in future)
-      if (!persistence) {
-        return Response.json({
-          completedTasks: [],
-          total: 0,
-          limit: 20,
-          offset: 0,
-        });
-      }
-
+      const orgId = getRequestOrgId(url);
       const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
       const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
 
-      const completedTasks = persistence.getCompletedTasks(limit, offset);
-      const total = persistence.getCompletedTasksCount();
+      const completedTasksList = await getCompletedTasks(orgId, limit, offset);
+      const total = await getCompletedTaskCount(orgId);
 
       return Response.json({
-        completedTasks: completedTasks.map((task) => ({
+        completedTasks: completedTasksList.map((task) => ({
           ...task,
           completedAt: task.completedAt.toISOString(),
         })),
