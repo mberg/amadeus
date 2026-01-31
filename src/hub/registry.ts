@@ -2,6 +2,7 @@
 // ABOUTME: Tracks known machines and their status via push-based heartbeats.
 
 import type { AgentStatus } from "../types";
+import type { DbMachine } from "../db";
 
 export interface MachineInfo {
   name: string;
@@ -171,6 +172,17 @@ export class MachineRegistry {
         ? "dormant" as const
         : m.status,
     }));
+  }
+
+  /**
+   * Load machines from Postgres.
+   * Raw API keys are not available (only hashes stored) — keys get
+   * populated in-memory when machines send heartbeats.
+   */
+  loadFromDb(machines: DbMachine[]): void {
+    for (const m of machines) {
+      this.register(m.name, m.url);
+    }
   }
 
   /**

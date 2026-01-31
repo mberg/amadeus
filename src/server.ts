@@ -21,6 +21,7 @@ import {
   isMachineMode,
   isStandaloneMode,
 } from "./config";
+import { getMachines, updateMachineLastSeen, authenticateMachine } from "./db";
 import { MachineRegistry } from "./hub/registry";
 import { IdleScanner } from "./hub/idle-scanner";
 import { routeWebhook } from "./hub/router";
@@ -91,8 +92,10 @@ console.log(`[Server] Starting in ${getRuntimeMode()} mode as "${machineConfig.n
 let machineRegistry: MachineRegistry | null = null;
 if (isHubMode() || isStandaloneMode()) {
   machineRegistry = new MachineRegistry();
-  if (REALM_CONFIG?.machines) {
-    machineRegistry.loadFromConfig(REALM_CONFIG.machines);
+  const dbMachines = await getMachines("default");
+  if (dbMachines.length > 0) {
+    machineRegistry.loadFromDb(dbMachines);
+    console.log(`[Server] Loaded ${dbMachines.length} machine(s) from database`);
   }
 }
 
@@ -926,12 +929,26 @@ export const server = Bun.serve({
         return new Response("Missing machineName", { status: 400 });
       }
 
-      // Verify machine is registered and token matches
-      const machine = machineRegistry?.get(machineName);
+      // Verify machine is registered — check in-memory first, then Postgres
+      let machine = machineRegistry?.get(machineName);
       if (!machine) {
-        return new Response("Unknown machine", { status: 403 });
-      }
-      if (machine.apiKey && machine.apiKey !== token) {
+        // Machine not in registry — try authenticating via Postgres API key hash
+        if (token) {
+          const hasher = new Bun.CryptoHasher("sha256");
+          hasher.update(token);
+          const hash = hasher.digest("hex");
+          const dbAuth = await authenticateMachine(hash);
+          if (dbAuth && dbAuth.machineName === machineName) {
+            // Register in-memory with the raw API key for proxying
+            machineRegistry?.register(machineName, machineUrl ?? "", token);
+            machine = machineRegistry?.get(machineName);
+            await updateMachineLastSeen(dbAuth.machineId);
+          }
+        }
+        if (!machine) {
+          return new Response("Unknown machine", { status: 403 });
+        }
+      } else if (machine.apiKey && machine.apiKey !== token) {
         return new Response("Invalid token", { status: 403 });
       }
 
