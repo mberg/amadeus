@@ -4,6 +4,14 @@
   "type": "module",
   "license": "Apache-2.0",
   "private": true,
+  "exports": {
+    "./create-server": "./src/create-server.ts",
+    "./db": "./src/db/index.ts",
+    "./config": "./src/config.ts",
+    "./auth": "./src/auth.ts",
+    "./org": "./src/org.ts",
+    "./types": "./src/types.ts"
+  },
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun run css:build && bun run src/server.ts",
