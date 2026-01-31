@@ -22,6 +22,7 @@ import {
   isStandaloneMode,
 } from "./config";
 import { getMachines, updateMachineLastSeen, authenticateMachine } from "./db";
+import { getRequestOrgId } from "./org";
 import { MachineRegistry } from "./hub/registry";
 import { IdleScanner } from "./hub/idle-scanner";
 import { routeWebhook } from "./hub/router";
@@ -766,7 +767,8 @@ export const server = Bun.serve({
     }
 
     // Linear webhook endpoint
-    if (req.method === "POST" && url.pathname === "/webhook") {
+    if (req.method === "POST" && (url.pathname === "/webhook" || url.pathname.startsWith("/webhook/"))) {
+      const orgId = getRequestOrgId(url);
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
@@ -1163,7 +1165,8 @@ export const server = Bun.serve({
       const authError = await requireViewer(req);
       if (authError) return authError;
 
-      const yaml = await getConfigYaml();
+      const orgId = getRequestOrgId(url);
+      const yaml = await getConfigYaml(orgId);
       if (!yaml) {
         return new Response("No config file found", { status: 404 });
       }
@@ -1192,8 +1195,9 @@ export const server = Bun.serve({
       const authError = await requireAdmin(req);
       if (authError) return authError;
 
+      const orgId = getRequestOrgId(url);
       const yamlContent = await req.text();
-      const result = reloadConfig(yamlContent);
+      const result = reloadConfig(yamlContent, orgId);
 
       if (result.success) {
         return Response.json({ success: true });
