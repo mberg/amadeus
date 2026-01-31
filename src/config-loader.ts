@@ -130,6 +130,28 @@ function buildResolvedConfig(config: AmadeusConfig): ResolvedConfig {
 }
 
 /**
+ * Parse and resolve a YAML config string into a ResolvedConfig.
+ */
+export function loadConfigFromYaml(yamlContent: string): ResolvedConfig {
+  const rawConfig = yaml.load(yamlContent) as Record<string, unknown> | null;
+
+  if (rawConfig && rawConfig.global === undefined) {
+    rawConfig.global = {};
+  }
+
+  const parseResult = AmadeusConfigSchema.safeParse(rawConfig);
+
+  if (!parseResult.success) {
+    const errors = parseResult.error.issues
+      .map((e) => `  - ${e.path.join(".")}: ${e.message}`)
+      .join("\n");
+    throw new Error(`Invalid configuration:\n${errors}`);
+  }
+
+  return buildResolvedConfig(parseResult.data);
+}
+
+/**
  * Load configuration from amadeus.config.yaml.
  * Looks in the project root directory.
  */
@@ -144,23 +166,8 @@ export function loadConfig(baseDir?: string): ResolvedConfig {
     );
   }
 
-  const rawConfig = loadConfigFile(configPath) as Record<string, unknown> | null;
-
-  // Ensure global is at least an empty object (Zod defaults need an object, not undefined)
-  if (rawConfig && rawConfig.global === undefined) {
-    rawConfig.global = {};
-  }
-
-  const parseResult = AmadeusConfigSchema.safeParse(rawConfig);
-
-  if (!parseResult.success) {
-    const errors = parseResult.error.issues
-      .map((e) => `  - ${e.path.join(".")}: ${e.message}`)
-      .join("\n");
-    throw new Error(`Invalid configuration in ${configPath}:\n${errors}`);
-  }
-
-  return buildResolvedConfig(parseResult.data);
+  const content = readFileSync(configPath, "utf-8");
+  return loadConfigFromYaml(content);
 }
 
 /**

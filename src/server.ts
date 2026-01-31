@@ -3,6 +3,7 @@
 
 import { $ } from "bun";
 import {
+  initConfig,
   CONFIG,
   REALM_CONFIG,
   getAllWebhookSecrets,
@@ -78,6 +79,9 @@ async function requireAdmin(req: Request): Promise<Response | null> {
   });
   return result.authorized ? null : result.response;
 }
+
+// Initialize config from Postgres (seeds from local YAML on first run)
+await initConfig();
 
 // Mode-based initialization
 const machineConfig = getMachineConfig();
@@ -1142,7 +1146,7 @@ export const server = Bun.serve({
       const authError = await requireViewer(req);
       if (authError) return authError;
 
-      const yaml = getConfigYaml();
+      const yaml = await getConfigYaml();
       if (!yaml) {
         return new Response("No config file found", { status: 404 });
       }

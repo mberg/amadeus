@@ -19,7 +19,6 @@ import {
   recordCompletedTask,
   getCompletedTasks,
   getCompletedTaskCount,
-  close,
 } from "../src/db";
 
 const TEST_ORG = "test-org";
@@ -42,7 +41,6 @@ afterAll(async () => {
   await sql`DELETE FROM secrets WHERE org_id = ${TEST_ORG}`;
   await sql`DELETE FROM machines WHERE org_id = ${TEST_ORG}`;
   await sql`DELETE FROM organizations WHERE org_id = ${TEST_ORG}`;
-  await close();
 });
 
 // --- Organizations ---

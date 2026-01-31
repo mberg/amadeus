@@ -4,15 +4,22 @@
 import { join, resolve } from "node:path";
 import {
   loadConfig,
+  loadConfigFromYaml,
   hasNewStyleConfig,
   writeConfig,
-  getConfigYaml,
+  getConfigYaml as getConfigYamlFromFile,
   validateConfigYaml,
   type ResolvedConfig,
   type ResolvedRealm,
   type ConfigValidationResult,
 } from "./config-loader";
 import type { SecurityConfig, RuntimeMode } from "./config-schema";
+import {
+  migrate,
+  ensureOrg,
+  getConfigYaml as dbGetConfigYaml,
+  saveConfigYaml as dbSaveConfigYaml,
+} from "./db";
 
 /**
  * Legacy CONFIG interface for backward compatibility.
@@ -183,9 +190,6 @@ function loadLegacyConfigFromEnv(): LegacyConfig {
   };
 }
 
-// Determine which config system to use
-const useNewConfig = hasNewStyleConfig();
-
 /**
  * Resolved realm configuration for multi-realm support.
  * Only available when using new-style config (amadeus.config.yaml).
@@ -198,17 +202,40 @@ export let REALM_CONFIG: ResolvedConfig | null = null;
  */
 export let CONFIG: LegacyConfig;
 
-if (useNewConfig) {
-  try {
-    REALM_CONFIG = loadConfig();
-    CONFIG = buildLegacyConfigFromResolved(REALM_CONFIG);
-    console.log(`[Config] Loaded ${REALM_CONFIG.realms.length} realm(s) from amadeus.config.yaml`);
-  } catch (error) {
-    console.error("[Config] Failed to load amadeus.config.yaml:", error);
-    process.exit(1);
+let _configInitialized = false;
+
+/**
+ * Initialize configuration from Postgres.
+ * Falls back to local YAML file (seeding Postgres) or legacy env config.
+ * Must be called before using CONFIG or REALM_CONFIG.
+ */
+export async function initConfig(orgId: string = "default"): Promise<void> {
+  // Run Postgres migration and ensure org exists
+  await migrate();
+  await ensureOrg(orgId);
+
+  // Try Postgres first
+  let yamlContent = await dbGetConfigYaml(orgId);
+
+  // If no config in Postgres, seed from local YAML file
+  if (!yamlContent) {
+    const localYaml = getConfigYamlFromFile();
+    if (localYaml) {
+      yamlContent = localYaml;
+      await dbSaveConfigYaml(orgId, yamlContent);
+      console.log("[Config] Seeded Postgres from local config file");
+    }
   }
-} else {
-  CONFIG = loadLegacyConfigFromEnv();
+
+  if (yamlContent) {
+    REALM_CONFIG = loadConfigFromYaml(yamlContent);
+    CONFIG = buildLegacyConfigFromResolved(REALM_CONFIG);
+    console.log(`[Config] Loaded ${REALM_CONFIG.realms.length} realm(s) from database`);
+  } else {
+    CONFIG = loadLegacyConfigFromEnv();
+  }
+
+  _configInitialized = true;
 }
 
 /**
@@ -360,32 +387,41 @@ export function getMachineUrlForProject(projectName: string | undefined, teamKey
   return null;
 }
 
+export { validateConfigYaml };
+
 /**
- * Get the raw YAML configuration content.
+ * Get the raw YAML configuration content from Postgres.
  */
-export { getConfigYaml, validateConfigYaml };
+export function getConfigYaml(orgId: string = "default"): Promise<string | null> {
+  return dbGetConfigYaml(orgId);
+}
 
 export type ReloadConfigResult =
   | { success: true; config: ResolvedConfig }
   | { success: false; errors: string[] };
 
 /**
- * Reload configuration from disk and update in-memory config.
+ * Reload configuration: validate, save to Postgres, and update in-memory config.
  * Only works with new-style YAML config.
  */
-export function reloadConfig(yamlContent: string): ReloadConfigResult {
+export function reloadConfig(yamlContent: string, orgId: string = "default"): ReloadConfigResult {
   if (!REALM_CONFIG) {
     return { success: false, errors: ["Config reload only supported with YAML config"] };
   }
 
-  const result = writeConfig(yamlContent);
-  if (!result.valid) {
-    return { success: false, errors: result.errors };
+  const validation = validateConfigYaml(yamlContent);
+  if (!validation.valid) {
+    return { success: false, errors: validation.errors };
   }
 
-  REALM_CONFIG = result.config;
-  CONFIG = buildLegacyConfigFromResolved(result.config);
+  REALM_CONFIG = validation.config;
+  CONFIG = buildLegacyConfigFromResolved(validation.config);
 
-  console.log(`[Config] Reloaded configuration with ${result.config.realms.length} realm(s)`);
-  return { success: true, config: result.config };
+  // Save to Postgres (fire and forget — in-memory is already updated)
+  dbSaveConfigYaml(orgId, yamlContent).catch((err) => {
+    console.error("[Config] Failed to persist config to database:", err);
+  });
+
+  console.log(`[Config] Reloaded configuration with ${validation.config.realms.length} realm(s)`);
+  return { success: true, config: validation.config };
 }
