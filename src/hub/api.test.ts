@@ -52,7 +52,6 @@ describe("hub api", () => {
     await sql`DELETE FROM projects WHERE org_id = ${TEST_ORG}`;
     await sql`DELETE FROM machines WHERE org_id = ${TEST_ORG}`;
     await sql`DELETE FROM organizations WHERE org_id = ${TEST_ORG}`;
-    await sql.close();
   });
 
   // --- Users ---

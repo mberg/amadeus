@@ -26,7 +26,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await sql`DELETE FROM projects WHERE org_id = ${TEST_ORG}`;
-  await sql.close();
 });
 
 describe("projects CRUD", () => {

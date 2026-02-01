@@ -28,7 +28,6 @@ afterAll(async () => {
   await sql`DELETE FROM machines WHERE org_id = ${TEST_ORG}`;
   await sql`DELETE FROM users WHERE org_id = ${TEST_ORG}`;
   await sql`DELETE FROM organizations WHERE org_id = ${TEST_ORG}`;
-  await sql.close();
 });
 
 describe("machines extended", () => {

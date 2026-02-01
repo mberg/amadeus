@@ -21,7 +21,6 @@ describe("org-members", () => {
     await sql`DELETE FROM org_members WHERE org_id = ${TEST_ORG}`;
     await sql`DELETE FROM users WHERE org_id = ${TEST_ORG}`;
     await sql`DELETE FROM organizations WHERE org_id = ${TEST_ORG}`;
-    await sql.close();
   });
 
   test("addOrgMember inserts a member", async () => {

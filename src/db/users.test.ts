@@ -28,7 +28,6 @@ describe("users", () => {
   afterAll(async () => {
     await sql`DELETE FROM users WHERE org_id = ${TEST_ORG}`;
     await sql`DELETE FROM organizations WHERE org_id = ${TEST_ORG}`;
-    await sql.close();
   });
 
   test("createUser inserts and returns user", async () => {

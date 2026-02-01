@@ -38,7 +38,6 @@ afterAll(async () => {
   await sql`DELETE FROM projects WHERE org_id = ${TEST_ORG}`;
   await sql`DELETE FROM users WHERE org_id = ${TEST_ORG}`;
   await sql`DELETE FROM organizations WHERE org_id = ${TEST_ORG}`;
-  await sql.close();
 });
 
 describe("machine-projects", () => {
