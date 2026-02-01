@@ -365,7 +365,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     machineUrl: string,
     payload: string,
     signature: string | null,
-    teamKey: string
+    teamKey: string,
+    localRepoPath?: string | null
   ): Promise<void> {
     try {
       const headers: Record<string, string> = {
@@ -381,10 +382,17 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         headers["X-Amadeus-Secret"] = currentRouterConfig.secret;
       }
 
+      let forwardPayload = payload;
+      if (localRepoPath) {
+        const parsed = JSON.parse(payload);
+        parsed._routing = { localRepoPath };
+        forwardPayload = JSON.stringify(parsed);
+      }
+
       const response = await fetch(`${machineUrl}/webhook`, {
         method: "POST",
         headers,
-        body: payload,
+        body: forwardPayload,
       });
 
       if (!response.ok) {
@@ -532,9 +540,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       if (isHubMode()) {
-        const route = routeWebhook(data);
+        const route = await routeWebhook(orgId, data);
         if (route.machineUrl) {
-          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown").catch((err) => {
+          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath).catch((err) => {
             console.error("[HubForward] Error:", err);
           });
           return new Response("OK", { status: 200 });
