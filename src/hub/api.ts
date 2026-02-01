@@ -1,0 +1,172 @@
+// ABOUTME: REST API handlers for managing hub entities.
+// ABOUTME: Provides CRUD endpoints for users, projects, machines, and their relationships.
+
+import { getUsersByOrg, createUser, deleteUser, updateUserLinearId } from "../db/users";
+import { addOrgMember, removeOrgMember } from "../db/org-members";
+import { getProjectsByOrg, createProject, deleteProject } from "../db/projects";
+import {
+  addMachineProject,
+  getMachineProjects,
+  removeMachineProject,
+  addMachineAccess,
+  getMachineAccessList,
+  removeMachineAccess,
+} from "../db/machine-projects";
+import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
+import { getMachines, setSecret } from "../db";
+import { fetchLinearUserId } from "../linear";
+
+// --- Users ---
+
+export async function handleGetUsers(orgId: string): Promise<Response> {
+  const users = await getUsersByOrg(orgId);
+  return Response.json(users);
+}
+
+export async function handleCreateUser(req: Request, orgId: string): Promise<Response> {
+  const body = (await req.json()) as { name: string; email: string };
+  if (!body.name || !body.email) {
+    return Response.json({ error: "name and email are required" }, { status: 400 });
+  }
+  const user = await createUser({ orgId, name: body.name, email: body.email, authMethod: "api_key" });
+  await addOrgMember(orgId, user.id, "member");
+  return Response.json(user, { status: 201 });
+}
+
+export async function handleDeleteUser(orgId: string, userId: string): Promise<Response> {
+  await removeOrgMember(orgId, userId);
+  const deleted = await deleteUser(userId);
+  if (!deleted) return Response.json({ error: "User not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}
+
+export async function handleSetUserLinearPat(
+  req: Request,
+  orgId: string,
+  userId: string
+): Promise<Response> {
+  const body = (await req.json()) as { pat: string };
+  if (!body.pat) {
+    return Response.json({ error: "pat is required" }, { status: 400 });
+  }
+
+  const linearUserId = await fetchLinearUserId(body.pat);
+  if (!linearUserId) {
+    return Response.json({ error: "Invalid Linear API key" }, { status: 400 });
+  }
+
+  await setSecret(orgId, `user:${userId}:linear_pat`, body.pat);
+  await updateUserLinearId(userId, linearUserId);
+
+  return Response.json({ linearUserId });
+}
+
+// --- Projects ---
+
+export async function handleGetProjects(orgId: string): Promise<Response> {
+  const projects = await getProjectsByOrg(orgId);
+  return Response.json(projects);
+}
+
+export async function handleCreateProject(req: Request, orgId: string): Promise<Response> {
+  const body = (await req.json()) as {
+    name: string;
+    linearProjectUrl?: string;
+    githubRepoUrl?: string;
+    linearTeamKey?: string;
+    linearProjectName?: string;
+  };
+  if (!body.name) {
+    return Response.json({ error: "name is required" }, { status: 400 });
+  }
+  const project = await createProject({ orgId, ...body });
+  return Response.json(project, { status: 201 });
+}
+
+export async function handleDeleteProject(orgId: string, projectId: string): Promise<Response> {
+  const deleted = await deleteProject(projectId, orgId);
+  if (!deleted) return Response.json({ error: "Project not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}
+
+// --- Machines ---
+
+export async function handleGetMachines(orgId: string): Promise<Response> {
+  const machines = await getMachines(orgId);
+  return Response.json(machines);
+}
+
+// --- Machine Projects ---
+
+export async function handleGetMachineProjects(machineId: string): Promise<Response> {
+  const projects = await getMachineProjects(machineId);
+  return Response.json(projects);
+}
+
+export async function handleAddMachineProject(req: Request, machineId: string): Promise<Response> {
+  const body = (await req.json()) as { projectId: string; localRepoPath: string };
+  if (!body.projectId || !body.localRepoPath) {
+    return Response.json({ error: "projectId and localRepoPath are required" }, { status: 400 });
+  }
+  await addMachineProject(machineId, body.projectId, body.localRepoPath);
+  return new Response(null, { status: 204 });
+}
+
+export async function handleRemoveMachineProject(
+  machineId: string,
+  projectId: string
+): Promise<Response> {
+  const removed = await removeMachineProject(machineId, projectId);
+  if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}
+
+// --- Machine Access ---
+
+export async function handleGetMachineAccess(machineId: string): Promise<Response> {
+  const access = await getMachineAccessList(machineId);
+  return Response.json(access);
+}
+
+export async function handleAddMachineAccess(req: Request, machineId: string): Promise<Response> {
+  const body = (await req.json()) as { userId: string };
+  if (!body.userId) {
+    return Response.json({ error: "userId is required" }, { status: 400 });
+  }
+  await addMachineAccess(machineId, body.userId);
+  return new Response(null, { status: 204 });
+}
+
+export async function handleRemoveMachineAccess(
+  machineId: string,
+  userId: string
+): Promise<Response> {
+  const removed = await removeMachineAccess(machineId, userId);
+  if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}
+
+// --- Project Members ---
+
+export async function handleGetProjectMembers(projectId: string): Promise<Response> {
+  const members = await getProjectMembers(projectId);
+  return Response.json(members);
+}
+
+export async function handleAddProjectMember(req: Request, projectId: string): Promise<Response> {
+  const body = (await req.json()) as { userId: string; machineId: string };
+  if (!body.userId || !body.machineId) {
+    return Response.json({ error: "userId and machineId are required" }, { status: 400 });
+  }
+  await addProjectMember(projectId, body.userId, body.machineId);
+  return new Response(null, { status: 204 });
+}
+
+export async function handleRemoveProjectMember(
+  projectId: string,
+  userId: string
+): Promise<Response> {
+  const removed = await removeProjectMember(projectId, userId);
+  if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}

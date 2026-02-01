@@ -795,6 +795,53 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
     }
 
+    // Hub API endpoints for entity management
+    if (url.pathname.startsWith("/hub/api/")) {
+      const authError = await requireAdmin(req);
+      if (authError) return authError;
+
+      const orgId = getRequestOrgId(url);
+      const parts = url.pathname.split("/").filter(Boolean); // ["hub", "api", "users", ...]
+
+      const resource = parts[2];
+      const resourceId = parts[3];
+      const subResource = parts[4];
+      const subResourceId = parts[5];
+
+      const api = await import("./hub/api");
+
+      // Users
+      if (resource === "users") {
+        if (!resourceId && req.method === "GET") return api.handleGetUsers(orgId);
+        if (!resourceId && req.method === "POST") return api.handleCreateUser(req, orgId);
+        if (resourceId && !subResource && req.method === "DELETE") return api.handleDeleteUser(orgId, resourceId);
+        if (resourceId && subResource === "linear-pat" && req.method === "POST") return api.handleSetUserLinearPat(req, orgId, resourceId);
+      }
+
+      // Projects
+      if (resource === "projects") {
+        if (!resourceId && req.method === "GET") return api.handleGetProjects(orgId);
+        if (!resourceId && req.method === "POST") return api.handleCreateProject(req, orgId);
+        if (resourceId && !subResource && req.method === "DELETE") return api.handleDeleteProject(orgId, resourceId);
+        if (resourceId && subResource === "members" && !subResourceId && req.method === "GET") return api.handleGetProjectMembers(resourceId);
+        if (resourceId && subResource === "members" && !subResourceId && req.method === "POST") return api.handleAddProjectMember(req, resourceId);
+        if (resourceId && subResource === "members" && subResourceId && req.method === "DELETE") return api.handleRemoveProjectMember(resourceId, subResourceId);
+      }
+
+      // Machines
+      if (resource === "machines") {
+        if (!resourceId && req.method === "GET") return api.handleGetMachines(orgId);
+        if (resourceId && subResource === "projects" && !subResourceId && req.method === "GET") return api.handleGetMachineProjects(resourceId);
+        if (resourceId && subResource === "projects" && !subResourceId && req.method === "POST") return api.handleAddMachineProject(req, resourceId);
+        if (resourceId && subResource === "projects" && subResourceId && req.method === "DELETE") return api.handleRemoveMachineProject(resourceId, subResourceId);
+        if (resourceId && subResource === "access" && !subResourceId && req.method === "GET") return api.handleGetMachineAccess(resourceId);
+        if (resourceId && subResource === "access" && !subResourceId && req.method === "POST") return api.handleAddMachineAccess(req, resourceId);
+        if (resourceId && subResource === "access" && subResourceId && req.method === "DELETE") return api.handleRemoveMachineAccess(resourceId, subResourceId);
+      }
+
+      return new Response("Not Found", { status: 404 });
+    }
+
     // Completed tasks history (from Postgres)
     if (req.method === "GET" && url.pathname === "/status/history") {
       const authError = await requireViewer(req);
