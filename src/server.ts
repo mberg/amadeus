@@ -161,6 +161,7 @@ if (isMachineMode() && machineConfig.hubUrl) {
       machineName: machineConfig.name,
       machineUrl: `http://localhost:${getServerPort()}`,
       apiKey: process.env.AMADEUS_API_KEY,
+      token: machineConfig.token,
     },
     getAgents
   );

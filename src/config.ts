@@ -334,7 +334,7 @@ export function isStandaloneMode(): boolean {
 /**
  * Get machine configuration with defaults.
  */
-export function getMachineConfig(): { name: string; hubUrl?: string; heartbeat: boolean } {
+export function getMachineConfig(): { name: string; token?: string; hubUrl?: string; heartbeat: boolean } {
   if (REALM_CONFIG?.global.machine) {
     return REALM_CONFIG.global.machine;
   }

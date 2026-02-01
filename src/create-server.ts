@@ -629,6 +629,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("Not available in machine mode", { status: 404 });
       }
 
+      const tokenHash = req.headers.get("X-Machine-Token-Hash");
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");
 
@@ -648,10 +649,10 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
       let machine = ctx.machineRegistry?.get(machineName);
       if (!machine) {
-        if (token) {
-          const hasher = new Bun.CryptoHasher("sha256");
-          hasher.update(token);
-          const hash = hasher.digest("hex");
+        // Authenticate via token hash (pre-hashed by machine) or raw API key
+        const hash = tokenHash
+          ?? (token ? new Bun.CryptoHasher("sha256").update(token).digest("hex") : null);
+        if (hash) {
           const dbAuth = await authenticateMachine(hash);
           if (dbAuth && dbAuth.machineName === machineName) {
             ctx.machineRegistry?.register(machineName, heartbeatMachineUrl ?? "", token);
