@@ -1,12 +1,13 @@
 // ABOUTME: Webhook routing logic for hub mode.
-// ABOUTME: Determines which machine should handle an incoming webhook.
+// ABOUTME: Routes webhooks to machines via database lookups.
 
 import type { LinearWebhookPayload, LinearIssue, LinearComment } from "../shared/types";
-import { REALM_CONFIG } from "../shared/config";
+import { resolveRoute } from "../db/routing";
 
 export interface RouteResult {
-  machineUrl: string | null; // null means process locally
+  machineUrl: string | null;
   machineName: string | null;
+  localRepoPath: string | null;
   reason: string;
 }
 
@@ -45,43 +46,42 @@ export function getProjectNameFromPayload(payload: LinearWebhookPayload): string
 }
 
 /**
+ * Get assignee Linear user ID from webhook payload.
+ */
+export function getAssigneeIdFromPayload(payload: LinearWebhookPayload): string | null {
+  const { type, data } = payload;
+
+  if (type === "Issue" && !isComment(data)) {
+    return data.assignee?.id ?? null;
+  } else if (type === "Comment" && isComment(data)) {
+    return data.issue?.assignee?.id ?? null;
+  }
+
+  return null;
+}
+
+/**
  * Determine which machine should handle a webhook.
  */
-export function routeWebhook(payload: LinearWebhookPayload): RouteResult {
+export async function routeWebhook(orgId: string, payload: LinearWebhookPayload): Promise<RouteResult> {
   const teamKey = getTeamKeyFromPayload(payload);
   const projectName = getProjectNameFromPayload(payload);
+  const assigneeLinearId = getAssigneeIdFromPayload(payload);
 
-  if (!REALM_CONFIG) {
-    return { machineUrl: null, machineName: null, reason: "No realm config" };
+  const route = await resolveRoute(orgId, {
+    linearProjectName: projectName ?? undefined,
+    teamKey: teamKey ?? undefined,
+    assigneeLinearId: assigneeLinearId ?? undefined,
+  });
+
+  if (route) {
+    return {
+      machineUrl: route.machineUrl,
+      machineName: route.machineName,
+      localRepoPath: route.localRepoPath,
+      reason: route.reason,
+    };
   }
 
-  // Search for matching project with machine assignment
-  for (const realm of REALM_CONFIG.realms) {
-    for (const project of realm.projects) {
-      // Match by Linear project name (case-insensitive)
-      if (projectName && project.linearProject?.toLowerCase() === projectName.toLowerCase()) {
-        if (project.machineUrl) {
-          return {
-            machineUrl: project.machineUrl,
-            machineName: project.linearProject ?? teamKey ?? "unknown",
-            reason: `Matched project "${projectName}"`,
-          };
-        }
-      }
-    }
-  }
-
-  // Fall back to team key lookup
-  if (teamKey) {
-    const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
-    if (entry?.project.machineUrl) {
-      return {
-        machineUrl: entry.project.machineUrl,
-        machineName: teamKey,
-        reason: `Matched team "${teamKey}"`,
-      };
-    }
-  }
-
-  return { machineUrl: null, machineName: null, reason: "No machine routing configured" };
+  return { machineUrl: null, machineName: null, localRepoPath: null, reason: "No matching project in database" };
 }
