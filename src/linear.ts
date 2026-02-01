@@ -207,3 +207,31 @@ export async function fetchTeamWorkflowStates(
     return [];
   }
 }
+
+/**
+ * Fetches the authenticated user's Linear ID using their PAT.
+ * Returns the user ID or null on failure.
+ */
+export async function fetchLinearUserId(
+  apiKey: string
+): Promise<string | null> {
+  try {
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({
+        query: "{ viewer { id } }",
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return data?.data?.viewer?.id ?? null;
+  } catch {
+    return null;
+  }
+}
