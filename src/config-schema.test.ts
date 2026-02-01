@@ -66,6 +66,19 @@ describe("MachineConfigSchema", () => {
   test("requires non-empty name", () => {
     expect(() => MachineConfigSchema.parse({ name: "" })).toThrow();
   });
+
+  test("token is optional", () => {
+    const result = MachineConfigSchema.parse({ name: "NoToken" });
+    expect(result.token).toBeUndefined();
+  });
+
+  test("accepts token when provided", () => {
+    const result = MachineConfigSchema.parse({
+      name: "Authenticated",
+      token: "secret-token-123",
+    });
+    expect(result.token).toBe("secret-token-123");
+  });
 });
 
 describe("StaticMachineSchema", () => {
