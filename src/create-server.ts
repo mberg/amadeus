@@ -178,7 +178,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
   async function handleIssueWebhook(
     action: string,
-    issue: LinearIssue
+    issue: LinearIssue,
+    repoPathOverride?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor) {
       console.error("[Webhook] Machine components not initialized");
@@ -243,7 +244,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName, undefined, undefined, workflowStates)
         );
       } else {
-        await ctx.orchestrator.startAgent(issue);
+        await ctx.orchestrator.startAgent(issue, repoPathOverride);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
       }
@@ -252,7 +253,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
   async function handleCommentWebhook(
     action: string,
-    comment: LinearComment
+    comment: LinearComment,
+    repoPathOverride?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor || !ctx.persistence) {
       console.error("[Webhook] Machine components not initialized");
@@ -319,7 +321,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           `[${new Date().toISOString()}] Recovering agent for ${comment.issue.identifier} from saved state`
         );
 
-        await ctx.orchestrator.startAgent(comment.issue);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -344,7 +346,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         console.log(
           `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
         );
-        await ctx.orchestrator.startAgent(comment.issue);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -437,13 +439,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     return null;
   }
 
-  async function handleWebhook(payload: LinearWebhookPayload): Promise<void> {
+  async function handleWebhook(payload: LinearWebhookPayload, repoPathOverride?: string): Promise<void> {
     const { action, type, data } = payload;
 
     if (type === "Issue" && !isComment(data)) {
-      await handleIssueWebhook(action, data);
+      await handleIssueWebhook(action, data, repoPathOverride);
     } else if (type === "Comment" && isComment(data)) {
-      await handleCommentWebhook(action, data);
+      await handleCommentWebhook(action, data, repoPathOverride);
     }
   }
 
@@ -529,6 +531,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
+      const routing = (data as any)._routing as { localRepoPath?: string } | undefined;
 
       const MAX_AGE_MS = 60000;
       const now = Date.now();
@@ -566,7 +569,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("OK", { status: 200 });
       }
 
-      handleWebhook(data).catch((err) => {
+      handleWebhook(data, routing?.localRepoPath).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
       });
 

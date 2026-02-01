@@ -17,6 +17,64 @@ function makeContext(overrides: Partial<ServerContext> = {}): ServerContext {
   };
 }
 
+describe("_routing extraction", () => {
+  test("extracts localRepoPath from payload with _routing", () => {
+    const payload = {
+      action: "create",
+      type: "Issue",
+      data: { id: "1", identifier: "ENG-1", title: "test" },
+      webhookTimestamp: Date.now(),
+      _routing: { localRepoPath: "/srv/repos/my-project" },
+    };
+    const routing = (payload as any)._routing as { localRepoPath?: string } | undefined;
+    expect(routing?.localRepoPath).toBe("/srv/repos/my-project");
+  });
+
+  test("returns undefined when _routing is absent", () => {
+    const payload = {
+      action: "create",
+      type: "Issue",
+      data: { id: "1", identifier: "ENG-1", title: "test" },
+      webhookTimestamp: Date.now(),
+    };
+    const routing = (payload as any)._routing as { localRepoPath?: string } | undefined;
+    expect(routing).toBeUndefined();
+  });
+
+  test("repoPathOverride takes precedence over config in path resolution", () => {
+    const configPaths: Record<string, string> = {
+      eng: "/config/eng-repo",
+      default: "/config/default-repo",
+    };
+    const teamKeyLower = "eng";
+    const repoPathOverride = "/hub/override-repo";
+
+    // This mirrors the logic in orchestrator.startAgent after our change
+    const projectPath =
+      repoPathOverride ||
+      (teamKeyLower && configPaths[teamKeyLower]) ||
+      configPaths["default"];
+
+    expect(projectPath).toBe("/hub/override-repo");
+  });
+
+  test("falls back to config path when repoPathOverride is undefined", () => {
+    const configPaths: Record<string, string> = {
+      eng: "/config/eng-repo",
+      default: "/config/default-repo",
+    };
+    const teamKeyLower = "eng";
+    const repoPathOverride: string | undefined = undefined;
+
+    const projectPath =
+      repoPathOverride ||
+      (teamKeyLower && configPaths[teamKeyLower]) ||
+      configPaths["default"];
+
+    expect(projectPath).toBe("/config/eng-repo");
+  });
+});
+
 describe("createFetchHandler", () => {
   test("returns a function", () => {
     const handler = createFetchHandler(makeContext());

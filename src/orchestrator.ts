@@ -365,16 +365,17 @@ export class ClaudeOrchestrator {
     }
   }
 
-  async startAgent(issue: LinearIssue): Promise<void> {
+  async startAgent(issue: LinearIssue, repoPathOverride?: string): Promise<void> {
     const key = this.getAgentKey(issue);
 
-    // Look up project path: try project name first, then team key, then DEFAULT
+    // Look up project path: hub-provided override first, then project name, team key, DEFAULT
     // Use lowercase for case-insensitive matching
     const projectName = issue.project?.name;
     const teamKey = issue.team?.key;
     const projectNameLower = projectName?.toLowerCase();
     const teamKeyLower = teamKey?.toLowerCase();
     const projectPath =
+      repoPathOverride ||
       (projectNameLower && this.config.projectPaths[projectNameLower]) ||
       (teamKeyLower && this.config.projectPaths[teamKeyLower]) ||
       this.config.projectPaths["default"] ||
@@ -386,11 +387,13 @@ export class ClaudeOrchestrator {
       return;
     }
 
-    const routedBy = projectNameLower && this.config.projectPaths[projectNameLower]
-      ? `project "${projectName}"`
-      : teamKeyLower && this.config.projectPaths[teamKeyLower]
-        ? `team "${teamKey}"`
-        : "DEFAULT";
+    const routedBy = repoPathOverride
+      ? "hub override"
+      : projectNameLower && this.config.projectPaths[projectNameLower]
+        ? `project "${projectName}"`
+        : teamKeyLower && this.config.projectPaths[teamKeyLower]
+          ? `team "${teamKey}"`
+          : "DEFAULT";
     console.log(`[Agent] Routed ${issue.identifier} to ${projectPath} via ${routedBy}`);
 
     if (this.agents.has(key)) {
