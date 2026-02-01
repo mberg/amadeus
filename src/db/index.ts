@@ -197,3 +197,11 @@ function rowToCompletedTask(row: Record<string, unknown>): CompletedTask {
 export async function close(): Promise<void> {
   await sql.close();
 }
+
+// --- Entity modules ---
+
+export * from "./users";
+export * from "./org-members";
+export * from "./projects";
+export * from "./machine-projects";
+export * from "./project-members";
