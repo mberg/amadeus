@@ -42,6 +42,72 @@ CREATE TABLE IF NOT EXISTS completed_tasks (
   duration_ms        INTEGER NOT NULL
 );
 
+-- Users within an organization
+CREATE TABLE IF NOT EXISTS users (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id          TEXT REFERENCES organizations(org_id),
+  name            TEXT NOT NULL,
+  email           TEXT NOT NULL,
+  linear_user_id  TEXT,
+  auth_method     TEXT NOT NULL DEFAULT 'api_key',
+  api_key_hash    TEXT,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Extend organizations with name and owner
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS owner_user_id UUID;
+
+-- Extend machines with ownership, permission, and status
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES users(id);
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS permission TEXT NOT NULL DEFAULT 'public';
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'unknown';
+
+-- Maps users to organizations with a role
+CREATE TABLE IF NOT EXISTS org_members (
+  org_id   TEXT NOT NULL REFERENCES organizations(org_id),
+  user_id  UUID NOT NULL REFERENCES users(id),
+  role     TEXT NOT NULL DEFAULT 'member',
+  PRIMARY KEY (org_id, user_id)
+);
+
+-- Per-user access grants for private machines
+CREATE TABLE IF NOT EXISTS machine_access (
+  machine_id UUID NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (machine_id, user_id)
+);
+
+-- Projects track a Linear project + GitHub repo pair
+CREATE TABLE IF NOT EXISTS projects (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id               TEXT NOT NULL REFERENCES organizations(org_id),
+  name                 TEXT NOT NULL,
+  linear_project_url   TEXT,
+  github_repo_url      TEXT,
+  linear_team_key      TEXT,
+  linear_project_name  TEXT,
+  created_at           TIMESTAMPTZ DEFAULT now()
+);
+
+-- Links machines to projects with a local checkout path
+CREATE TABLE IF NOT EXISTS machine_projects (
+  machine_id      UUID NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
+  project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  local_repo_path TEXT NOT NULL,
+  PRIMARY KEY (machine_id, project_id)
+);
+
+-- Assigns users to projects, scoped to a specific machine
+CREATE TABLE IF NOT EXISTS project_members (
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  machine_id UUID NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
+  PRIMARY KEY (project_id, user_id)
+);
+
+-- Indexes
+
 CREATE INDEX IF NOT EXISTS idx_completed_tasks_org_date
   ON completed_tasks (org_id, completed_at DESC);
 
@@ -50,6 +116,18 @@ CREATE INDEX IF NOT EXISTS idx_machines_org
 
 CREATE INDEX IF NOT EXISTS idx_secrets_org_key
   ON secrets (org_id, key_name);
+
+CREATE INDEX IF NOT EXISTS idx_users_org
+  ON users (org_id);
+
+CREATE INDEX IF NOT EXISTS idx_users_linear_id
+  ON users (linear_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_projects_org
+  ON projects (org_id);
+
+CREATE INDEX IF NOT EXISTS idx_projects_linear
+  ON projects (org_id, linear_team_key);
 
 -- Ensure a default org exists for open-source single-tenant mode
 INSERT INTO organizations (org_id) VALUES ('default')
