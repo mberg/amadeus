@@ -175,14 +175,7 @@ export async function requireAuth(
 
     const hasApiToken = options.apiToken && req.headers.get("X-Amadeus-Token") === options.apiToken;
 
-    if (requiredRole === "admin") {
-      return {
-        authorized: false,
-        response: new Response("Forbidden: Config editing requires Clerk authentication", { status: 403 }),
-      };
-    }
-
-    if (requiredRole === "operator") {
+    if (requiredRole === "admin" || requiredRole === "operator") {
       if (hasApiToken) {
         return { authorized: true, context };
       }
