@@ -1,16 +1,21 @@
-// ABOUTME: Authentication provider that wraps the app with Clerk when enabled.
-// ABOUTME: Handles both simple mode (no auth) and Clerk mode with role-based access.
+// ABOUTME: Authentication provider that wraps the app with Better Auth when enabled.
+// ABOUTME: Handles both simple mode (no auth) and Better Auth mode with role-based access.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { ClerkProvider, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
+import { authClient } from "../lib/auth-client";
 
-export type AuthMode = "simple" | "clerk";
+export type AuthMode = "simple" | "betterauth";
 export type UserRole = "viewer" | "operator" | "admin";
 
 interface AuthInfo {
   mode: AuthMode;
-  clerkEnabled: boolean;
-  publishableKey?: string;
+  authEnabled: boolean;
+}
+
+interface MeResponse {
+  authenticated: boolean;
+  user?: { id: string; name: string; email: string; image?: string };
+  role?: UserRole;
 }
 
 interface AuthContextValue {
@@ -20,6 +25,8 @@ interface AuthContextValue {
   canMessage: boolean;
   canEditConfig: boolean;
   enableAgentMessaging?: boolean;
+  user?: { id: string; name: string; email: string; image?: string };
+  isSignedIn: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -28,26 +35,48 @@ const AuthContext = createContext<AuthContextValue>({
   role: "viewer",
   canMessage: false,
   canEditConfig: false,
+  isSignedIn: false,
 });
 
 export function useAuth() {
   return useContext(AuthContext);
 }
 
-function ClerkAuthContent({ children, enableAgentMessaging }: { children: ReactNode; enableAgentMessaging?: boolean }) {
-  const { user, isLoaded } = useUser();
+function BetterAuthContent({ children, enableAgentMessaging }: { children: ReactNode; enableAgentMessaging?: boolean }) {
+  const { data: session, isPending } = authClient.useSession();
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [mePending, setMePending] = useState(true);
 
-  const role = (user?.publicMetadata?.role as UserRole) || "viewer";
+  useEffect(() => {
+    if (isPending) return;
+    if (!session?.user) {
+      setMe({ authenticated: false });
+      setMePending(false);
+      return;
+    }
+
+    fetch("/auth/me")
+      .then((res) => res.json())
+      .then((data: MeResponse) => setMe(data))
+      .catch(() => setMe({ authenticated: false }))
+      .finally(() => setMePending(false));
+  }, [session?.user?.id, isPending]);
+
+  const loading = isPending || mePending;
+  const role = me?.role ?? "viewer";
   const canMessage = role === "operator" || role === "admin";
   const canEditConfig = role === "admin";
+  const isSignedIn = !!session?.user;
 
   const value: AuthContextValue = {
-    mode: "clerk",
-    loading: !isLoaded,
+    mode: "betterauth",
+    loading,
     role,
     canMessage,
     canEditConfig,
     enableAgentMessaging,
+    user: me?.user,
+    isSignedIn,
   };
 
   return (
@@ -67,6 +96,7 @@ function SimpleAuthContent({ children, enableAgentMessaging }: { children: React
     canMessage,
     canEditConfig: false,
     enableAgentMessaging,
+    isSignedIn: false,
   };
 
   return (
@@ -104,7 +134,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       } catch (error) {
         console.error("Failed to fetch auth info:", error);
-        setAuthInfo({ mode: "simple", clerkEnabled: false });
+        setAuthInfo({ mode: "simple", authEnabled: false });
       } finally {
         setLoading(false);
       }
@@ -121,13 +151,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     );
   }
 
-  if (authInfo?.clerkEnabled && authInfo.publishableKey) {
+  if (authInfo?.authEnabled) {
     return (
-      <ClerkProvider publishableKey={authInfo.publishableKey}>
-        <ClerkAuthContent enableAgentMessaging={enableAgentMessaging}>
-          {children}
-        </ClerkAuthContent>
-      </ClerkProvider>
+      <BetterAuthContent enableAgentMessaging={enableAgentMessaging}>
+        {children}
+      </BetterAuthContent>
     );
   }
 
@@ -144,16 +172,23 @@ interface ProtectedProps {
 }
 
 export function Protected({ children, fallback }: ProtectedProps) {
-  const { mode } = useAuth();
+  const { mode, loading, isSignedIn } = useAuth();
 
   if (mode === "simple") {
     return <>{children}</>;
   }
 
-  return (
-    <>
-      <SignedIn>{children}</SignedIn>
-      <SignedOut>{fallback}</SignedOut>
-    </>
-  );
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <>{fallback}</>;
+  }
+
+  return <>{children}</>;
 }
