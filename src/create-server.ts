@@ -27,7 +27,8 @@ import {
 import { getRequestOrgId } from "./org";
 import { routeWebhook } from "./hub/router";
 import { verifyLinearSignature } from "./signature";
-import { requireAuth as checkAuth, getAuthInfo, isClerkEnabled } from "./auth";
+import { requireAuth as checkAuth, getAuthInfo, isBetterAuthEnabled } from "./auth";
+import { auth } from "./better-auth";
 import type { ClaudeOrchestrator, AgentDeathInfo, AgentCompletionInfo } from "./orchestrator";
 import { buildPrompt, buildCommentPrompt, buildRecoveryPrompt } from "./prompt";
 import { isBotComment } from "./comment-filter";
@@ -482,6 +483,11 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
 
+    // Better Auth handler (session management, sign-in, sign-up, OAuth callbacks)
+    if (auth && url.pathname.startsWith("/api/auth/")) {
+      return auth.handler(req);
+    }
+
     // Health check
     if (req.method === "GET" && url.pathname === "/health") {
       return new Response("OK");
@@ -579,6 +585,42 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     // Auth info endpoint
     if (req.method === "GET" && url.pathname === "/auth/info") {
       return Response.json(getAuthInfo());
+    }
+
+    // Current user endpoint (returns hub user info + role for authenticated sessions)
+    if (req.method === "GET" && url.pathname === "/auth/me") {
+      if (!isBetterAuthEnabled() || !auth) {
+        return Response.json({ authenticated: false });
+      }
+      try {
+        const session = await auth.api.getSession({ headers: req.headers });
+        if (!session?.user) {
+          return Response.json({ authenticated: false });
+        }
+        const { getUserByEmail } = await import("./db/users");
+        const { getOrgMemberRole } = await import("./db/org-members");
+        const hubUser = session.user.email
+          ? await getUserByEmail("default", session.user.email)
+          : null;
+        const orgRole = hubUser
+          ? await getOrgMemberRole("default", hubUser.id)
+          : null;
+        let role: "admin" | "operator" | "viewer" = "viewer";
+        if (orgRole === "admin") role = "admin";
+        else if (orgRole === "member") role = "operator";
+        return Response.json({
+          authenticated: true,
+          user: {
+            id: session.user.id,
+            name: session.user.name,
+            email: session.user.email,
+            image: session.user.image,
+          },
+          role,
+        });
+      } catch {
+        return Response.json({ authenticated: false });
+      }
     }
 
     // Status dashboard (JSON)

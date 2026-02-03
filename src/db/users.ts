@@ -47,6 +47,17 @@ export async function getUser(id: string): Promise<DbUser | null> {
   return row ? rowToUser(row) : null;
 }
 
+export async function getUserByEmail(
+  orgId: string,
+  email: string
+): Promise<DbUser | null> {
+  const [row] = await sql`
+    SELECT id, org_id, name, email, linear_user_id, auth_method, api_key_hash, created_at
+    FROM users WHERE org_id = ${orgId} AND email = ${email}
+  `;
+  return row ? rowToUser(row) : null;
+}
+
 export async function getUserByLinearId(
   orgId: string,
   linearUserId: string
