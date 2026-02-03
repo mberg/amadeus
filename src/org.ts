@@ -1,5 +1,5 @@
 // ABOUTME: Org context for multi-tenant support.
-// ABOUTME: Open-source uses "default" org. SaaS layer overrides with Clerk org ID.
+// ABOUTME: Open-source uses "default" org. Cloud layer overrides with session-based org ID.
 
 const DEFAULT_ORG_ID = "default";
 

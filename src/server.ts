@@ -26,7 +26,7 @@ import { HubHeartbeat } from "./hub-heartbeat";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
-import { isClerkEnabled } from "./auth";
+import { isBetterAuthEnabled } from "./auth";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged, deleteBranch } from "./github";
 import { createFetchHandler, type ServerContext } from "./create-server";
@@ -374,10 +374,10 @@ if (routerConfig) {
   console.log(`   Router:    ${routerConfig.url} (as "${routerConfig.machineName}")`);
 }
 
-if (!isClerkEnabled() && !CONFIG.apiToken) {
+if (!isBetterAuthEnabled() && !CONFIG.apiToken) {
   console.warn(
     "\n⚠️  WARNING: No authentication configured!\n" +
-    "   Set AMADEUS_API_TOKEN or configure Clerk to secure your instance.\n" +
+    "   Set AMADEUS_API_TOKEN or configure Better Auth to secure your instance.\n" +
     "   All API endpoints will deny access until authentication is configured.\n"
   );
 }

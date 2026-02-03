@@ -2,7 +2,7 @@
 // ABOUTME: Covers simple auth mode, secure defaults, and cookie parsing.
 
 import { describe, expect, it, test } from "bun:test";
-import { getAuthContext, parseCookies } from "../src/auth";
+import { getAuthContext, getAuthInfo, isBetterAuthEnabled, parseCookies } from "../src/auth";
 
 function mockRequest(headers: Record<string, string> = {}): Request {
   return new Request("http://localhost/test", { headers });
@@ -54,6 +54,20 @@ describe("getAuthContext in simple mode", () => {
   });
 });
 
+describe("isBetterAuthEnabled", () => {
+  it("returns false when BETTER_AUTH_SECRET is not set", () => {
+    expect(isBetterAuthEnabled()).toBe(false);
+  });
+});
+
+describe("getAuthInfo", () => {
+  it("returns simple mode when Better Auth is not configured", () => {
+    const info = getAuthInfo();
+    expect(info.mode).toBe("simple");
+    expect(info.authEnabled).toBe(false);
+  });
+});
+
 describe("parseCookies", () => {
   test("parses a single cookie", () => {
     expect(parseCookies("foo=bar")).toEqual({ foo: "bar" });
@@ -91,7 +105,7 @@ describe("parseCookies", () => {
     expect(parseCookies("foo=bar ;baz=qux")).toEqual({ "foo": "bar ", baz: "qux" });
   });
 
-  test("handles real-world Clerk session cookie", () => {
+  test("handles JWT-style session cookie", () => {
     const jwt = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig";
     expect(parseCookies(`__session=${jwt}`)).toEqual({ __session: jwt });
   });

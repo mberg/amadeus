@@ -107,6 +107,6 @@ describe("createFetchHandler", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data).toHaveProperty("mode");
-    expect(data).toHaveProperty("clerkEnabled");
+    expect(data).toHaveProperty("authEnabled");
   });
 });
