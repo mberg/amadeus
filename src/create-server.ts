@@ -414,17 +414,21 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       } catch (tlsErr) {
         // Fallback: use curl for TLS-problematic connections (e.g. Tailscale funnel certs)
         console.log(`[WebhookForward] fetch failed with TLS error, retrying with curl: ${(tlsErr as Error).message}`);
-        const curlArgs = ["-sk", "-X", "POST", "-o", "/dev/null", "-w", "%{http_code}"];
+        const curlArgs = ["-skv", "-X", "POST", "-w", "\n%{http_code}"];
         for (const [k, v] of Object.entries(headers)) {
           curlArgs.push("-H", `${k}: ${v}`);
         }
         curlArgs.push("-d", forwardPayload, `${machineUrl}/webhook`);
+        console.log(`[WebhookForward] curl args: curl ${curlArgs.map(a => a.length > 100 ? a.slice(0, 100) + '...' : a).join(' ')}`);
         const proc = Bun.spawn(["curl", ...curlArgs], { stdout: "pipe", stderr: "pipe" });
-        const output = await new Response(proc.stdout).text();
-        const errOutput = await new Response(proc.stderr).text();
-        await proc.exited;
-        if (errOutput) console.log(`[WebhookForward] curl stderr: ${errOutput.trim()}`);
-        const statusCode = parseInt(output.trim(), 10) || 500;
+        const [output, errOutput, exitCode] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
+        ]);
+        console.log(`[WebhookForward] curl exit=${exitCode} stdout=${output.trim().slice(-20)} stderr=${errOutput.trim().slice(-200)}`);
+        const lines = output.trim().split("\n");
+        const statusCode = parseInt(lines[lines.length - 1], 10) || 500;
         response = new Response(null, { status: statusCode });
       }
 
