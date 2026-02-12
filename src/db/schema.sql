@@ -138,6 +138,14 @@ CREATE INDEX IF NOT EXISTS idx_users_linear_id
 -- Add realm_id to existing projects tables
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS realm_id UUID REFERENCES realms(id);
 
+-- Maps users to realms with a role
+CREATE TABLE IF NOT EXISTS realm_members (
+  realm_id UUID NOT NULL REFERENCES realms(id) ON DELETE CASCADE,
+  user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role     TEXT NOT NULL DEFAULT 'member',
+  PRIMARY KEY (realm_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_realms_org
   ON realms (org_id);
 
