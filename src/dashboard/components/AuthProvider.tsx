@@ -16,6 +16,7 @@ interface MeResponse {
   authenticated: boolean;
   user?: { id: string; name: string; email: string; image?: string };
   role?: UserRole;
+  hubUserId?: string | null;
 }
 
 interface AuthContextValue {
@@ -26,6 +27,7 @@ interface AuthContextValue {
   canEditConfig: boolean;
   enableAgentMessaging?: boolean;
   user?: { id: string; name: string; email: string; image?: string };
+  hubUserId?: string;
   isSignedIn: boolean;
 }
 
@@ -76,6 +78,7 @@ function BetterAuthContent({ children, enableAgentMessaging }: { children: React
     canEditConfig,
     enableAgentMessaging,
     user: me?.user,
+    hubUserId: me?.hubUserId ?? undefined,
     isSignedIn,
   };
 
