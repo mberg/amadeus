@@ -141,11 +141,15 @@ export function AccountPage() {
       {/* User info */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-2">
         <h3 className="text-sm font-medium">Profile</h3>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-          <span className="text-muted-foreground">Name</span>
-          <span>{user?.name ?? "—"}</span>
-          <span className="text-muted-foreground">Email</span>
-          <span>{user?.email ?? "—"}</span>
+        <div className="text-sm space-y-1">
+          <div className="flex gap-3">
+            <span className="text-muted-foreground w-14">Name</span>
+            <span>{user?.name ?? "—"}</span>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-muted-foreground w-14">Email</span>
+            <span>{user?.email ?? "—"}</span>
+          </div>
         </div>
       </div>
 
