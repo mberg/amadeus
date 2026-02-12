@@ -1,7 +1,7 @@
 // ABOUTME: Machine API key generation and verification for amadeus-cloud.
 // ABOUTME: Keys use amk_ prefix with SHA-256 hashing for storage.
 
-import { createMachine, authenticateMachine } from "amadeus/db";
+import { createMachine, authenticateMachine } from "../../src/db";
 
 function hashApiKey(apiKey: string): string {
   const hasher = new Bun.CryptoHasher("sha256");

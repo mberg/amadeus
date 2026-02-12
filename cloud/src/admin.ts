@@ -2,7 +2,7 @@
 // ABOUTME: Wraps generateMachineApiKey for the admin UI.
 
 import { generateMachineApiKey } from "./api-keys";
-import { deleteMachine } from "amadeus/db";
+import { deleteMachine } from "../../src/db";
 
 export async function handleAdminRoutes(
   req: Request,

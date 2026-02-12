@@ -1,7 +1,7 @@
 // ABOUTME: Cloud fetch handler wrapping amadeus with org resolution and cloud routes.
 // ABOUTME: Mounts onboarding and admin routes before falling through to the amadeus handler.
 
-import { createFetchHandler, type ServerContext } from "amadeus/create-server";
+import { createFetchHandler, type ServerContext } from "../../src/create-server";
 import { resolveOrgId } from "./org-auth";
 import { handleOnboardingRoutes } from "./onboarding";
 import { handleAdminRoutes } from "./admin";

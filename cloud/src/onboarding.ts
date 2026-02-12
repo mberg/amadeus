@@ -8,7 +8,7 @@ import {
   completeOnboarding,
 } from "./db/cloud-db";
 import { generateMachineApiKey } from "./api-keys";
-import { setSecret, saveConfigYaml } from "amadeus/db";
+import { setSecret, saveConfigYaml } from "../../src/db";
 
 export async function handleOnboardingRoutes(
   req: Request,

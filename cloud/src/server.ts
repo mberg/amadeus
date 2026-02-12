@@ -13,13 +13,13 @@ import {
   isHubMode,
   isMachineMode,
   isStandaloneMode,
-} from "amadeus/config";
-import { getMachines, recordCompletedTask } from "amadeus/db";
-import { isBetterAuthEnabled } from "amadeus/auth";
-import { createFetchHandler, type ServerContext } from "amadeus/create-server";
+} from "../../src/config";
+import { getMachines, recordCompletedTask } from "../../src/db";
+import { isBetterAuthEnabled } from "../../src/auth";
+import { createFetchHandler, type ServerContext } from "../../src/create-server";
 import { createCloudHandler } from "./cloud-handler";
 import { migrateCloud } from "./db/cloud-db";
-import amadeusHtml from "amadeus/dashboard/index.html";
+import amadeusHtml from "../../src/dashboard/index.html";
 import setupHtml from "./dashboard/index.html";
 import adminHtml from "./dashboard/admin.html";
 
@@ -87,13 +87,13 @@ const machineConfig = getMachineConfig();
 console.log(`[Cloud] Starting in ${getRuntimeMode()} mode as "${machineConfig.name}"`);
 
 // Dynamic imports for amadeus components (not all are re-exported)
-const { MachineRegistry } = await import("amadeus/src/hub/registry.ts");
-const { IdleScanner } = await import("amadeus/src/hub/idle-scanner.ts");
-const { RouterHeartbeat } = await import("amadeus/src/router-heartbeat.ts");
-const { HubHeartbeat } = await import("amadeus/src/hub-heartbeat.ts");
-const { ClaudeOrchestrator } = await import("amadeus/src/orchestrator.ts");
-const { AgentPersistence } = await import("amadeus/src/persistence.ts");
-const { HealthMonitor } = await import("amadeus/src/health-monitor.ts");
+const { MachineRegistry } = await import("../../src/hub/registry.ts");
+const { IdleScanner } = await import("../../src/hub/idle-scanner.ts");
+const { RouterHeartbeat } = await import("../../src/router-heartbeat.ts");
+const { HubHeartbeat } = await import("../../src/hub-heartbeat.ts");
+const { ClaudeOrchestrator } = await import("../../src/orchestrator.ts");
+const { AgentPersistence } = await import("../../src/persistence.ts");
+const { HealthMonitor } = await import("../../src/health-monitor.ts");
 
 // Hub components (hub or standalone mode)
 let machineRegistry: InstanceType<typeof MachineRegistry> | null = null;

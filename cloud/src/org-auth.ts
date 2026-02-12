@@ -1,8 +1,8 @@
 // ABOUTME: Organization resolution from Better Auth sessions.
 // ABOUTME: Extracts org_id from request, ensuring the org exists in Postgres.
 
-import { auth } from "amadeus/better-auth";
-import { ensureOrg } from "amadeus/db";
+import { auth } from "../../src/better-auth";
+import { ensureOrg } from "../../src/db";
 
 export async function resolveOrgId(req: Request): Promise<string | null> {
   if (!auth) return null;

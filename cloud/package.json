@@ -9,20 +9,14 @@
     "test": "bun test",
     "css:build": "tailwindcss -i src/dashboard/styles.css -o src/dashboard/index.css --minify",
     "css:watch": "tailwindcss -i src/dashboard/styles.css -o src/dashboard/index.css --watch",
-    "postinstall": "rm -rf node_modules/amadeus/node_modules/react node_modules/amadeus/node_modules/react-dom"
   },
   "dependencies": {
-    "amadeus": "file:..",
     "better-auth": "^1.4.18",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "lucide-react": "^0.562.0",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.4.0"
-  },
-  "overrides": {
-    "react": "$react",
-    "react-dom": "$react-dom"
   },
   "devDependencies": {
     "@types/react": "^19.2.8",
