@@ -952,10 +952,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           }
         : null;
 
+      // Cloud deployments (Better Auth enabled) are effectively hub mode
+      const effectiveMode = isBetterAuthEnabled() ? "hub" : getRuntimeMode();
+
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
         machineName: machineConfig.name,
-        runtimeMode: getRuntimeMode(),
+        runtimeMode: effectiveMode,
         setup,
       });
     }
