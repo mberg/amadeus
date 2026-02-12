@@ -1154,6 +1154,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       return Response.json(resources);
     }
 
-    return new Response("Not Found", { status: 404 });
+    // Return undefined to let Bun's built-in static file serving handle HTML import chunks
+    return undefined;
   };
 }
