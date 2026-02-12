@@ -3,7 +3,8 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { sql } from "bun";
-import { migrate } from "../db/index";
+import { migrate, setSecret } from "../db/index";
+import { createRealm } from "../db/realms";
 import {
   handleGetUsers,
   handleCreateUser,
@@ -21,6 +22,8 @@ import {
   handleGetProjectMembers,
   handleAddProjectMember,
   handleRemoveProjectMember,
+  handleGetUserLinearPats,
+  handleDeleteUserLinearPat,
 } from "./api";
 
 const TEST_ORG = "test-org-hub-api";
@@ -315,6 +318,102 @@ describe("hub api", () => {
 
     test("handleRemoveProjectMember returns 404 for nonexistent member", async () => {
       const res = await handleRemoveProjectMember(projectId, "00000000-0000-0000-0000-000000000000");
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // --- User Linear PATs ---
+
+  describe("user linear pats", () => {
+    let patUserId: string;
+    let realmId1: string;
+    let realmId2: string;
+
+    beforeAll(async () => {
+      const createRes = await handleCreateUser(
+        jsonRequest({ name: "PatUser", email: "patuser@hub-api.test" }),
+        TEST_ORG
+      );
+      const user = await createRes.json();
+      patUserId = user.id;
+
+      const realm1 = await createRealm({ orgId: TEST_ORG, name: "realm-a", linearWorkspace: "ws-a" });
+      realmId1 = realm1.id;
+      const realm2 = await createRealm({ orgId: TEST_ORG, name: "realm-b", linearWorkspace: "ws-b" });
+      realmId2 = realm2.id;
+
+      await setSecret(TEST_ORG, `user:${patUserId}:realm:${realmId1}:linear_pat`, "pat-1");
+      await setSecret(TEST_ORG, `user:${patUserId}:realm:${realmId2}:linear_pat`, "pat-2");
+      await setSecret(TEST_ORG, `user:${patUserId}:linear_pat`, "global-pat");
+    });
+
+    afterAll(async () => {
+      await sql`DELETE FROM secrets WHERE org_id = ${TEST_ORG} AND key_name LIKE ${"user:" + patUserId + ":%"}`;
+      await sql`DELETE FROM secrets WHERE org_id = ${TEST_ORG} AND key_name = ${"user:" + patUserId + ":linear_pat"}`;
+      await sql`DELETE FROM realms WHERE org_id = ${TEST_ORG}`;
+    });
+
+    test("handleGetUserLinearPats returns all PATs for user", async () => {
+      const res = await handleGetUserLinearPats(TEST_ORG, patUserId);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(3);
+
+      const realmIds = body.map((p: { realmId: string | null }) => p.realmId);
+      expect(realmIds).toContain(realmId1);
+      expect(realmIds).toContain(realmId2);
+      expect(realmIds).toContain(null);
+
+      for (const pat of body) {
+        expect(pat.hasToken).toBe(true);
+      }
+    });
+
+    test("handleGetUserLinearPats returns empty array for user with no PATs", async () => {
+      const res = await handleGetUserLinearPats(TEST_ORG, "00000000-0000-0000-0000-000000000000");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual([]);
+    });
+
+    test("handleDeleteUserLinearPat removes realm-specific PAT", async () => {
+      const req = new Request("http://localhost/test", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ realmId: realmId2 }),
+      });
+      const res = await handleDeleteUserLinearPat(req, TEST_ORG, patUserId);
+      expect(res.status).toBe(204);
+
+      // Verify it's gone
+      const listRes = await handleGetUserLinearPats(TEST_ORG, patUserId);
+      const body = await listRes.json();
+      const realmIds = body.map((p: { realmId: string | null }) => p.realmId);
+      expect(realmIds).not.toContain(realmId2);
+    });
+
+    test("handleDeleteUserLinearPat removes global PAT", async () => {
+      const req = new Request("http://localhost/test", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const res = await handleDeleteUserLinearPat(req, TEST_ORG, patUserId);
+      expect(res.status).toBe(204);
+
+      const listRes = await handleGetUserLinearPats(TEST_ORG, patUserId);
+      const body = await listRes.json();
+      const realmIds = body.map((p: { realmId: string | null }) => p.realmId);
+      expect(realmIds).not.toContain(null);
+    });
+
+    test("handleDeleteUserLinearPat returns 404 for nonexistent PAT", async () => {
+      const req = new Request("http://localhost/test", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ realmId: "nonexistent-realm" }),
+      });
+      const res = await handleDeleteUserLinearPat(req, TEST_ORG, patUserId);
       expect(res.status).toBe(404);
     });
   });

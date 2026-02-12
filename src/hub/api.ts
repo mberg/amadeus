@@ -13,7 +13,7 @@ import {
   removeMachineAccess,
 } from "../db/machine-projects";
 import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
-import { getMachines, setSecret, getSecret, deleteSecret } from "../db";
+import { getMachines, setSecret, getSecret, deleteSecret, listSecretKeys } from "../db";
 import { createRealm, getRealmsByOrg, getRealm, updateRealm, deleteRealm as dbDeleteRealm } from "../db/realms";
 import { addRealmMember, getRealmMembers, removeRealmMember, getUserRealms } from "../db/realm-members";
 import { rebuildRealmConfig } from "../config";
@@ -65,6 +65,40 @@ export async function handleSetUserLinearPat(
   await updateUserLinearId(userId, linearUserId);
 
   return Response.json({ linearUserId });
+}
+
+export async function handleGetUserLinearPats(
+  orgId: string,
+  userId: string
+): Promise<Response> {
+  const keys = await listSecretKeys(orgId, `user:${userId}:`);
+  const patKeys = keys.filter((k) => k.endsWith(":linear_pat"));
+
+  const pats = patKeys.map((key) => {
+    // Key formats: "user:{id}:realm:{realmId}:linear_pat" or "user:{id}:linear_pat"
+    const realmMatch = key.match(/^user:[^:]+:realm:([^:]+):linear_pat$/);
+    return {
+      realmId: realmMatch ? realmMatch[1] : null,
+      hasToken: true,
+    };
+  });
+
+  return Response.json(pats);
+}
+
+export async function handleDeleteUserLinearPat(
+  req: Request,
+  orgId: string,
+  userId: string
+): Promise<Response> {
+  const body = (await req.json()) as { realmId?: string };
+  const secretKey = body.realmId
+    ? `user:${userId}:realm:${body.realmId}:linear_pat`
+    : `user:${userId}:linear_pat`;
+
+  const deleted = await deleteSecret(orgId, secretKey);
+  if (!deleted) return Response.json({ error: "PAT not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
 }
 
 // --- Projects ---
