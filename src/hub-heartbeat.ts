@@ -8,6 +8,7 @@ export interface HubHeartbeatConfig {
   machineName: string;
   machineUrl: string;
   apiKey?: string;
+  token?: string;
   intervalMs?: number;
 }
 
@@ -16,7 +17,7 @@ const IDLE_INTERVAL_MS = 60_000; // Slower when no agents to allow hibernation
 const IDLE_STOP_THRESHOLD_MS = 120_000; // Stop heartbeats after 2 minutes idle
 
 export class HubHeartbeat {
-  private config: Required<Omit<HubHeartbeatConfig, "apiKey">> & { apiKey?: string };
+  private config: Required<Omit<HubHeartbeatConfig, "apiKey" | "token">> & { apiKey?: string; token?: string };
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private getAgents: () => Promise<AgentStatus[]>;
   private lastAgentCount = -1; // -1 means unknown (first run)
@@ -40,6 +41,10 @@ export class HubHeartbeat {
       };
       if (this.config.apiKey) {
         headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+      }
+      if (this.config.token) {
+        const hash = new Bun.CryptoHasher("sha256").update(this.config.token).digest("hex");
+        headers["X-Machine-Token-Hash"] = hash;
       }
 
       const response = await fetch(`${this.config.hubUrl}/hub/heartbeat`, {

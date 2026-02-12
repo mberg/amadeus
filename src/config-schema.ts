@@ -68,6 +68,7 @@ export type RuntimeMode = z.infer<typeof RuntimeModeSchema>;
  */
 export const MachineConfigSchema = z.object({
   name: z.string().min(1, "Machine name cannot be empty"),
+  token: z.string().optional(),
   hubUrl: z.string().url().optional(),
   heartbeat: z.boolean().default(false),
 });

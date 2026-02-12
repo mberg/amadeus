@@ -4,15 +4,33 @@
 import { join, resolve } from "node:path";
 import {
   loadConfig,
+  loadConfigFromYaml,
   hasNewStyleConfig,
   writeConfig,
-  getConfigYaml,
+  getConfigYaml as getConfigYamlFromFile,
   validateConfigYaml,
   type ResolvedConfig,
   type ResolvedRealm,
   type ConfigValidationResult,
 } from "./config-loader";
-import type { SecurityConfig, RuntimeMode } from "./config-schema";
+import type { SecurityConfig, RuntimeMode, GlobalConfig, Project } from "./config-schema";
+import { GlobalConfigSchema } from "./config-schema";
+import yaml from "js-yaml";
+import {
+  migrate,
+  ensureOrg,
+  getConfigYaml as dbGetConfigYaml,
+  saveConfigYaml as dbSaveConfigYaml,
+  getSecret,
+  setSecret,
+  getRealmsByOrg,
+  getProjectsByRealm,
+  createRealm,
+  createProject,
+  getUserByLinearId,
+  getProjectByLinearKey,
+} from "./db";
+import type { DbRealm } from "./db/realms";
 
 /**
  * Legacy CONFIG interface for backward compatibility.
@@ -183,9 +201,6 @@ function loadLegacyConfigFromEnv(): LegacyConfig {
   };
 }
 
-// Determine which config system to use
-const useNewConfig = hasNewStyleConfig();
-
 /**
  * Resolved realm configuration for multi-realm support.
  * Only available when using new-style config (amadeus.config.yaml).
@@ -198,17 +213,170 @@ export let REALM_CONFIG: ResolvedConfig | null = null;
  */
 export let CONFIG: LegacyConfig;
 
-if (useNewConfig) {
-  try {
-    REALM_CONFIG = loadConfig();
-    CONFIG = buildLegacyConfigFromResolved(REALM_CONFIG);
-    console.log(`[Config] Loaded ${REALM_CONFIG.realms.length} realm(s) from amadeus.config.yaml`);
-  } catch (error) {
-    console.error("[Config] Failed to load amadeus.config.yaml:", error);
-    process.exit(1);
+let _configInitialized = false;
+
+/**
+ * Parse global settings from the YAML stored in organizations.config_yaml.
+ * Returns defaults if no YAML exists or if parsing fails.
+ */
+function parseGlobalConfig(yamlContent: string | null): GlobalConfig {
+  if (!yamlContent) {
+    return GlobalConfigSchema.parse({});
   }
-} else {
-  CONFIG = loadLegacyConfigFromEnv();
+  try {
+    const raw = yaml.load(yamlContent) as Record<string, unknown> | null;
+    return GlobalConfigSchema.parse(raw?.global ?? {});
+  } catch {
+    return GlobalConfigSchema.parse({});
+  }
+}
+
+/**
+ * Build ResolvedConfig from DB realms + secrets + global YAML config.
+ * Returns null if no DB realms exist.
+ */
+async function buildRealmConfigFromDb(orgId: string): Promise<ResolvedConfig | null> {
+  const dbRealms = await getRealmsByOrg(orgId);
+  if (dbRealms.length === 0) return null;
+
+  const yamlContent = await dbGetConfigYaml(orgId);
+  const global = parseGlobalConfig(yamlContent);
+
+  const resolvedRealms: ResolvedRealm[] = [];
+  const realmByWorkspace = new Map<string, ResolvedRealm>();
+  const realmByTeamKey = new Map<string, ResolvedRealm>();
+  const projectByTeamKey = new Map<string, { realm: ResolvedRealm; project: Project }>();
+
+  for (const dbRealm of dbRealms) {
+    const webhookSecret = await getSecret(orgId, `realm:${dbRealm.id}:webhook_secret`) ?? "";
+
+    const dbProjects = await getProjectsByRealm(dbRealm.id);
+    const projects: Project[] = dbProjects
+      .filter((p) => p.linearTeamKey)
+      .map((p) => ({
+        teamKey: p.linearTeamKey!,
+        linearProject: p.linearProjectName ?? undefined,
+        path: "/",
+        githubRepoUrl: p.githubRepoUrl ?? undefined,
+      }));
+
+    const resolvedRealm: ResolvedRealm = {
+      name: dbRealm.name,
+      linearWorkspace: dbRealm.linearWorkspace,
+      apiKey: "",
+      webhookSecret,
+      claudeBotUserId: dbRealm.claudeBotUserId ?? undefined,
+      projects,
+    };
+
+    resolvedRealms.push(resolvedRealm);
+    realmByWorkspace.set(dbRealm.linearWorkspace, resolvedRealm);
+
+    for (const project of projects) {
+      realmByTeamKey.set(project.teamKey, resolvedRealm);
+      projectByTeamKey.set(project.teamKey, { realm: resolvedRealm, project });
+    }
+  }
+
+  return {
+    realms: resolvedRealms,
+    global,
+    realmByWorkspace,
+    realmByTeamKey,
+    projectByTeamKey,
+  };
+}
+
+/**
+ * Seed DB realms from a parsed YAML config (one-time migration).
+ * Creates realm rows and stores resolved secrets.
+ */
+async function seedRealmsFromYaml(orgId: string, config: ResolvedConfig): Promise<void> {
+  for (const realm of config.realms) {
+    const dbRealm = await createRealm({
+      orgId,
+      name: realm.name,
+      linearWorkspace: realm.linearWorkspace,
+      claudeBotUserId: realm.claudeBotUserId,
+    });
+
+    if (realm.webhookSecret) {
+      await setSecret(orgId, `realm:${dbRealm.id}:webhook_secret`, realm.webhookSecret);
+    }
+
+    // Create DB projects for each realm project that has a team key
+    for (const project of realm.projects) {
+      await createProject({
+        orgId,
+        name: project.linearProject ?? project.teamKey,
+        linearTeamKey: project.teamKey,
+        linearProjectName: project.linearProject,
+        githubRepoUrl: project.githubRepoUrl,
+        realmId: dbRealm.id,
+      });
+    }
+
+    console.log(`[Config] Seeded realm "${realm.name}" with ${realm.projects.length} project(s)`);
+  }
+}
+
+/**
+ * Rebuild in-memory REALM_CONFIG from DB after realm API changes.
+ */
+export async function rebuildRealmConfig(orgId: string = "default"): Promise<void> {
+  const dbConfig = await buildRealmConfigFromDb(orgId);
+  if (dbConfig) {
+    REALM_CONFIG = dbConfig;
+    CONFIG = buildLegacyConfigFromResolved(dbConfig);
+    console.log(`[Config] Rebuilt config with ${dbConfig.realms.length} realm(s) from database`);
+  }
+}
+
+/**
+ * Initialize configuration from Postgres.
+ * Falls back to local YAML file (seeding Postgres) or legacy env config.
+ * Must be called before using CONFIG or REALM_CONFIG.
+ */
+export async function initConfig(orgId: string = "default"): Promise<void> {
+  // Run Postgres migration and ensure org exists
+  await migrate();
+  await ensureOrg(orgId);
+
+  // Try DB realms first
+  const dbConfig = await buildRealmConfigFromDb(orgId);
+  if (dbConfig) {
+    REALM_CONFIG = dbConfig;
+    CONFIG = buildLegacyConfigFromResolved(dbConfig);
+    console.log(`[Config] Loaded ${dbConfig.realms.length} realm(s) from database`);
+    _configInitialized = true;
+    return;
+  }
+
+  // Try Postgres YAML config
+  let yamlContent = await dbGetConfigYaml(orgId);
+
+  // If no config in Postgres, seed from local YAML file
+  if (!yamlContent) {
+    const localYaml = getConfigYamlFromFile();
+    if (localYaml) {
+      yamlContent = localYaml;
+      await dbSaveConfigYaml(orgId, yamlContent);
+      console.log("[Config] Seeded Postgres from local config file");
+    }
+  }
+
+  if (yamlContent) {
+    REALM_CONFIG = loadConfigFromYaml(yamlContent);
+    CONFIG = buildLegacyConfigFromResolved(REALM_CONFIG);
+    console.log(`[Config] Loaded ${REALM_CONFIG.realms.length} realm(s) from YAML config`);
+
+    // Seed DB realms from YAML for future DB-first loading
+    await seedRealmsFromYaml(orgId, REALM_CONFIG);
+  } else {
+    CONFIG = loadLegacyConfigFromEnv();
+  }
+
+  _configInitialized = true;
 }
 
 /**
@@ -307,7 +475,7 @@ export function isStandaloneMode(): boolean {
 /**
  * Get machine configuration with defaults.
  */
-export function getMachineConfig(): { name: string; hubUrl?: string; heartbeat: boolean } {
+export function getMachineConfig(): { name: string; token?: string; hubUrl?: string; heartbeat: boolean } {
   if (REALM_CONFIG?.global.machine) {
     return REALM_CONFIG.global.machine;
   }
@@ -361,31 +529,76 @@ export function getMachineUrlForProject(projectName: string | undefined, teamKey
 }
 
 /**
- * Get the raw YAML configuration content.
+ * Resolve a Linear API key for a given team and optional assignee.
+ * Fallback chain:
+ *   1. Realm-specific PAT for the assignee's hub user
+ *   2. Global PAT for the assignee's hub user
+ *   3. Static apiKey from YAML-based realm config
+ *   4. null
  */
-export { getConfigYaml, validateConfigYaml };
+export async function resolveLinearApiKey(
+  orgId: string,
+  teamKey: string,
+  assigneeLinearId?: string
+): Promise<string | null> {
+  if (assigneeLinearId) {
+    const hubUser = await getUserByLinearId(orgId, assigneeLinearId);
+    if (hubUser) {
+      // Find the realm DB ID via the project's team key
+      const project = await getProjectByLinearKey(orgId, teamKey);
+      if (project?.realmId) {
+        const realmPat = await getSecret(orgId, `user:${hubUser.id}:realm:${project.realmId}:linear_pat`);
+        if (realmPat) return realmPat;
+      }
+
+      // Fall back to user's global PAT
+      const globalPat = await getSecret(orgId, `user:${hubUser.id}:linear_pat`);
+      if (globalPat) return globalPat;
+    }
+  }
+
+  // Fall back to static apiKey from YAML config (non-empty for YAML-sourced realms)
+  const realmInfo = getRealmByTeamKey(teamKey);
+  if (realmInfo?.apiKey) return realmInfo.apiKey;
+
+  return null;
+}
+
+export { validateConfigYaml };
+
+/**
+ * Get the raw YAML configuration content from Postgres.
+ */
+export function getConfigYaml(orgId: string = "default"): Promise<string | null> {
+  return dbGetConfigYaml(orgId);
+}
 
 export type ReloadConfigResult =
   | { success: true; config: ResolvedConfig }
   | { success: false; errors: string[] };
 
 /**
- * Reload configuration from disk and update in-memory config.
+ * Reload configuration: validate, save to Postgres, and update in-memory config.
  * Only works with new-style YAML config.
  */
-export function reloadConfig(yamlContent: string): ReloadConfigResult {
+export function reloadConfig(yamlContent: string, orgId: string = "default"): ReloadConfigResult {
   if (!REALM_CONFIG) {
     return { success: false, errors: ["Config reload only supported with YAML config"] };
   }
 
-  const result = writeConfig(yamlContent);
-  if (!result.valid) {
-    return { success: false, errors: result.errors };
+  const validation = validateConfigYaml(yamlContent);
+  if (!validation.valid) {
+    return { success: false, errors: validation.errors };
   }
 
-  REALM_CONFIG = result.config;
-  CONFIG = buildLegacyConfigFromResolved(result.config);
+  REALM_CONFIG = validation.config;
+  CONFIG = buildLegacyConfigFromResolved(validation.config);
 
-  console.log(`[Config] Reloaded configuration with ${result.config.realms.length} realm(s)`);
-  return { success: true, config: result.config };
+  // Save to Postgres (fire and forget — in-memory is already updated)
+  dbSaveConfigYaml(orgId, yamlContent).catch((err) => {
+    console.error("[Config] Failed to persist config to database:", err);
+  });
+
+  console.log(`[Config] Reloaded configuration with ${validation.config.realms.length} realm(s)`);
+  return { success: true, config: validation.config };
 }

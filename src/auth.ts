@@ -1,7 +1,9 @@
-// ABOUTME: Authentication middleware supporting both simple (API token) and Clerk modes.
+// ABOUTME: Authentication middleware supporting both simple (API token) and Better Auth modes.
 // ABOUTME: Provides role-based access control for dashboard and API endpoints.
 
-import { createClerkClient, verifyToken } from "@clerk/backend";
+import { auth } from "./better-auth";
+import { getUserByEmail } from "./db/users";
+import { getOrgMemberRole } from "./db/org-members";
 
 /**
  * Parses a cookie header string into a key-value object.
@@ -24,7 +26,7 @@ export function parseCookies(cookieHeader: string): Record<string, string> {
   return cookies;
 }
 
-export type AuthMode = "simple" | "clerk";
+export type AuthMode = "simple" | "betterauth";
 export type UserRole = "viewer" | "operator" | "admin";
 
 export interface AuthContext {
@@ -34,15 +36,7 @@ export interface AuthContext {
   role: UserRole;
 }
 
-const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
-const CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY;
 const MACHINE_API_KEY = process.env.MACHINE_API_KEY;
-
-let clerkClient: ReturnType<typeof createClerkClient> | null = null;
-
-if (CLERK_SECRET_KEY && CLERK_PUBLISHABLE_KEY) {
-  clerkClient = createClerkClient({ secretKey: CLERK_SECRET_KEY });
-}
 
 /**
  * Check if request has valid machine-to-machine API key.
@@ -63,52 +57,52 @@ function checkMachineApiKey(req: Request): AuthContext | null {
 }
 
 export function getAuthMode(): AuthMode {
-  return clerkClient ? "clerk" : "simple";
+  return auth ? "betterauth" : "simple";
 }
 
-export function isClerkEnabled(): boolean {
-  return clerkClient !== null;
+export function isBetterAuthEnabled(): boolean {
+  return auth !== null;
 }
 
-async function getClerkAuth(req: Request): Promise<AuthContext> {
-  if (!clerkClient) {
+function mapOrgRoleToUserRole(orgRole: string | null): UserRole {
+  switch (orgRole) {
+    case "admin": return "admin";
+    case "member": return "operator";
+    default: return "viewer";
+  }
+}
+
+async function getBetterAuthSession(req: Request): Promise<AuthContext> {
+  if (!auth) {
     return { mode: "simple", authenticated: false, role: "viewer" };
   }
 
-  const authHeader = req.headers.get("Authorization");
-  const cookieHeader = req.headers.get("Cookie");
-
-  let token: string | undefined;
-
-  if (authHeader?.startsWith("Bearer ")) {
-    token = authHeader.slice(7);
-  } else if (cookieHeader) {
-    const cookies = parseCookies(cookieHeader);
-    token = cookies["__session"];
-  }
-
-  if (!token) {
-    return { mode: "clerk", authenticated: false, role: "viewer" };
-  }
-
   try {
-    const verifiedToken = await verifyToken(token, {
-      secretKey: CLERK_SECRET_KEY!,
-    });
+    const session = await auth.api.getSession({ headers: req.headers });
 
-    const userId = verifiedToken.sub;
+    if (!session?.user) {
+      return { mode: "betterauth", authenticated: false, role: "viewer" };
+    }
 
-    const user = await clerkClient.users.getUser(userId);
-    const role = (user.publicMetadata?.role as UserRole) || "viewer";
+    const email = session.user.email;
+    let role: UserRole = "viewer";
+
+    if (email) {
+      const hubUser = await getUserByEmail("default", email);
+      if (hubUser) {
+        const orgRole = await getOrgMemberRole("default", hubUser.id);
+        role = mapOrgRoleToUserRole(orgRole);
+      }
+    }
 
     return {
-      mode: "clerk",
+      mode: "betterauth",
       authenticated: true,
-      userId,
+      userId: session.user.id,
       role,
     };
   } catch {
-    return { mode: "clerk", authenticated: false, role: "viewer" };
+    return { mode: "betterauth", authenticated: false, role: "viewer" };
   }
 }
 
@@ -129,12 +123,20 @@ export async function getAuthContext(
   req: Request,
   apiToken?: string
 ): Promise<AuthContext> {
-  // Check machine-to-machine API key first (works regardless of Clerk)
+  // Check machine-to-machine API key first
   const machineAuth = checkMachineApiKey(req);
   if (machineAuth) return machineAuth;
 
-  if (isClerkEnabled()) {
-    return getClerkAuth(req);
+  // Check API token (works regardless of auth mode)
+  if (apiToken) {
+    const token = req.headers.get("X-Amadeus-Token");
+    if (token === apiToken) {
+      return { mode: "simple", authenticated: true, role: "admin" };
+    }
+  }
+
+  if (isBetterAuthEnabled()) {
+    return getBetterAuthSession(req);
   }
   return getSimpleAuth(req, apiToken);
 }
@@ -175,14 +177,7 @@ export async function requireAuth(
 
     const hasApiToken = options.apiToken && req.headers.get("X-Amadeus-Token") === options.apiToken;
 
-    if (requiredRole === "admin") {
-      return {
-        authorized: false,
-        response: new Response("Forbidden: Config editing requires Clerk authentication", { status: 403 }),
-      };
-    }
-
-    if (requiredRole === "operator") {
+    if (requiredRole === "admin" || requiredRole === "operator") {
       if (hasApiToken) {
         return { authorized: true, context };
       }
@@ -212,12 +207,10 @@ export async function requireAuth(
 
 export function getAuthInfo(): {
   mode: AuthMode;
-  clerkEnabled: boolean;
-  publishableKey?: string;
+  authEnabled: boolean;
 } {
   return {
     mode: getAuthMode(),
-    clerkEnabled: isClerkEnabled(),
-    publishableKey: isClerkEnabled() ? CLERK_PUBLISHABLE_KEY : undefined,
+    authEnabled: isBetterAuthEnabled(),
   };
 }

@@ -110,6 +110,112 @@ bun --hot ./index.ts
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
 
+## Local Hub Development
+
+Run amadeus in hub mode locally for testing the hub data model and API.
+
+### Setup
+
+```bash
+# Create a local Postgres database
+createdb amadeus_hub
+
+# Add to .env
+DATABASE_URL=postgres://localhost/amadeus_hub
+
+# Omit BETTER_AUTH_SECRET for simple auth mode (API token only)
+# Add a test token for API access
+AMADEUS_API_TOKEN=test-token
+```
+
+### Config
+
+Create `amadeus.config.yaml` in the project root:
+
+```yaml
+realms:
+  test:
+    linearWorkspace: test
+    apiKeyEnvVar: LINEAR_API_KEY_RECODE
+    webhookSecretEnvVar: LINEAR_WEBHOOK_SECRET_RECODE
+    projects:
+      - teamKey: TEST
+        path: /tmp/test-project
+
+global:
+  runtimeMode: hub
+  agentName: Amadeus
+  port: 5678
+  triggerStates:
+    - Planning
+  security:
+    publicDashboard: true
+```
+
+The config is seeded into Postgres on first run. To re-seed after changes:
+```bash
+psql amadeus_hub -c "UPDATE organizations SET config_yaml = NULL WHERE org_id = 'default';"
+```
+
+### Run
+
+```bash
+bun src/server.ts
+```
+
+### Hub API
+
+All hub API requests need the auth header: `X-Amadeus-Token: test-token`
+
+```bash
+# Users
+curl -s -H "X-Amadeus-Token: test-token" http://localhost:5678/hub/api/users
+curl -s -X POST -H "X-Amadeus-Token: test-token" -H "Content-Type: application/json" \
+  -d '{"name":"Matt","email":"matt@example.com"}' http://localhost:5678/hub/api/users
+
+# Projects
+curl -s -H "X-Amadeus-Token: test-token" http://localhost:5678/hub/api/projects
+curl -s -X POST -H "X-Amadeus-Token: test-token" -H "Content-Type: application/json" \
+  -d '{"name":"Zebra","linearTeamKey":"TEST","linearProjectName":"Zebra"}' http://localhost:5678/hub/api/projects
+
+# Machines (read-only via API; created via heartbeat registration)
+curl -s -H "X-Amadeus-Token: test-token" http://localhost:5678/hub/api/machines
+
+# Link machine to project
+curl -s -X POST -H "X-Amadeus-Token: test-token" -H "Content-Type: application/json" \
+  -d '{"projectId":"<id>","localRepoPath":"/path/to/repo"}' \
+  http://localhost:5678/hub/api/machines/<machine-id>/projects
+
+# Assign user to project on a machine
+curl -s -X POST -H "X-Amadeus-Token: test-token" -H "Content-Type: application/json" \
+  -d '{"userId":"<id>","machineId":"<id>"}' \
+  http://localhost:5678/hub/api/projects/<project-id>/members
+```
+
+### Runtime Modes
+
+- `standalone` (default): Hub + Machine combined, for solo users
+- `hub`: Routing + aggregate dashboard only, no local agents
+- `machine`: Agent execution + local dashboard only
+
+## Running amadeus-cloud Locally
+
+The cloud version (`../amadeus-cloud`) wraps amadeus with Better Auth session-based auth,
+an onboarding wizard, and machine API key management.
+
+```bash
+cd ../amadeus-cloud
+
+# .env needs DATABASE_URL pointing to the same Postgres
+DATABASE_URL=postgres://localhost/amadeus_hub
+
+# Start (uses amadeus.config.yaml from the amadeus root)
+bun run src/server.ts
+```
+
+Cloud serves on the same port as configured in amadeus.config.yaml.
+It adds `/cloud/setup` (onboarding wizard) alongside the standard `/dashboard`.
+
 ## Sprites (Remote Execution)
 
 Amadeus can forward webhooks to [Sprites](https://sprites.dev/) VMs for isolated agent execution.

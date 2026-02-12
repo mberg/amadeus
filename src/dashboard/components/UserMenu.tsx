@@ -1,9 +1,9 @@
 // ABOUTME: User menu component showing avatar, role badge, and sign out.
-// ABOUTME: Only displayed when Clerk authentication is enabled.
+// ABOUTME: Only displayed when Better Auth authentication is enabled.
 
-import { useClerk, useUser } from "@clerk/clerk-react";
 import { LogOut, User, Shield, Eye, Wrench } from "lucide-react";
 import { useAuth, type UserRole } from "./AuthProvider";
+import { authClient } from "../lib/auth-client";
 import { cn } from "../lib/utils";
 
 interface UserMenuProps {
@@ -22,10 +22,10 @@ const roleLabels: Record<UserRole, string> = {
   viewer: "Viewer",
 };
 
-function ClerkUserInfo({ collapsed, role }: { collapsed: boolean; role: UserRole }) {
-  const { user, isLoaded } = useUser();
+function UserInfo({ collapsed, role }: { collapsed: boolean; role: UserRole }) {
+  const { user } = useAuth();
 
-  if (!isLoaded || !user) {
+  if (!user) {
     return null;
   }
 
@@ -33,15 +33,14 @@ function ClerkUserInfo({ collapsed, role }: { collapsed: boolean; role: UserRole
   const roleLabel = roleLabels[role];
 
   if (collapsed) {
-    // When collapsed, just show avatar
     return (
       <div className="flex justify-center">
-        {user.imageUrl ? (
+        {user.image ? (
           <img
-            src={user.imageUrl}
-            alt={user.firstName || "User"}
+            src={user.image}
+            alt={user.name || "User"}
             className="h-8 w-8 rounded-full"
-            title={user.firstName || "User"}
+            title={user.name || "User"}
           />
         ) : (
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
@@ -54,10 +53,10 @@ function ClerkUserInfo({ collapsed, role }: { collapsed: boolean; role: UserRole
 
   return (
     <div className="flex items-center gap-3 px-3 py-2">
-      {user.imageUrl ? (
+      {user.image ? (
         <img
-          src={user.imageUrl}
-          alt={user.firstName || "User"}
+          src={user.image}
+          alt={user.name || "User"}
           className="h-8 w-8 rounded-full"
         />
       ) : (
@@ -67,7 +66,7 @@ function ClerkUserInfo({ collapsed, role }: { collapsed: boolean; role: UserRole
       )}
       <div className="flex-1 min-w-0">
         <div className="truncate text-sm font-medium text-foreground">
-          {user.firstName || user.emailAddresses[0]?.emailAddress || "User"}
+          {user.name || user.email || "User"}
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <RoleIcon className="h-3 w-3" />
@@ -78,12 +77,10 @@ function ClerkUserInfo({ collapsed, role }: { collapsed: boolean; role: UserRole
   );
 }
 
-function ClerkSignOutButton({ collapsed }: { collapsed: boolean }) {
-  const { signOut } = useClerk();
-
-  const handleSignOut = () => {
-    signOut();
-  };
+function SignOutButtonInner({ collapsed }: { collapsed: boolean }) {
+  function handleSignOut() {
+    authClient.signOut();
+  }
 
   return (
     <button
@@ -104,19 +101,19 @@ function ClerkSignOutButton({ collapsed }: { collapsed: boolean }) {
 export function UserMenu({ collapsed }: UserMenuProps) {
   const { mode, role } = useAuth();
 
-  if (mode !== "clerk") {
+  if (mode !== "betterauth") {
     return null;
   }
 
-  return <ClerkUserInfo collapsed={collapsed} role={role} />;
+  return <UserInfo collapsed={collapsed} role={role} />;
 }
 
 export function SignOutButton({ collapsed }: { collapsed: boolean }) {
   const { mode } = useAuth();
 
-  if (mode !== "clerk") {
+  if (mode !== "betterauth") {
     return null;
   }
 
-  return <ClerkSignOutButton collapsed={collapsed} />;
+  return <SignOutButtonInner collapsed={collapsed} />;
 }

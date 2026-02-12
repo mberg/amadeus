@@ -2,7 +2,7 @@
 // ABOUTME: Verifies team key and project name extraction from payloads.
 
 import { describe, test, expect } from "bun:test";
-import { getTeamKeyFromPayload, getProjectNameFromPayload } from "./router";
+import { getTeamKeyFromPayload, getProjectNameFromPayload, getAssigneeIdFromPayload } from "./router";
 import type { LinearWebhookPayload } from "../shared/types";
 
 describe("getTeamKeyFromPayload", () => {
@@ -128,5 +128,73 @@ describe("getProjectNameFromPayload", () => {
       },
     };
     expect(getProjectNameFromPayload(payload)).toBeNull();
+  });
+});
+
+describe("getAssigneeIdFromPayload", () => {
+  test("extracts assignee id from issue", () => {
+    const payload: LinearWebhookPayload = {
+      action: "update",
+      type: "Issue",
+      data: { id: "123", identifier: "ENG-456", title: "Test", assignee: { id: "user-1" } },
+    };
+    expect(getAssigneeIdFromPayload(payload)).toBe("user-1");
+  });
+
+  test("returns null when no assignee on issue", () => {
+    const payload: LinearWebhookPayload = {
+      action: "update",
+      type: "Issue",
+      data: { id: "123", identifier: "ENG-456", title: "Test" },
+    };
+    expect(getAssigneeIdFromPayload(payload)).toBeNull();
+  });
+
+  test("extracts assignee id from comment issue", () => {
+    const payload: LinearWebhookPayload = {
+      action: "create",
+      type: "Comment",
+      data: {
+        id: "c1",
+        body: "Test comment",
+        issueId: "123",
+        issue: {
+          id: "123",
+          identifier: "ENG-456",
+          title: "Test",
+          assignee: { id: "user-2" },
+        },
+        createdAt: new Date().toISOString(),
+      },
+    };
+    expect(getAssigneeIdFromPayload(payload)).toBe("user-2");
+  });
+
+  test("returns null when comment issue has no assignee", () => {
+    const payload: LinearWebhookPayload = {
+      action: "create",
+      type: "Comment",
+      data: {
+        id: "c1",
+        body: "Test comment",
+        issueId: "123",
+        issue: {
+          id: "123",
+          identifier: "ENG-456",
+          title: "Test",
+        },
+        createdAt: new Date().toISOString(),
+      },
+    };
+    expect(getAssigneeIdFromPayload(payload)).toBeNull();
+  });
+
+  test("returns null for unknown payload type", () => {
+    const payload = {
+      action: "update",
+      type: "Unknown",
+      data: { id: "123" },
+    } as unknown as LinearWebhookPayload;
+    expect(getAssigneeIdFromPayload(payload)).toBeNull();
   });
 });
