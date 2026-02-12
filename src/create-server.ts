@@ -735,11 +735,14 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           ?? (token ? new Bun.CryptoHasher("sha256").update(token).digest("hex") : null);
         if (hash) {
           const dbAuth = await authenticateMachine(hash);
+          console.log(`[Hub] Heartbeat auth: machine="${machineName}", hasToken=${!!token}, dbMatch=${!!dbAuth}, dbName="${dbAuth?.machineName}"`);
           if (dbAuth && dbAuth.machineName === machineName) {
             ctx.machineRegistry?.register(machineName, heartbeatMachineUrl ?? "", token);
             machine = ctx.machineRegistry?.get(machineName);
             await updateMachineLastSeen(dbAuth.machineId);
           }
+        } else {
+          console.log(`[Hub] Heartbeat auth: machine="${machineName}", no token provided`);
         }
         if (!machine) {
           return new Response("Unknown machine", { status: 403 });

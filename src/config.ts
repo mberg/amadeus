@@ -102,7 +102,7 @@ function loadTeamProfilesFromEnv(): Record<string, string> {
  * Uses the first realm for single-realm backward compatibility.
  */
 function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
-  const firstRealm = resolved.realms[0];
+  const firstRealm = resolved.realms[0] as ResolvedRealm | undefined;
 
   // Build project paths from all realms
   // Linear project name takes priority over team key for routing
@@ -143,8 +143,8 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     port: resolved.global.port,
     apiToken: process.env.AMADEUS_API_TOKEN,
     agentName: resolved.global.agentName,
-    linearWebhookSecret: firstRealm.webhookSecret,
-    claudeBotUserId: firstRealm.claudeBotUserId,
+    linearWebhookSecret: firstRealm?.webhookSecret ?? "",
+    claudeBotUserId: firstRealm?.claudeBotUserId,
     projectPaths,
     triggerStates: resolved.global.triggerStates,
     profilesDir,
@@ -152,7 +152,7 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     teamProfiles,
     useWorktrees: resolved.global.useWorktrees,
     worktreesDir: resolved.global.worktreesDir,
-    linearWorkspace: firstRealm.linearWorkspace,
+    linearWorkspace: firstRealm?.linearWorkspace ?? "",
     dbPath,
     healthCheckIntervalMs: resolved.global.healthCheckIntervalMs,
     healthCheckTimeoutMs: resolved.global.healthCheckTimeoutMs,

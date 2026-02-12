@@ -132,10 +132,7 @@ export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
  * Complete configuration schema for amadeus.config.yaml.
  */
 export const AmadeusConfigSchema = z.object({
-  realms: z.record(z.string(), RealmSchema).refine(
-    (realms) => Object.keys(realms).length > 0,
-    "At least one realm must be defined"
-  ),
+  realms: z.record(z.string(), RealmSchema).default({}),
   global: GlobalConfigSchema,
 });
 
