@@ -52,7 +52,7 @@ export function AccountPage() {
   }, [fetchPats, fetchRealms]);
 
   function getRealmName(realmId: string | null): string {
-    if (!realmId) return "All realms (global)";
+    if (!realmId) return "Global";
     const realm = realms.find((r) => r.id === realmId);
     return realm?.name ?? realmId;
   }
@@ -60,11 +60,14 @@ export function AccountPage() {
   async function handleAddPat(e: React.FormEvent) {
     e.preventDefault();
     if (!hubUserId) return;
+    if (!newPatRealmId) {
+      setAddError("Please select a realm");
+      return;
+    }
     setAddError(null);
     setAddSubmitting(true);
     try {
-      const body: Record<string, string> = { pat: newPat };
-      if (newPatRealmId) body.realmId = newPatRealmId;
+      const body: Record<string, string> = { pat: newPat, realmId: newPatRealmId };
 
       const res = await fetch(`/hub/api/users/${hubUserId}/linear-pat`, {
         method: "POST",
@@ -126,10 +129,7 @@ export function AccountPage() {
     return <div className="text-muted-foreground">Loading account settings...</div>;
   }
 
-  // Realms that don't have a PAT configured yet
-  const configuredRealmIds = new Set(pats.map((p) => p.realmId));
-  const unconfiguredRealms = realms.filter((r) => !configuredRealmIds.has(r.id));
-  const hasGlobalPat = configuredRealmIds.has(null);
+  const realmPats = pats.filter((p) => p.realmId !== null);
 
   return (
     <div className="space-y-6">
@@ -196,8 +196,9 @@ export function AccountPage() {
                   value={newPatRealmId}
                   onChange={(e) => setNewPatRealmId(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  required
                 >
-                  <option value="">All realms (global)</option>
+                  <option value="" disabled>Select a realm...</option>
                   {realms.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
@@ -227,7 +228,7 @@ export function AccountPage() {
         )}
 
         {/* PAT table */}
-        {pats.length === 0 ? (
+        {realmPats.length === 0 ? (
           <p className="text-sm text-muted-foreground">No Linear tokens configured.</p>
         ) : (
           <table className="w-full text-sm">
@@ -239,7 +240,7 @@ export function AccountPage() {
               </tr>
             </thead>
             <tbody>
-              {pats.map((pat) => {
+              {realmPats.map((pat) => {
                 const key = pat.realmId ?? "__global__";
                 return (
                   <tr key={key} className="border-b border-border/50">
