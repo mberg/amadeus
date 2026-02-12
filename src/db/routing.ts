@@ -36,7 +36,7 @@ export async function resolveRoute(
   if (!project && query.teamKey) {
     const [row] = await sql`
       SELECT id, name FROM projects
-      WHERE org_id = ${orgId} AND linear_team_key = ${query.teamKey}
+      WHERE org_id = ${orgId} AND UPPER(linear_team_key) = UPPER(${query.teamKey})
     `;
     if (row) project = { id: row.id, name: row.name };
   }
