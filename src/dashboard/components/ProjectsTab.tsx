@@ -2,7 +2,7 @@
 // ABOUTME: Member assignment requires selecting both a user and a machine.
 
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { Trash2, ChevronDown, ChevronRight, UserPlus } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, UserPlus, Pencil, Check, X } from "lucide-react";
 
 interface Project {
   id: string;
@@ -53,6 +53,15 @@ export function ProjectsTab() {
   const [memberUserId, setMemberUserId] = useState("");
   const [memberMachineId, setMemberMachineId] = useState("");
   const [memberError, setMemberError] = useState<string | null>(null);
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLinearTeamKey, setEditLinearTeamKey] = useState("");
+  const [editLinearProjectName, setEditLinearProjectName] = useState("");
+  const [editGithubRepoUrl, setEditGithubRepoUrl] = useState("");
+  const [editRealmId, setEditRealmId] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
 
   const userNameMap = Object.fromEntries(users.map((u) => [u.id, u.name]));
   const machineNameMap = Object.fromEntries(machines.map((m) => [m.id, m.name]));
@@ -137,6 +146,41 @@ export function ProjectsTab() {
       setError(err instanceof Error ? err.message : "Failed to add project");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function startEditing(project: Project) {
+    setEditingId(project.id);
+    setEditName(project.name);
+    setEditLinearTeamKey(project.linearTeamKey ?? "");
+    setEditLinearProjectName(project.linearProjectName ?? "");
+    setEditGithubRepoUrl(project.githubRepoUrl ?? "");
+    setEditRealmId(project.realmId ?? "");
+    setEditError(null);
+  }
+
+  async function handleSaveEdit(projectId: string) {
+    setEditError(null);
+    try {
+      const body: Record<string, string | null> = { name: editName };
+      body.linearTeamKey = editLinearTeamKey || null;
+      body.linearProjectName = editLinearProjectName || null;
+      body.githubRepoUrl = editGithubRepoUrl || null;
+      body.realmId = editRealmId || null;
+
+      const res = await fetch(`/hub/api/projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setEditingId(null);
+      await fetchProjects();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update project");
     }
   }
 
@@ -310,27 +354,100 @@ export function ProjectsTab() {
                       )}
                     </button>
                   </td>
-                  <td className="py-2.5">{project.name}</td>
-                  <td className="py-2.5 text-muted-foreground">
-                    {project.realmId
-                      ? realms.find((r) => r.id === project.realmId)?.name ?? <span className="text-muted-foreground/50">&mdash;</span>
-                      : <span className="text-muted-foreground/50">&mdash;</span>}
-                  </td>
-                  <td className="py-2.5 text-muted-foreground">
-                    {project.linearTeamKey || <span className="text-muted-foreground/50">&mdash;</span>}
-                  </td>
-                  <td className="py-2.5 text-muted-foreground">
-                    {project.linearProjectName || <span className="text-muted-foreground/50">&mdash;</span>}
-                  </td>
-                  <td className="py-2.5">
-                    <button
-                      onClick={() => handleDelete(project.id)}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Delete project"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
+                  {editingId === project.id ? (
+                    <>
+                      <td className="py-2.5">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </td>
+                      <td className="py-2.5">
+                        <select
+                          value={editRealmId}
+                          onChange={(e) => setEditRealmId(e.target.value)}
+                          className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="">None</option>
+                          {realms.map((r) => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-2.5">
+                        <input
+                          type="text"
+                          value={editLinearTeamKey}
+                          onChange={(e) => setEditLinearTeamKey(e.target.value)}
+                          placeholder="ENG"
+                          className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </td>
+                      <td className="py-2.5">
+                        <input
+                          type="text"
+                          value={editLinearProjectName}
+                          onChange={(e) => setEditLinearProjectName(e.target.value)}
+                          placeholder="Sprint 1"
+                          className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </td>
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleSaveEdit(project.id)}
+                            className="p-1 rounded hover:bg-green-500/10 text-muted-foreground hover:text-green-600 transition-colors"
+                            title="Save"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Cancel"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-2.5">{project.name}</td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {project.realmId
+                          ? realms.find((r) => r.id === project.realmId)?.name ?? <span className="text-muted-foreground/50">&mdash;</span>
+                          : <span className="text-muted-foreground/50">&mdash;</span>}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {project.linearTeamKey || <span className="text-muted-foreground/50">&mdash;</span>}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {project.linearProjectName || <span className="text-muted-foreground/50">&mdash;</span>}
+                      </td>
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => startEditing(project)}
+                            className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Edit project"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(project.id)}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete project"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
                 </tr>
                 {expandedId === project.id && (
                   <tr className="border-b border-border/50">
