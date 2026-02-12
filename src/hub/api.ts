@@ -3,7 +3,7 @@
 
 import { getUsersByOrg, createUser, deleteUser, updateUserLinearId } from "../db/users";
 import { addOrgMember, removeOrgMember } from "../db/org-members";
-import { getProjectsByOrg, createProject, deleteProject } from "../db/projects";
+import { getProjectsByOrg, createProject, deleteProject, unlinkProjectsFromRealm } from "../db/projects";
 import {
   addMachineProject,
   getMachineProjects,
@@ -248,6 +248,9 @@ export async function handleUpdateRealm(
 }
 
 export async function handleDeleteRealm(orgId: string, realmId: string): Promise<Response> {
+  // Unlink projects from this realm before deleting
+  await unlinkProjectsFromRealm(realmId);
+
   const deleted = await dbDeleteRealm(realmId, orgId);
   if (!deleted) return Response.json({ error: "Realm not found" }, { status: 404 });
 

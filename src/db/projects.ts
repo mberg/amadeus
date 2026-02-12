@@ -84,6 +84,12 @@ export async function getProjectsByRealm(realmId: string): Promise<DbProject[]> 
   return rows.map(rowToProject);
 }
 
+export async function unlinkProjectsFromRealm(realmId: string): Promise<void> {
+  await sql`
+    UPDATE projects SET realm_id = NULL WHERE realm_id = ${realmId}
+  `;
+}
+
 export async function deleteProject(id: string, orgId: string): Promise<boolean> {
   const result = await sql`
     DELETE FROM projects WHERE id = ${id} AND org_id = ${orgId}

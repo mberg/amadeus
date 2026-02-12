@@ -23,6 +23,11 @@ export function RealmsTab() {
   const [submitting, setSubmitting] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
+  // Delete confirmation state
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Webhook secret rotation state
   const [rotatingId, setRotatingId] = useState<string | null>(null);
   const [rotateWebhookSecret, setRotateWebhookSecret] = useState("");
@@ -76,13 +81,23 @@ export function RealmsTab() {
     }
   }
 
-  async function handleDelete(realmId: string) {
+  async function handleDelete(realmId: string, realmName: string) {
+    if (deleteConfirmName !== realmName) {
+      setDeleteError("Name does not match");
+      return;
+    }
+    setDeleteError(null);
     try {
       const res = await fetch(`/hub/api/realms/${realmId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setDeletingId(null);
+      setDeleteConfirmName("");
       await fetchRealms();
     } catch (err) {
-      console.error("Failed to delete realm:", err);
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete realm");
     }
   }
 
@@ -242,7 +257,11 @@ export function RealmsTab() {
                       Secret
                     </button>
                     <button
-                      onClick={() => handleDelete(realm.id)}
+                      onClick={() => {
+                        setDeletingId(deletingId === realm.id ? null : realm.id);
+                        setDeleteConfirmName("");
+                        setDeleteError(null);
+                      }}
                       className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                       title="Delete realm"
                     >
@@ -255,6 +274,52 @@ export function RealmsTab() {
           </tbody>
         </table>
       )}
+
+      {/* Delete confirmation */}
+      {deletingId && (() => {
+        const realm = realms.find((r) => r.id === deletingId);
+        if (!realm) return null;
+        return (
+          <div className="p-3 rounded-md border border-destructive/50 bg-destructive/5 space-y-3">
+            <p className="text-sm">
+              This will permanently delete the realm <strong>{realm.name}</strong> and
+              remove its webhook secret. Projects linked to this realm will be unlinked.
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Type <strong>{realm.name}</strong> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={realm.name}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDelete(deletingId, realm.name)}
+                disabled={deleteConfirmName !== realm.name}
+                className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 transition-colors"
+              >
+                Delete Realm
+              </button>
+              <button
+                onClick={() => {
+                  setDeletingId(null);
+                  setDeleteConfirmName("");
+                  setDeleteError(null);
+                }}
+                className="rounded-md border border-input px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+              >
+                Cancel
+              </button>
+              {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Webhook secret rotation form */}
       {rotatingId && (
