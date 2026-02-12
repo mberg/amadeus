@@ -2,7 +2,7 @@
 // ABOUTME: Uses /hub/api/realms endpoints for CRUD operations including member management.
 
 import { useState, useEffect, useCallback } from "react";
-import { Trash2, Eye, EyeOff, Users, X } from "lucide-react";
+import { Trash2, Eye, EyeOff, Users, X, Pencil, Check } from "lucide-react";
 
 interface Realm {
   id: string;
@@ -45,6 +45,13 @@ export function RealmsTab() {
   const [rotateWebhookSecret, setRotateWebhookSecret] = useState("");
   const [rotateError, setRotateError] = useState<string | null>(null);
   const [rotateSubmitting, setRotateSubmitting] = useState(false);
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLinearWorkspace, setEditLinearWorkspace] = useState("");
+  const [editClaudeBotUserId, setEditClaudeBotUserId] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Members management state
   const [membersRealmId, setMembersRealmId] = useState<string | null>(null);
@@ -113,6 +120,38 @@ export function RealmsTab() {
       setError(err instanceof Error ? err.message : "Failed to add realm");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function startEditingRealm(realm: Realm) {
+    setEditingId(realm.id);
+    setEditName(realm.name);
+    setEditLinearWorkspace(realm.linearWorkspace);
+    setEditClaudeBotUserId(realm.claudeBotUserId ?? "");
+    setEditError(null);
+  }
+
+  async function handleSaveEdit(realmId: string) {
+    setEditError(null);
+    try {
+      const body: Record<string, string | null> = {
+        name: editName,
+        linearWorkspace: editLinearWorkspace,
+        claudeBotUserId: editClaudeBotUserId || null,
+      };
+      const res = await fetch(`/hub/api/realms/${realmId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setEditingId(null);
+      await fetchRealms();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update realm");
     }
   }
 
@@ -299,57 +338,117 @@ export function RealmsTab() {
           <tbody>
             {realms.map((realm) => (
               <tr key={realm.id} className="border-b border-border/50">
-                <td className="py-2.5">{realm.name}</td>
-                <td className="py-2.5 text-muted-foreground">{realm.linearWorkspace}</td>
-                <td className="py-2.5">
-                  {realm.hasWebhookSecret ? (
-                    <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
-                      configured
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
-                      missing
-                    </span>
-                  )}
-                </td>
-                <td className="py-2.5">
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        const newId = membersRealmId === realm.id ? null : realm.id;
-                        setMembersRealmId(newId);
-                        setAddMemberUserId("");
-                        if (newId) fetchMembers(newId);
-                      }}
-                      className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Manage members"
-                    >
-                      <Users className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRotatingId(rotatingId === realm.id ? null : realm.id);
-                        setRotateWebhookSecret("");
-                        setRotateError(null);
-                      }}
-                      className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors text-xs"
-                      title="Update webhook secret"
-                    >
-                      Secret
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDeletingId(deletingId === realm.id ? null : realm.id);
-                        setDeleteConfirmName("");
-                        setDeleteError(null);
-                      }}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Delete realm"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </td>
+                {editingId === realm.id ? (
+                  <>
+                    <td className="py-2.5">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </td>
+                    <td className="py-2.5">
+                      <input
+                        type="text"
+                        value={editLinearWorkspace}
+                        onChange={(e) => setEditLinearWorkspace(e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </td>
+                    <td className="py-2.5">
+                      {realm.hasWebhookSecret ? (
+                        <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
+                          configured
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                          missing
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleSaveEdit(realm.id)}
+                          className="p-1 rounded hover:bg-green-500/10 text-muted-foreground hover:text-green-600 transition-colors"
+                          title="Save"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="py-2.5">{realm.name}</td>
+                    <td className="py-2.5 text-muted-foreground">{realm.linearWorkspace}</td>
+                    <td className="py-2.5">
+                      {realm.hasWebhookSecret ? (
+                        <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
+                          configured
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                          missing
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => startEditingRealm(realm)}
+                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit realm"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newId = membersRealmId === realm.id ? null : realm.id;
+                            setMembersRealmId(newId);
+                            setAddMemberUserId("");
+                            if (newId) fetchMembers(newId);
+                          }}
+                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Manage members"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRotatingId(rotatingId === realm.id ? null : realm.id);
+                            setRotateWebhookSecret("");
+                            setRotateError(null);
+                          }}
+                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors text-xs"
+                          title="Update webhook secret"
+                        >
+                          Secret
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeletingId(deletingId === realm.id ? null : realm.id);
+                            setDeleteConfirmName("");
+                            setDeleteError(null);
+                          }}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Delete realm"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>

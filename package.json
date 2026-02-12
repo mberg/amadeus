@@ -9,6 +9,7 @@
     "./db": "./src/db/index.ts",
     "./config": "./src/config.ts",
     "./auth": "./src/auth.ts",
+    "./better-auth": "./src/better-auth.ts",
     "./org": "./src/org.ts",
     "./types": "./src/types.ts",
     "./dashboard/*": "./src/dashboard/*",

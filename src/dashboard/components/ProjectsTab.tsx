@@ -2,7 +2,7 @@
 // ABOUTME: Member assignment requires selecting both a user and a machine.
 
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { Trash2, ChevronDown, ChevronRight, UserPlus, Pencil, Check, X } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, UserPlus, Pencil, Check, X, Plus } from "lucide-react";
 
 interface Project {
   id: string;
@@ -47,6 +47,7 @@ export function ProjectsTab() {
   const [realmId, setRealmId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [members, setMembers] = useState<Record<string, ProjectMemberRaw[]>>({});
   const [addingMemberId, setAddingMemberId] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export function ProjectsTab() {
       setLinearProjectName("");
       setGithubRepoUrl("");
       setRealmId("");
+      setShowAddForm(false);
       await fetchProjects();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add project");
@@ -233,96 +235,6 @@ export function ProjectsTab() {
 
   return (
     <div className="space-y-6">
-      {/* Add project form */}
-      <form onSubmit={handleAdd} className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-medium">Add Project</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label htmlFor="projectName" className="text-xs font-medium text-muted-foreground">
-              Name *
-            </label>
-            <input
-              id="projectName"
-              type="text"
-              placeholder="My Project"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              required
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="githubRepoUrl" className="text-xs font-medium text-muted-foreground">
-              GitHub Repo URL
-            </label>
-            <input
-              id="githubRepoUrl"
-              type="url"
-              placeholder="https://github.com/org/repo"
-              value={githubRepoUrl}
-              onChange={(e) => setGithubRepoUrl(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="linearTeamKey" className="text-xs font-medium text-muted-foreground">
-              Linear Team Key
-            </label>
-            <input
-              id="linearTeamKey"
-              type="text"
-              placeholder="ENG"
-              value={linearTeamKey}
-              onChange={(e) => setLinearTeamKey(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="linearProjectName" className="text-xs font-medium text-muted-foreground">
-              Linear Project
-            </label>
-            <input
-              id="linearProjectName"
-              type="text"
-              placeholder="Sprint 1"
-              value={linearProjectName}
-              onChange={(e) => setLinearProjectName(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          {realms.length > 0 && (
-            <div className="space-y-1.5">
-              <label htmlFor="projectRealm" className="text-xs font-medium text-muted-foreground">
-                Realm
-              </label>
-              <select
-                id="projectRealm"
-                value={realmId}
-                onChange={(e) => setRealmId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">None</option>
-                {realms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {submitting ? "Adding..." : "Add Project"}
-          </button>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </div>
-      </form>
-
       {/* Projects table */}
       {projects.length === 0 ? (
         <p className="text-sm text-muted-foreground">No projects yet.</p>
@@ -482,6 +394,113 @@ export function ProjectsTab() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {/* Add project */}
+      {showAddForm ? (
+        <form onSubmit={handleAdd} className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h3 className="text-sm font-medium">Add Project</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="projectName" className="text-xs font-medium text-muted-foreground">
+                Name *
+              </label>
+              <input
+                id="projectName"
+                type="text"
+                placeholder="My Project"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="githubRepoUrl" className="text-xs font-medium text-muted-foreground">
+                GitHub Repo URL
+              </label>
+              <input
+                id="githubRepoUrl"
+                type="url"
+                placeholder="https://github.com/org/repo"
+                value={githubRepoUrl}
+                onChange={(e) => setGithubRepoUrl(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="linearTeamKey" className="text-xs font-medium text-muted-foreground">
+                Linear Team Key
+              </label>
+              <input
+                id="linearTeamKey"
+                type="text"
+                placeholder="ENG"
+                value={linearTeamKey}
+                onChange={(e) => setLinearTeamKey(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="linearProjectName" className="text-xs font-medium text-muted-foreground">
+                Linear Project
+              </label>
+              <input
+                id="linearProjectName"
+                type="text"
+                placeholder="Sprint 1"
+                value={linearProjectName}
+                onChange={(e) => setLinearProjectName(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {realms.length > 0 && (
+              <div className="space-y-1.5">
+                <label htmlFor="projectRealm" className="text-xs font-medium text-muted-foreground">
+                  Realm
+                </label>
+                <select
+                  id="projectRealm"
+                  value={realmId}
+                  onChange={(e) => setRealmId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">None</option>
+                  {realms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {submitting ? "Adding..." : "Add Project"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddForm(false)}
+              className="rounded-md border border-input px-4 py-2 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+            >
+              Cancel
+            </button>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+        </form>
+      ) : (
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Project
+        </button>
       )}
     </div>
   );
