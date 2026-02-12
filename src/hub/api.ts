@@ -15,6 +15,7 @@ import {
 import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
 import { getMachines, setSecret, getSecret, deleteSecret } from "../db";
 import { createRealm, getRealmsByOrg, getRealm, updateRealm, deleteRealm as dbDeleteRealm } from "../db/realms";
+import { rebuildRealmConfig } from "../config";
 import { fetchLinearUserId } from "../linear";
 
 // --- Users ---
@@ -216,6 +217,7 @@ export async function handleCreateRealm(req: Request, orgId: string): Promise<Re
     await setSecret(orgId, `realm:${realm.id}:webhook_secret`, body.webhookSecret);
   }
 
+  await rebuildRealmConfig(orgId);
   return Response.json(realm, { status: 201 });
 }
 
@@ -250,6 +252,7 @@ export async function handleUpdateRealm(
     await setSecret(orgId, `realm:${realmId}:webhook_secret`, body.webhookSecret);
   }
 
+  await rebuildRealmConfig(orgId);
   return Response.json(updated);
 }
 
@@ -261,5 +264,6 @@ export async function handleDeleteRealm(orgId: string, realmId: string): Promise
   await deleteSecret(orgId, `realm:${realmId}:linear_api_key`);
   await deleteSecret(orgId, `realm:${realmId}:webhook_secret`);
 
+  await rebuildRealmConfig(orgId);
   return new Response(null, { status: 204 });
 }
