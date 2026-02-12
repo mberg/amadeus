@@ -565,6 +565,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
             const { getSecret: getMachineSecret } = await import("./db");
             machineKey = await getMachineSecret(orgId, `machine:${route.machineId}:api_key`);
           }
+          console.log(`[HubForward] Routing to ${route.machineName} (id=${route.machineId}), hasApiKey=${!!machineKey}`);
           forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey).catch((err) => {
             console.error("[HubForward] Error:", err);
           });
