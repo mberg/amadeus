@@ -405,7 +405,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         method: "POST",
         headers,
         body: forwardPayload,
-      });
+        tls: { rejectUnauthorized: false },
+      } as any);
 
       if (!response.ok) {
         console.warn(
