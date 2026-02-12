@@ -251,8 +251,8 @@ export const server = Bun.serve({
   port: serverPort,
   routes: {
     "/dashboard": amadeusHtml,
-    "/cloud/setup": setupHtml,
-    "/cloud/admin": adminHtml,
+    "/setup": setupHtml,
+    "/admin": adminHtml,
   },
   fetch: handler,
 });
@@ -279,7 +279,7 @@ process.on("SIGTERM", shutdown);
 
 console.log(`Amadeus Cloud listening on http://localhost:${server.port}`);
 console.log(`  Dashboard: http://localhost:${server.port}/dashboard`);
-console.log(`  Admin:     http://localhost:${server.port}/cloud/admin`);
+console.log(`  Admin:     http://localhost:${server.port}/admin`);
 console.log(`  Status:    http://localhost:${server.port}/status`);
 
 if (!isBetterAuthEnabled()) {
