@@ -403,13 +403,22 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         forwardPayload = JSON.stringify(parsed);
       }
 
-      const response = await fetch(`${machineUrl}/webhook`, {
-        method: "POST",
-        headers,
-        body: forwardPayload,
-        // @ts-ignore - Bun-specific TLS option
-        tls: { rejectUnauthorized: false },
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${machineUrl}/webhook`, {
+          method: "POST",
+          headers,
+          body: forwardPayload,
+          // @ts-ignore - Bun-specific TLS option
+          tls: { rejectUnauthorized: false },
+        });
+      } catch (tlsErr) {
+        // Fallback: use curl for TLS-problematic connections (e.g. Tailscale funnel certs)
+        const headerArgs = Object.entries(headers).map(([k, v]) => `-H "${k}: ${v}"`).join(" ");
+        const result = await $`curl -sk -X POST ${headerArgs} -d ${forwardPayload} ${machineUrl}/webhook -w "\n%{http_code}" -o /dev/null`.text();
+        const statusCode = parseInt(result.trim().split("\n").pop() ?? "500", 10);
+        response = new Response(null, { status: statusCode });
+      }
 
       if (!response.ok) {
         console.warn(
