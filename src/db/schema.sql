@@ -78,6 +78,17 @@ CREATE TABLE IF NOT EXISTS machine_access (
   PRIMARY KEY (machine_id, user_id)
 );
 
+-- Realms group a Linear workspace with its credentials and projects
+CREATE TABLE IF NOT EXISTS realms (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id             TEXT NOT NULL REFERENCES organizations(org_id),
+  name               TEXT NOT NULL,
+  linear_workspace   TEXT NOT NULL,
+  claude_bot_user_id TEXT,
+  created_at         TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(org_id, name)
+);
+
 -- Projects track a Linear project + GitHub repo pair
 CREATE TABLE IF NOT EXISTS projects (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -87,6 +98,7 @@ CREATE TABLE IF NOT EXISTS projects (
   github_repo_url      TEXT,
   linear_team_key      TEXT,
   linear_project_name  TEXT,
+  realm_id             UUID REFERENCES realms(id),
   created_at           TIMESTAMPTZ DEFAULT now()
 );
 
@@ -123,11 +135,20 @@ CREATE INDEX IF NOT EXISTS idx_users_org
 CREATE INDEX IF NOT EXISTS idx_users_linear_id
   ON users (linear_user_id);
 
+-- Add realm_id to existing projects tables
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS realm_id UUID REFERENCES realms(id);
+
+CREATE INDEX IF NOT EXISTS idx_realms_org
+  ON realms (org_id);
+
 CREATE INDEX IF NOT EXISTS idx_projects_org
   ON projects (org_id);
 
 CREATE INDEX IF NOT EXISTS idx_projects_linear
   ON projects (org_id, linear_team_key);
+
+CREATE INDEX IF NOT EXISTS idx_projects_realm
+  ON projects (realm_id);
 
 -- Ensure a default org exists for open-source single-tenant mode
 INSERT INTO organizations (org_id) VALUES ('default')
