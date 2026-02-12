@@ -608,17 +608,30 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           : null;
         // Auto-create hub user for authenticated Better Auth users
         if (!hubUser && session.user.email) {
+          const { getUsersByOrg } = await import("./db/users");
+          const existingUsers = await getUsersByOrg("default");
           hubUser = await createUser({
             orgId: "default",
             name: session.user.name ?? session.user.email,
             email: session.user.email,
             authMethod: "betterauth",
           });
-          await addOrgMember("default", hubUser.id, "member");
+          // First user in the org becomes admin
+          const role = existingUsers.length === 0 ? "admin" : "member";
+          await addOrgMember("default", hubUser.id, role);
         }
-        const orgRole = hubUser
+        let orgRole = hubUser
           ? await getOrgMemberRole("default", hubUser.id)
           : null;
+        // Promote sole member to admin (bootstrap case)
+        if (hubUser && orgRole === "member") {
+          const { getOrgMembers } = await import("./db/org-members");
+          const members = await getOrgMembers("default");
+          if (members.length === 1) {
+            await addOrgMember("default", hubUser.id, "admin");
+            orgRole = "admin";
+          }
+        }
         let role: "admin" | "operator" | "viewer" = "viewer";
         if (orgRole === "admin") role = "admin";
         else if (orgRole === "member") role = "operator";
