@@ -601,11 +601,21 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         if (!session?.user) {
           return Response.json({ authenticated: false });
         }
-        const { getUserByEmail } = await import("./db/users");
-        const { getOrgMemberRole } = await import("./db/org-members");
-        const hubUser = session.user.email
+        const { getUserByEmail, createUser } = await import("./db/users");
+        const { getOrgMemberRole, addOrgMember } = await import("./db/org-members");
+        let hubUser = session.user.email
           ? await getUserByEmail("default", session.user.email)
           : null;
+        // Auto-create hub user for authenticated Better Auth users
+        if (!hubUser && session.user.email) {
+          hubUser = await createUser({
+            orgId: "default",
+            name: session.user.name ?? session.user.email,
+            email: session.user.email,
+            authMethod: "betterauth",
+          });
+          await addOrgMember("default", hubUser.id, "member");
+        }
         const orgRole = hubUser
           ? await getOrgMemberRole("default", hubUser.id)
           : null;
