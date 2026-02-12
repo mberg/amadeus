@@ -621,6 +621,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
             image: session.user.image,
           },
           role,
+          hubUserId: hubUser?.id ?? null,
         });
       } catch {
         return Response.json({ authenticated: false });
@@ -838,6 +839,29 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       } catch (err) {
         console.error("[Hub] Proxy trigger error:", err);
         return new Response("Failed to trigger agent on remote machine", { status: 502 });
+      }
+    }
+
+    // Self-service PAT endpoints (accessible by the user themselves)
+    {
+      const patMatch = url.pathname.match(/^\/hub\/api\/users\/([^/]+)\/(linear-pats?)$/);
+      if (patMatch) {
+        const authError = await requireViewer(req);
+        if (authError) return authError;
+
+        const targetUserId = patMatch[1];
+        const orgId = getRequestOrgId(url);
+        const api = await import("./hub/api");
+
+        if (patMatch[2] === "linear-pats" && req.method === "GET") {
+          return api.handleGetUserLinearPats(orgId, targetUserId);
+        }
+        if (patMatch[2] === "linear-pat" && req.method === "POST") {
+          return api.handleSetUserLinearPat(req, orgId, targetUserId);
+        }
+        if (patMatch[2] === "linear-pat" && req.method === "DELETE") {
+          return api.handleDeleteUserLinearPat(req, orgId, targetUserId);
+        }
       }
     }
 
