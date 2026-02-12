@@ -870,6 +870,14 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         if (resourceId && subResource === "members" && subResourceId && req.method === "DELETE") return api.handleRemoveProjectMember(resourceId, subResourceId);
       }
 
+      // Realms
+      if (resource === "realms") {
+        if (!resourceId && req.method === "GET") return api.handleGetRealms(orgId);
+        if (!resourceId && req.method === "POST") return api.handleCreateRealm(req, orgId);
+        if (resourceId && req.method === "PUT") return api.handleUpdateRealm(req, orgId, resourceId);
+        if (resourceId && req.method === "DELETE") return api.handleDeleteRealm(orgId, resourceId);
+      }
+
       // Machines
       if (resource === "machines") {
         if (!resourceId && req.method === "GET") return api.handleGetMachines(orgId);

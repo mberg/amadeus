@@ -13,7 +13,8 @@ import {
   removeMachineAccess,
 } from "../db/machine-projects";
 import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
-import { getMachines, setSecret } from "../db";
+import { getMachines, setSecret, getSecret, deleteSecret } from "../db";
+import { createRealm, getRealmsByOrg, getRealm, updateRealm, deleteRealm as dbDeleteRealm } from "../db/realms";
 import { fetchLinearUserId } from "../linear";
 
 // --- Users ---
@@ -45,7 +46,7 @@ export async function handleSetUserLinearPat(
   orgId: string,
   userId: string
 ): Promise<Response> {
-  const body = (await req.json()) as { pat: string };
+  const body = (await req.json()) as { pat: string; realmId?: string };
   if (!body.pat) {
     return Response.json({ error: "pat is required" }, { status: 400 });
   }
@@ -55,7 +56,10 @@ export async function handleSetUserLinearPat(
     return Response.json({ error: "Invalid Linear API key" }, { status: 400 });
   }
 
-  await setSecret(orgId, `user:${userId}:linear_pat`, body.pat);
+  const secretKey = body.realmId
+    ? `user:${userId}:realm:${body.realmId}:linear_pat`
+    : `user:${userId}:linear_pat`;
+  await setSecret(orgId, secretKey, body.pat);
   await updateUserLinearId(userId, linearUserId);
 
   return Response.json({ linearUserId });
@@ -75,6 +79,7 @@ export async function handleCreateProject(req: Request, orgId: string): Promise<
     githubRepoUrl?: string;
     linearTeamKey?: string;
     linearProjectName?: string;
+    realmId?: string;
   };
   if (!body.name) {
     return Response.json({ error: "name is required" }, { status: 400 });
@@ -168,5 +173,93 @@ export async function handleRemoveProjectMember(
 ): Promise<Response> {
   const removed = await removeProjectMember(projectId, userId);
   if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}
+
+// --- Realms ---
+
+export async function handleGetRealms(orgId: string): Promise<Response> {
+  const realms = await getRealmsByOrg(orgId);
+  const results = await Promise.all(
+    realms.map(async (realm) => {
+      const hasApiKey = (await getSecret(orgId, `realm:${realm.id}:linear_api_key`)) !== null;
+      const hasWebhookSecret = (await getSecret(orgId, `realm:${realm.id}:webhook_secret`)) !== null;
+      return { ...realm, hasApiKey, hasWebhookSecret };
+    })
+  );
+  return Response.json(results);
+}
+
+export async function handleCreateRealm(req: Request, orgId: string): Promise<Response> {
+  const body = (await req.json()) as {
+    name: string;
+    linearWorkspace: string;
+    claudeBotUserId?: string;
+    linearApiKey?: string;
+    webhookSecret?: string;
+  };
+  if (!body.name || !body.linearWorkspace) {
+    return Response.json({ error: "name and linearWorkspace are required" }, { status: 400 });
+  }
+
+  const realm = await createRealm({
+    orgId,
+    name: body.name,
+    linearWorkspace: body.linearWorkspace,
+    claudeBotUserId: body.claudeBotUserId,
+  });
+
+  if (body.linearApiKey) {
+    await setSecret(orgId, `realm:${realm.id}:linear_api_key`, body.linearApiKey);
+  }
+  if (body.webhookSecret) {
+    await setSecret(orgId, `realm:${realm.id}:webhook_secret`, body.webhookSecret);
+  }
+
+  return Response.json(realm, { status: 201 });
+}
+
+export async function handleUpdateRealm(
+  req: Request,
+  orgId: string,
+  realmId: string
+): Promise<Response> {
+  const body = (await req.json()) as {
+    name?: string;
+    linearWorkspace?: string;
+    claudeBotUserId?: string | null;
+    linearApiKey?: string;
+    webhookSecret?: string;
+  };
+
+  const realm = await getRealm(realmId);
+  if (!realm || realm.orgId !== orgId) {
+    return Response.json({ error: "Realm not found" }, { status: 404 });
+  }
+
+  const updated = await updateRealm(realmId, {
+    name: body.name,
+    linearWorkspace: body.linearWorkspace,
+    claudeBotUserId: body.claudeBotUserId,
+  });
+
+  if (body.linearApiKey) {
+    await setSecret(orgId, `realm:${realmId}:linear_api_key`, body.linearApiKey);
+  }
+  if (body.webhookSecret) {
+    await setSecret(orgId, `realm:${realmId}:webhook_secret`, body.webhookSecret);
+  }
+
+  return Response.json(updated);
+}
+
+export async function handleDeleteRealm(orgId: string, realmId: string): Promise<Response> {
+  const deleted = await dbDeleteRealm(realmId, orgId);
+  if (!deleted) return Response.json({ error: "Realm not found" }, { status: 404 });
+
+  // Clean up associated secrets
+  await deleteSecret(orgId, `realm:${realmId}:linear_api_key`);
+  await deleteSecret(orgId, `realm:${realmId}:webhook_secret`);
+
   return new Response(null, { status: 204 });
 }
