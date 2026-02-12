@@ -153,7 +153,6 @@ export function UsersTab() {
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="pb-2 font-medium">Name</th>
               <th className="pb-2 font-medium">Email</th>
-              <th className="pb-2 font-medium">Linear ID</th>
               <th className="pb-2 font-medium w-24">Actions</th>
             </tr>
           </thead>
@@ -162,15 +161,6 @@ export function UsersTab() {
               <tr key={user.id} className="border-b border-border/50">
                 <td className="py-2.5">{user.name}</td>
                 <td className="py-2.5 text-muted-foreground">{user.email}</td>
-                <td className="py-2.5">
-                  {user.linearUserId ? (
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {user.linearUserId}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground/50">not linked</span>
-                  )}
-                </td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1">
                     <button
