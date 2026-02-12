@@ -2,6 +2,7 @@
 // ABOUTME: Enables amadeus-cloud to wrap the handler with org resolution.
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+process.env.BUN_TLS_REJECT_UNAUTHORIZED = "0";
 
 import { $ } from "bun";
 import {
@@ -413,16 +414,29 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           tls: { rejectUnauthorized: false },
         });
       } catch (tlsErr) {
-        // Fallback: use curl for TLS-problematic connections (e.g. Tailscale funnel certs)
-        const curlArgs = ["curl", "-sk", "-X", "POST", "-o", "/dev/null", "-w", "%{http_code}"];
-        for (const [k, v] of Object.entries(headers)) {
-          curlArgs.push("-H", `${k}: ${v}`);
-        }
-        curlArgs.push("-d", forwardPayload, `${machineUrl}/webhook`);
-        const proc = Bun.spawn(curlArgs, { stdout: "pipe" });
-        const output = await new Response(proc.stdout).text();
-        await proc.exited;
-        const statusCode = parseInt(output.trim(), 10) || 500;
+        // Fallback: use Node.js https module for TLS-problematic connections (e.g. Tailscale funnel certs)
+        console.log(`[WebhookForward] fetch failed with TLS error, retrying with https module: ${(tlsErr as Error).message}`);
+        const https = await import("node:https");
+        const url = new URL(`${machineUrl}/webhook`);
+        const statusCode = await new Promise<number>((resolve) => {
+          const req = https.request(
+            {
+              hostname: url.hostname,
+              port: url.port || 443,
+              path: url.pathname,
+              method: "POST",
+              headers: { ...headers, "Content-Length": Buffer.byteLength(forwardPayload) },
+              rejectUnauthorized: false,
+            },
+            (res) => resolve(res.statusCode ?? 500)
+          );
+          req.on("error", (e) => {
+            console.warn(`[WebhookForward] https fallback error: ${e.message}`);
+            resolve(500);
+          });
+          req.write(forwardPayload);
+          req.end();
+        });
         response = new Response(null, { status: statusCode });
       }
 
