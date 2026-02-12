@@ -414,9 +414,15 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         });
       } catch (tlsErr) {
         // Fallback: use curl for TLS-problematic connections (e.g. Tailscale funnel certs)
-        const headerArgs = Object.entries(headers).map(([k, v]) => `-H "${k}: ${v}"`).join(" ");
-        const result = await $`curl -sk -X POST ${headerArgs} -d ${forwardPayload} ${machineUrl}/webhook -w "\n%{http_code}" -o /dev/null`.text();
-        const statusCode = parseInt(result.trim().split("\n").pop() ?? "500", 10);
+        const curlArgs = ["curl", "-sk", "-X", "POST", "-o", "/dev/null", "-w", "%{http_code}"];
+        for (const [k, v] of Object.entries(headers)) {
+          curlArgs.push("-H", `${k}: ${v}`);
+        }
+        curlArgs.push("-d", forwardPayload, `${machineUrl}/webhook`);
+        const proc = Bun.spawn(curlArgs, { stdout: "pipe" });
+        const output = await new Response(proc.stdout).text();
+        await proc.exited;
+        const statusCode = parseInt(output.trim(), 10) || 500;
         response = new Response(null, { status: statusCode });
       }
 
