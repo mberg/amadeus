@@ -27,15 +27,60 @@ import adminHtml from "./dashboard/admin.html";
 await initConfig();
 await migrateCloud();
 
-// Run Better Auth migrations (creates user/session/account/verification tables)
+// Create Better Auth tables if they don't exist
 if (isBetterAuthEnabled()) {
-  const { getMigrations } = await import("better-auth/db");
-  const { auth } = await import("amadeus/better-auth");
-  if (auth) {
-    const { runMigrations } = await getMigrations(auth.options);
-    await runMigrations();
-    console.log("[Cloud] Better Auth migrations applied");
-  }
+  const { sql } = await import("bun");
+  await sql`
+    CREATE TABLE IF NOT EXISTS "user" (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      email TEXT,
+      "emailVerified" BOOLEAN,
+      image TEXT,
+      "createdAt" TIMESTAMP,
+      "updatedAt" TIMESTAMP
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS "session" (
+      id TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL REFERENCES "user"(id),
+      token TEXT UNIQUE,
+      "expiresAt" TIMESTAMP,
+      "ipAddress" TEXT,
+      "userAgent" TEXT,
+      "createdAt" TIMESTAMP,
+      "updatedAt" TIMESTAMP
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS "account" (
+      id TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL REFERENCES "user"(id),
+      "accountId" TEXT,
+      "providerId" TEXT,
+      "accessToken" TEXT,
+      "refreshToken" TEXT,
+      "accessTokenExpiresAt" TIMESTAMP,
+      "refreshTokenExpiresAt" TIMESTAMP,
+      scope TEXT,
+      "idToken" TEXT,
+      password TEXT,
+      "createdAt" TIMESTAMP,
+      "updatedAt" TIMESTAMP
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS "verification" (
+      id TEXT PRIMARY KEY,
+      identifier TEXT,
+      value TEXT,
+      "expiresAt" TIMESTAMP,
+      "createdAt" TIMESTAMP,
+      "updatedAt" TIMESTAMP
+    )
+  `;
+  console.log("[Cloud] Better Auth tables ensured");
 }
 
 const machineConfig = getMachineConfig();
