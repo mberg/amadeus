@@ -27,6 +27,17 @@ import adminHtml from "./dashboard/admin.html";
 await initConfig();
 await migrateCloud();
 
+// Run Better Auth migrations (creates user/session/account/verification tables)
+if (isBetterAuthEnabled()) {
+  const { getMigrations } = await import("better-auth/db");
+  const { auth } = await import("amadeus/better-auth");
+  if (auth) {
+    const { runMigrations } = await getMigrations(auth.options);
+    await runMigrations();
+    console.log("[Cloud] Better Auth migrations applied");
+  }
+}
+
 const machineConfig = getMachineConfig();
 console.log(`[Cloud] Starting in ${getRuntimeMode()} mode as "${machineConfig.name}"`);
 
