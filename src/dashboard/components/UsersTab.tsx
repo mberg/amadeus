@@ -29,6 +29,7 @@ export function UsersTab() {
   const [patRealmId, setPatRealmId] = useState("");
   const [patError, setPatError] = useState<string | null>(null);
   const [patSubmitting, setPatSubmitting] = useState(false);
+  const [userRealms, setUserRealms] = useState<Realm[]>([]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -50,6 +51,18 @@ export function UsersTab() {
       // Realms may not be available in all modes
     }
   }, []);
+
+  const fetchUserRealms = useCallback(async (userId: string) => {
+    try {
+      const res = await fetch(`/hub/api/users/${userId}/realms`);
+      if (!res.ok) return;
+      const memberships: { realmId: string }[] = await res.json();
+      const memberRealmIds = new Set(memberships.map((m) => m.realmId));
+      setUserRealms(realms.filter((r) => memberRealmIds.has(r.id)));
+    } catch {
+      setUserRealms([]);
+    }
+  }, [realms]);
 
   useEffect(() => {
     fetchUsers();
@@ -200,10 +213,12 @@ export function UsersTab() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => {
-                        setPatUserId(patUserId === user.id ? null : user.id);
+                        const newId = patUserId === user.id ? null : user.id;
+                        setPatUserId(newId);
                         setPat("");
                         setPatRealmId("");
                         setPatError(null);
+                        if (newId) fetchUserRealms(newId);
                       }}
                       className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
                       title="Link Linear PAT"
@@ -242,7 +257,7 @@ export function UsersTab() {
               required
             />
           </div>
-          {realms.length > 0 && (
+          {userRealms.length > 0 && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Realm</label>
               <select
@@ -251,7 +266,7 @@ export function UsersTab() {
                 className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">All realms</option>
-                {realms.map((r) => (
+                {userRealms.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
                   </option>

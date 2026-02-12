@@ -1,8 +1,8 @@
 // ABOUTME: Admin tab for managing realms with list, add, delete, and webhook secret management.
-// ABOUTME: Uses /hub/api/realms endpoints for CRUD operations.
+// ABOUTME: Uses /hub/api/realms endpoints for CRUD operations including member management.
 
 import { useState, useEffect, useCallback } from "react";
-import { Trash2, Eye, EyeOff } from "lucide-react";
+import { Trash2, Eye, EyeOff, Users, X } from "lucide-react";
 
 interface Realm {
   id: string;
@@ -10,6 +10,18 @@ interface Realm {
   linearWorkspace: string;
   claudeBotUserId: string | null;
   hasWebhookSecret: boolean;
+}
+
+interface RealmMember {
+  realmId: string;
+  userId: string;
+  role: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export function RealmsTab() {
@@ -34,6 +46,13 @@ export function RealmsTab() {
   const [rotateError, setRotateError] = useState<string | null>(null);
   const [rotateSubmitting, setRotateSubmitting] = useState(false);
 
+  // Members management state
+  const [membersRealmId, setMembersRealmId] = useState<string | null>(null);
+  const [members, setMembers] = useState<RealmMember[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [addMemberUserId, setAddMemberUserId] = useState("");
+  const [membersLoading, setMembersLoading] = useState(false);
+
   const fetchRealms = useCallback(async () => {
     try {
       const res = await fetch("/hub/api/realms");
@@ -49,6 +68,22 @@ export function RealmsTab() {
   useEffect(() => {
     fetchRealms();
   }, [fetchRealms]);
+
+  const fetchMembers = useCallback(async (realmId: string) => {
+    setMembersLoading(true);
+    try {
+      const [membersRes, usersRes] = await Promise.all([
+        fetch(`/hub/api/realms/${realmId}/members`),
+        fetch("/hub/api/users"),
+      ]);
+      if (membersRes.ok) setMembers(await membersRes.json());
+      if (usersRes.ok) setAllUsers(await usersRes.json());
+    } catch (err) {
+      console.error("Failed to fetch members:", err);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -128,9 +163,43 @@ export function RealmsTab() {
     }
   }
 
+  async function handleAddMember(realmId: string) {
+    if (!addMemberUserId) return;
+    try {
+      const res = await fetch(`/hub/api/realms/${realmId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: addMemberUserId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setAddMemberUserId("");
+      await fetchMembers(realmId);
+    } catch (err) {
+      console.error("Failed to add member:", err);
+    }
+  }
+
+  async function handleRemoveMember(realmId: string, userId: string) {
+    try {
+      const res = await fetch(`/hub/api/realms/${realmId}/members/${userId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await fetchMembers(realmId);
+    } catch (err) {
+      console.error("Failed to remove member:", err);
+    }
+  }
+
   if (loading) {
     return <div className="text-muted-foreground">Loading realms...</div>;
   }
+
+  // Users not already members of the currently expanded realm
+  const availableUsers = allUsers.filter(
+    (u) => !members.some((m) => m.userId === u.id)
+  );
 
   return (
     <div className="space-y-6">
@@ -224,7 +293,7 @@ export function RealmsTab() {
               <th className="pb-2 font-medium">Name</th>
               <th className="pb-2 font-medium">Workspace</th>
               <th className="pb-2 font-medium">Webhook Secret</th>
-              <th className="pb-2 font-medium w-24">Actions</th>
+              <th className="pb-2 font-medium w-32">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -245,6 +314,18 @@ export function RealmsTab() {
                 </td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        const newId = membersRealmId === realm.id ? null : realm.id;
+                        setMembersRealmId(newId);
+                        setAddMemberUserId("");
+                        if (newId) fetchMembers(newId);
+                      }}
+                      className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Manage members"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => {
                         setRotatingId(rotatingId === realm.id ? null : realm.id);
@@ -273,6 +354,68 @@ export function RealmsTab() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {/* Members management */}
+      {membersRealmId && (
+        <div className="p-3 rounded-md border border-border bg-card space-y-3">
+          <h4 className="text-xs font-medium text-muted-foreground">
+            Members of {realms.find((r) => r.id === membersRealmId)?.name}
+          </h4>
+          {membersLoading ? (
+            <p className="text-xs text-muted-foreground">Loading...</p>
+          ) : (
+            <>
+              {members.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No members yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {members.map((m) => {
+                    const user = allUsers.find((u) => u.id === m.userId);
+                    return (
+                      <span
+                        key={m.userId}
+                        className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs"
+                      >
+                        {user?.name ?? m.userId}
+                        <button
+                          onClick={() => handleRemoveMember(membersRealmId, m.userId)}
+                          className="p-0.5 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Remove member"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {availableUsers.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={addMemberUserId}
+                    onChange={(e) => setAddMemberUserId(e.target.value)}
+                    className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Select user...</option>
+                    {availableUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => handleAddMember(membersRealmId)}
+                    disabled={!addMemberUserId}
+                    className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {/* Delete confirmation */}
