@@ -11,6 +11,7 @@ import {
   addMachineAccess,
   getMachineAccessList,
   removeMachineAccess,
+  ensureMachineProject,
 } from "../db/machine-projects";
 import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
 import { getMachines, setSecret, getSecret, deleteSecret, listSecretKeys } from "../db";
@@ -214,6 +215,7 @@ export async function handleAddProjectMember(req: Request, projectId: string): P
     return Response.json({ error: "userId and machineId are required" }, { status: 400 });
   }
   await addProjectMember(projectId, body.userId, body.machineId);
+  await ensureMachineProject(body.machineId, projectId);
   return new Response(null, { status: 204 });
 }
 

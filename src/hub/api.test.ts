@@ -297,6 +297,15 @@ describe("hub api", () => {
       expect(res.status).toBe(204);
     });
 
+    test("handleAddProjectMember auto-creates machine_projects entry", async () => {
+      const res = await handleGetMachineProjects(machineId);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const link = body.find((p: { projectId: string }) => p.projectId === projectId);
+      expect(link).toBeDefined();
+      expect(link.localRepoPath).toBe("");
+    });
+
     test("handleGetProjectMembers returns assigned member", async () => {
       const res = await handleGetProjectMembers(projectId);
       expect(res.status).toBe(200);

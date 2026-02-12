@@ -30,6 +30,14 @@ export async function addMachineProject(
   return { machineId: row.machine_id, projectId: row.project_id, localRepoPath: row.local_repo_path };
 }
 
+export async function ensureMachineProject(machineId: string, projectId: string): Promise<void> {
+  await sql`
+    INSERT INTO machine_projects (machine_id, project_id, local_repo_path)
+    VALUES (${machineId}, ${projectId}, '')
+    ON CONFLICT (machine_id, project_id) DO NOTHING
+  `;
+}
+
 export async function getMachineProjects(machineId: string): Promise<MachineProject[]> {
   const rows = await sql`
     SELECT machine_id, project_id, local_repo_path
