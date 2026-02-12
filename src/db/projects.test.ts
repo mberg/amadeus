@@ -11,6 +11,7 @@ import {
   getProjectByLinearKey,
   getProjectByLinearName,
   getProjectsByRealm,
+  updateProject,
   deleteProject,
 } from "./projects";
 import { createRealm } from "./realms";
@@ -146,6 +147,67 @@ describe("projects CRUD", () => {
   test("getProjectByLinearName returns null when not found", async () => {
     const result = await getProjectByLinearName(TEST_ORG, "No Such Project");
     expect(result).toBeNull();
+  });
+
+  test("updateProject updates specified fields", async () => {
+    const project = await createProject({
+      orgId: TEST_ORG,
+      name: "Original Name",
+      linearTeamKey: "ORIG",
+      githubRepoUrl: "https://github.com/org/old",
+    });
+
+    const updated = await updateProject(project.id, TEST_ORG, {
+      name: "New Name",
+      githubRepoUrl: "https://github.com/org/new",
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated!.name).toBe("New Name");
+    expect(updated!.githubRepoUrl).toBe("https://github.com/org/new");
+    // Unchanged fields preserved
+    expect(updated!.linearTeamKey).toBe("ORIG");
+  });
+
+  test("updateProject can set nullable fields to null", async () => {
+    const project = await createProject({
+      orgId: TEST_ORG,
+      name: "Nullable Test",
+      linearProjectUrl: "https://linear.app/team/proj",
+      realmId: null,
+    });
+
+    const updated = await updateProject(project.id, TEST_ORG, {
+      linearProjectUrl: null,
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated!.linearProjectUrl).toBeNull();
+    expect(updated!.name).toBe("Nullable Test");
+  });
+
+  test("updateProject returns null for nonexistent project", async () => {
+    const result = await updateProject(
+      "00000000-0000-0000-0000-000000000000",
+      TEST_ORG,
+      { name: "Nope" }
+    );
+    expect(result).toBeNull();
+  });
+
+  test("updateProject returns null when org_id does not match", async () => {
+    const project = await createProject({
+      orgId: TEST_ORG,
+      name: "Wrong Org Update",
+    });
+
+    const result = await updateProject(project.id, "wrong-org", {
+      name: "Should Fail",
+    });
+    expect(result).toBeNull();
+
+    const unchanged = await getProject(project.id);
+    expect(unchanged!.name).toBe("Wrong Org Update");
   });
 
   test("deleteProject removes project and returns true", async () => {

@@ -869,6 +869,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       if (resource === "projects") {
         if (!resourceId && req.method === "GET") return api.handleGetProjects(orgId);
         if (!resourceId && req.method === "POST") return api.handleCreateProject(req, orgId);
+        if (resourceId && !subResource && req.method === "PUT") return api.handleUpdateProject(req, orgId, resourceId);
         if (resourceId && !subResource && req.method === "DELETE") return api.handleDeleteProject(orgId, resourceId);
         if (resourceId && subResource === "members" && !subResourceId && req.method === "GET") return api.handleGetProjectMembers(resourceId);
         if (resourceId && subResource === "members" && !subResourceId && req.method === "POST") return api.handleAddProjectMember(req, resourceId);

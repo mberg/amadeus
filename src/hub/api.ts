@@ -3,7 +3,7 @@
 
 import { getUsersByOrg, createUser, deleteUser, updateUserLinearId } from "../db/users";
 import { addOrgMember, removeOrgMember } from "../db/org-members";
-import { getProjectsByOrg, createProject, deleteProject, unlinkProjectsFromRealm } from "../db/projects";
+import { getProjectsByOrg, createProject, updateProject, deleteProject, unlinkProjectsFromRealm } from "../db/projects";
 import {
   addMachineProject,
   getMachineProjects,
@@ -88,6 +88,20 @@ export async function handleCreateProject(req: Request, orgId: string): Promise<
   }
   const project = await createProject({ orgId, ...body });
   return Response.json(project, { status: 201 });
+}
+
+export async function handleUpdateProject(req: Request, orgId: string, projectId: string): Promise<Response> {
+  const body = (await req.json()) as {
+    name?: string;
+    linearProjectUrl?: string | null;
+    githubRepoUrl?: string | null;
+    linearTeamKey?: string | null;
+    linearProjectName?: string | null;
+    realmId?: string | null;
+  };
+  const updated = await updateProject(projectId, orgId, body);
+  if (!updated) return Response.json({ error: "Project not found" }, { status: 404 });
+  return Response.json(updated);
 }
 
 export async function handleDeleteProject(orgId: string, projectId: string): Promise<Response> {

@@ -90,6 +90,40 @@ export async function unlinkProjectsFromRealm(realmId: string): Promise<void> {
   `;
 }
 
+export interface UpdateProjectParams {
+  name?: string;
+  linearProjectUrl?: string | null;
+  githubRepoUrl?: string | null;
+  linearTeamKey?: string | null;
+  linearProjectName?: string | null;
+  realmId?: string | null;
+}
+
+export async function updateProject(id: string, orgId: string, params: UpdateProjectParams): Promise<DbProject | null> {
+  const current = await getProject(id);
+  if (!current || current.orgId !== orgId) return null;
+
+  const name = params.name ?? current.name;
+  const linearProjectUrl = params.linearProjectUrl !== undefined ? params.linearProjectUrl : current.linearProjectUrl;
+  const githubRepoUrl = params.githubRepoUrl !== undefined ? params.githubRepoUrl : current.githubRepoUrl;
+  const linearTeamKey = params.linearTeamKey !== undefined ? params.linearTeamKey : current.linearTeamKey;
+  const linearProjectName = params.linearProjectName !== undefined ? params.linearProjectName : current.linearProjectName;
+  const realmId = params.realmId !== undefined ? params.realmId : current.realmId;
+
+  const [row] = await sql`
+    UPDATE projects
+    SET name = ${name},
+        linear_project_url = ${linearProjectUrl},
+        github_repo_url = ${githubRepoUrl},
+        linear_team_key = ${linearTeamKey},
+        linear_project_name = ${linearProjectName},
+        realm_id = ${realmId}
+    WHERE id = ${id} AND org_id = ${orgId}
+    RETURNING id, org_id, name, linear_project_url, github_repo_url, linear_team_key, linear_project_name, realm_id, created_at
+  `;
+  return row ? rowToProject(row) : null;
+}
+
 export async function deleteProject(id: string, orgId: string): Promise<boolean> {
   const result = await sql`
     DELETE FROM projects WHERE id = ${id} AND org_id = ${orgId}
