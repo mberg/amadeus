@@ -1,0 +1,6 @@
+node_modules
+cloud/node_modules
+.git
+temp
+.claude
+.cursor
