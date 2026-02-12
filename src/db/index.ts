@@ -140,6 +140,15 @@ export async function deleteSecret(orgId: string, keyName: string): Promise<bool
   return result.count > 0;
 }
 
+export async function listSecretKeys(orgId: string, prefix: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT key_name FROM secrets
+    WHERE org_id = ${orgId} AND key_name LIKE ${prefix + "%"}
+    ORDER BY key_name
+  `;
+  return rows.map((row: Record<string, unknown>) => row.key_name as string);
+}
+
 // --- Completed Tasks ---
 
 export async function recordCompletedTask(orgId: string, task: CompletedTask): Promise<void> {
