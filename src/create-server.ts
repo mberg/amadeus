@@ -858,6 +858,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         if (!resourceId && req.method === "POST") return api.handleCreateUser(req, orgId);
         if (resourceId && !subResource && req.method === "DELETE") return api.handleDeleteUser(orgId, resourceId);
         if (resourceId && subResource === "linear-pat" && req.method === "POST") return api.handleSetUserLinearPat(req, orgId, resourceId);
+        if (resourceId && subResource === "realms" && req.method === "GET") return api.handleGetUserRealms(resourceId);
       }
 
       // Projects
@@ -874,8 +875,11 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       if (resource === "realms") {
         if (!resourceId && req.method === "GET") return api.handleGetRealms(orgId);
         if (!resourceId && req.method === "POST") return api.handleCreateRealm(req, orgId);
-        if (resourceId && req.method === "PUT") return api.handleUpdateRealm(req, orgId, resourceId);
-        if (resourceId && req.method === "DELETE") return api.handleDeleteRealm(orgId, resourceId);
+        if (resourceId && !subResource && req.method === "PUT") return api.handleUpdateRealm(req, orgId, resourceId);
+        if (resourceId && !subResource && req.method === "DELETE") return api.handleDeleteRealm(orgId, resourceId);
+        if (resourceId && subResource === "members" && !subResourceId && req.method === "GET") return api.handleGetRealmMembers(resourceId);
+        if (resourceId && subResource === "members" && !subResourceId && req.method === "POST") return api.handleAddRealmMember(req, resourceId);
+        if (resourceId && subResource === "members" && subResourceId && req.method === "DELETE") return api.handleRemoveRealmMember(resourceId, subResourceId);
       }
 
       // Machines

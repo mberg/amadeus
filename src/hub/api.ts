@@ -15,6 +15,7 @@ import {
 import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
 import { getMachines, setSecret, getSecret, deleteSecret } from "../db";
 import { createRealm, getRealmsByOrg, getRealm, updateRealm, deleteRealm as dbDeleteRealm } from "../db/realms";
+import { addRealmMember, getRealmMembers, removeRealmMember, getUserRealms } from "../db/realm-members";
 import { rebuildRealmConfig } from "../config";
 import { fetchLinearUserId } from "../linear";
 
@@ -259,4 +260,31 @@ export async function handleDeleteRealm(orgId: string, realmId: string): Promise
 
   await rebuildRealmConfig(orgId);
   return new Response(null, { status: 204 });
+}
+
+// --- Realm Members ---
+
+export async function handleGetRealmMembers(realmId: string): Promise<Response> {
+  const members = await getRealmMembers(realmId);
+  return Response.json(members);
+}
+
+export async function handleAddRealmMember(req: Request, realmId: string): Promise<Response> {
+  const body = (await req.json()) as { userId: string; role?: string };
+  if (!body.userId) {
+    return Response.json({ error: "userId is required" }, { status: 400 });
+  }
+  const member = await addRealmMember(realmId, body.userId, body.role ?? "member");
+  return Response.json(member, { status: 201 });
+}
+
+export async function handleRemoveRealmMember(realmId: string, userId: string): Promise<Response> {
+  const removed = await removeRealmMember(realmId, userId);
+  if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
+  return new Response(null, { status: 204 });
+}
+
+export async function handleGetUserRealms(userId: string): Promise<Response> {
+  const realms = await getUserRealms(userId);
+  return Response.json(realms);
 }
