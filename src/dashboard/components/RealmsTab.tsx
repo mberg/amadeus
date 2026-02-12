@@ -1,4 +1,4 @@
-// ABOUTME: Admin tab for managing realms with list, add, delete, and secret management.
+// ABOUTME: Admin tab for managing realms with list, add, delete, and webhook secret management.
 // ABOUTME: Uses /hub/api/realms endpoints for CRUD operations.
 
 import { useState, useEffect, useCallback } from "react";
@@ -9,7 +9,6 @@ interface Realm {
   name: string;
   linearWorkspace: string;
   claudeBotUserId: string | null;
-  hasApiKey: boolean;
   hasWebhookSecret: boolean;
 }
 
@@ -19,16 +18,13 @@ export function RealmsTab() {
   const [name, setName] = useState("");
   const [linearWorkspace, setLinearWorkspace] = useState("");
   const [claudeBotUserId, setClaudeBotUserId] = useState("");
-  const [linearApiKey, setLinearApiKey] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
-  // Secret rotation state
+  // Webhook secret rotation state
   const [rotatingId, setRotatingId] = useState<string | null>(null);
-  const [rotateApiKey, setRotateApiKey] = useState("");
   const [rotateWebhookSecret, setRotateWebhookSecret] = useState("");
   const [rotateError, setRotateError] = useState<string | null>(null);
   const [rotateSubmitting, setRotateSubmitting] = useState(false);
@@ -56,7 +52,6 @@ export function RealmsTab() {
     try {
       const body: Record<string, string> = { name, linearWorkspace };
       if (claudeBotUserId) body.claudeBotUserId = claudeBotUserId;
-      if (linearApiKey) body.linearApiKey = linearApiKey;
       if (webhookSecret) body.webhookSecret = webhookSecret;
 
       const res = await fetch("/hub/api/realms", {
@@ -71,9 +66,7 @@ export function RealmsTab() {
       setName("");
       setLinearWorkspace("");
       setClaudeBotUserId("");
-      setLinearApiKey("");
       setWebhookSecret("");
-      setShowApiKey(false);
       setShowWebhookSecret(false);
       await fetchRealms();
     } catch (err) {
@@ -93,35 +86,28 @@ export function RealmsTab() {
     }
   }
 
-  async function handleRotateSecrets(realmId: string) {
+  async function handleRotateSecret(realmId: string) {
+    if (!rotateWebhookSecret) {
+      setRotateError("Enter a webhook secret");
+      return;
+    }
     setRotateError(null);
     setRotateSubmitting(true);
     try {
-      const body: Record<string, string> = {};
-      if (rotateApiKey) body.linearApiKey = rotateApiKey;
-      if (rotateWebhookSecret) body.webhookSecret = rotateWebhookSecret;
-
-      if (Object.keys(body).length === 0) {
-        setRotateError("Enter at least one secret to update");
-        setRotateSubmitting(false);
-        return;
-      }
-
       const res = await fetch(`/hub/api/realms/${realmId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ webhookSecret: rotateWebhookSecret }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       setRotatingId(null);
-      setRotateApiKey("");
       setRotateWebhookSecret("");
       await fetchRealms();
     } catch (err) {
-      setRotateError(err instanceof Error ? err.message : "Failed to update secrets");
+      setRotateError(err instanceof Error ? err.message : "Failed to update secret");
     } finally {
       setRotateSubmitting(false);
     }
@@ -164,28 +150,6 @@ export function RealmsTab() {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               required
             />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="realmApiKey" className="text-xs font-medium text-muted-foreground">
-              Linear API Key
-            </label>
-            <div className="relative">
-              <input
-                id="realmApiKey"
-                type={showApiKey ? "text" : "password"}
-                placeholder="lin_api_..."
-                value={linearApiKey}
-                onChange={(e) => setLinearApiKey(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring pr-9"
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-foreground"
-              >
-                {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
           </div>
           <div className="space-y-1.5">
             <label htmlFor="realmWebhookSecret" className="text-xs font-medium text-muted-foreground">
@@ -244,8 +208,7 @@ export function RealmsTab() {
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="pb-2 font-medium">Name</th>
               <th className="pb-2 font-medium">Workspace</th>
-              <th className="pb-2 font-medium">API Key</th>
-              <th className="pb-2 font-medium">Webhook</th>
+              <th className="pb-2 font-medium">Webhook Secret</th>
               <th className="pb-2 font-medium w-24">Actions</th>
             </tr>
           </thead>
@@ -254,17 +217,6 @@ export function RealmsTab() {
               <tr key={realm.id} className="border-b border-border/50">
                 <td className="py-2.5">{realm.name}</td>
                 <td className="py-2.5 text-muted-foreground">{realm.linearWorkspace}</td>
-                <td className="py-2.5">
-                  {realm.hasApiKey ? (
-                    <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
-                      configured
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
-                      missing
-                    </span>
-                  )}
-                </td>
                 <td className="py-2.5">
                   {realm.hasWebhookSecret ? (
                     <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
@@ -281,14 +233,13 @@ export function RealmsTab() {
                     <button
                       onClick={() => {
                         setRotatingId(rotatingId === realm.id ? null : realm.id);
-                        setRotateApiKey("");
                         setRotateWebhookSecret("");
                         setRotateError(null);
                       }}
                       className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors text-xs"
-                      title="Rotate secrets"
+                      title="Update webhook secret"
                     >
-                      Secrets
+                      Secret
                     </button>
                     <button
                       onClick={() => handleDelete(realm.id)}
@@ -305,37 +256,24 @@ export function RealmsTab() {
         </table>
       )}
 
-      {/* Secret rotation form */}
+      {/* Webhook secret rotation form */}
       {rotatingId && (
         <div className="p-3 rounded-md border border-border bg-card space-y-3">
           <h4 className="text-xs font-medium text-muted-foreground">
-            Update secrets for {realms.find((r) => r.id === rotatingId)?.name}
+            Update webhook secret for {realms.find((r) => r.id === rotatingId)?.name}
           </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Linear API Key</label>
-              <input
-                type="password"
-                placeholder="lin_api_..."
-                value={rotateApiKey}
-                onChange={(e) => setRotateApiKey(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Webhook Secret</label>
-              <input
-                type="password"
-                placeholder="whsec_..."
-                value={rotateWebhookSecret}
-                onChange={(e) => setRotateWebhookSecret(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+          <div className="space-y-1">
+            <input
+              type="password"
+              placeholder="whsec_..."
+              value={rotateWebhookSecret}
+              onChange={(e) => setRotateWebhookSecret(e.target.value)}
+              className="w-full max-w-md rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => handleRotateSecrets(rotatingId)}
+              onClick={() => handleRotateSecret(rotatingId)}
               disabled={rotateSubmitting}
               className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
@@ -344,7 +282,6 @@ export function RealmsTab() {
             <button
               onClick={() => {
                 setRotatingId(null);
-                setRotateApiKey("");
                 setRotateWebhookSecret("");
                 setRotateError(null);
               }}

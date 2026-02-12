@@ -246,7 +246,6 @@ async function buildRealmConfigFromDb(orgId: string): Promise<ResolvedConfig | n
   const projectByTeamKey = new Map<string, { realm: ResolvedRealm; project: Project }>();
 
   for (const dbRealm of dbRealms) {
-    const apiKey = await getSecret(orgId, `realm:${dbRealm.id}:linear_api_key`) ?? "";
     const webhookSecret = await getSecret(orgId, `realm:${dbRealm.id}:webhook_secret`) ?? "";
 
     const dbProjects = await getProjectsByRealm(dbRealm.id);
@@ -262,7 +261,7 @@ async function buildRealmConfigFromDb(orgId: string): Promise<ResolvedConfig | n
     const resolvedRealm: ResolvedRealm = {
       name: dbRealm.name,
       linearWorkspace: dbRealm.linearWorkspace,
-      apiKey,
+      apiKey: "",
       webhookSecret,
       claudeBotUserId: dbRealm.claudeBotUserId ?? undefined,
       projects,
@@ -299,9 +298,6 @@ async function seedRealmsFromYaml(orgId: string, config: ResolvedConfig): Promis
       claudeBotUserId: realm.claudeBotUserId,
     });
 
-    if (realm.apiKey) {
-      await setSecret(orgId, `realm:${dbRealm.id}:linear_api_key`, realm.apiKey);
-    }
     if (realm.webhookSecret) {
       await setSecret(orgId, `realm:${dbRealm.id}:webhook_secret`, realm.webhookSecret);
     }

@@ -183,9 +183,8 @@ export async function handleGetRealms(orgId: string): Promise<Response> {
   const realms = await getRealmsByOrg(orgId);
   const results = await Promise.all(
     realms.map(async (realm) => {
-      const hasApiKey = (await getSecret(orgId, `realm:${realm.id}:linear_api_key`)) !== null;
       const hasWebhookSecret = (await getSecret(orgId, `realm:${realm.id}:webhook_secret`)) !== null;
-      return { ...realm, hasApiKey, hasWebhookSecret };
+      return { ...realm, hasWebhookSecret };
     })
   );
   return Response.json(results);
@@ -196,7 +195,6 @@ export async function handleCreateRealm(req: Request, orgId: string): Promise<Re
     name: string;
     linearWorkspace: string;
     claudeBotUserId?: string;
-    linearApiKey?: string;
     webhookSecret?: string;
   };
   if (!body.name || !body.linearWorkspace) {
@@ -210,9 +208,6 @@ export async function handleCreateRealm(req: Request, orgId: string): Promise<Re
     claudeBotUserId: body.claudeBotUserId,
   });
 
-  if (body.linearApiKey) {
-    await setSecret(orgId, `realm:${realm.id}:linear_api_key`, body.linearApiKey);
-  }
   if (body.webhookSecret) {
     await setSecret(orgId, `realm:${realm.id}:webhook_secret`, body.webhookSecret);
   }
@@ -230,7 +225,6 @@ export async function handleUpdateRealm(
     name?: string;
     linearWorkspace?: string;
     claudeBotUserId?: string | null;
-    linearApiKey?: string;
     webhookSecret?: string;
   };
 
@@ -245,9 +239,6 @@ export async function handleUpdateRealm(
     claudeBotUserId: body.claudeBotUserId,
   });
 
-  if (body.linearApiKey) {
-    await setSecret(orgId, `realm:${realmId}:linear_api_key`, body.linearApiKey);
-  }
   if (body.webhookSecret) {
     await setSecret(orgId, `realm:${realmId}:webhook_secret`, body.webhookSecret);
   }
@@ -261,7 +252,6 @@ export async function handleDeleteRealm(orgId: string, realmId: string): Promise
   if (!deleted) return Response.json({ error: "Realm not found" }, { status: 404 });
 
   // Clean up associated secrets
-  await deleteSecret(orgId, `realm:${realmId}:linear_api_key`);
   await deleteSecret(orgId, `realm:${realmId}:webhook_secret`);
 
   await rebuildRealmConfig(orgId);
