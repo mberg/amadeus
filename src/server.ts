@@ -6,7 +6,7 @@ import {
   initConfig,
   CONFIG,
   REALM_CONFIG,
-  getRealmByTeamKey,
+  resolveLinearApiKey,
   getRouterConfig,
   getMachineConfig,
   getServerPort,
@@ -250,10 +250,10 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
       );
 
       try {
-        // Use realm-specific API key for this issue
+        // Use resolved API key for this issue
         const teamKey = agent.issueIdentifier.split("-")[0];
-        const realmInfo = getRealmByTeamKey(teamKey);
-        const env = realmInfo?.apiKey ? { ...process.env, LINEAR_API_KEY: realmInfo.apiKey } : process.env;
+        const apiKey = await resolveLinearApiKey("default", teamKey);
+        const env = apiKey ? { ...process.env, LINEAR_API_KEY: apiKey } : process.env;
         await $`linear-cli issues update ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.env(env).quiet();
         console.log(
           `[PR Check] Successfully updated ${agent.issueIdentifier} to Done`

@@ -9,7 +9,6 @@ import { loadProfiles, resolveProfile, resolveAndMergeProfiles, resolveSkillLabe
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
 import { applyProfileConfig } from "./profile-config";
 import { getGitHubRepoUrl } from "./git-utils";
-import { getRealmByTeamKey } from "./config";
 import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
 import { fetchIssueComments, fetchTeamWorkflowStates } from "./linear";
@@ -365,7 +364,7 @@ export class ClaudeOrchestrator {
     }
   }
 
-  async startAgent(issue: LinearIssue, repoPathOverride?: string): Promise<void> {
+  async startAgent(issue: LinearIssue, repoPathOverride?: string, linearApiKey?: string): Promise<void> {
     const key = this.getAgentKey(issue);
 
     // Look up project path: hub-provided override first, then project name, team key, DEFAULT
@@ -451,9 +450,6 @@ export class ClaudeOrchestrator {
       console.log(`[Agent] Applied profile config (${configResult.filesWritten.length} files)`);
     }
 
-    // Get realm-specific API key for Linear access
-    const realmInfo = teamKey ? getRealmByTeamKey(teamKey) : null;
-
     const proc = spawn({
       cmd: [
         "agentapi",
@@ -469,10 +465,9 @@ export class ClaudeOrchestrator {
         ...process.env,
         LINEAR_ISSUE_ID: issue.id,
         LINEAR_ISSUE_IDENTIFIER: issue.identifier,
-        // Pass realm's Linear API key for MCP server and linear-cli
-        ...(realmInfo && {
-          LINEAR_API_KEY: realmInfo.apiKey,
-          LINEAR_TOKEN: realmInfo.apiKey,
+        ...(linearApiKey && {
+          LINEAR_API_KEY: linearApiKey,
+          LINEAR_TOKEN: linearApiKey,
         }),
       },
       stdout: "inherit",
@@ -523,16 +518,16 @@ export class ClaudeOrchestrator {
     await this.clearInputBuffer(agent.port);
 
     // Acknowledge the issue before starting the planning process
-    await this.acknowledgeIssue(issue, realmInfo?.apiKey);
+    await this.acknowledgeIssue(issue, linearApiKey);
 
     // Get GitHub repo URL for file linking in comments
     const githubRepoUrl = await getGitHubRepoUrl(workingDir);
 
     // Download any Linear images in the description so Claude can access them
     let processedIssue = issue;
-    if (issue.description && realmInfo?.apiKey) {
+    if (issue.description && linearApiKey) {
       const imagesDir = join(workingDir, ".amadeus-images");
-      const result = await processDescription(issue.description, realmInfo.apiKey, imagesDir);
+      const result = await processDescription(issue.description, linearApiKey, imagesDir);
       if (result.downloadedCount > 0) {
         console.log(`[Agent] Downloaded ${result.downloadedCount} images for ${issue.identifier}`);
         processedIssue = { ...issue, description: result.processedDescription };
@@ -544,8 +539,8 @@ export class ClaudeOrchestrator {
 
     // Fetch existing comments to provide full context for agent recovery
     let existingComments;
-    if (realmInfo?.apiKey) {
-      existingComments = await fetchIssueComments(issue.id, realmInfo.apiKey);
+    if (linearApiKey) {
+      existingComments = await fetchIssueComments(issue.id, linearApiKey);
       if (existingComments.length > 0) {
         console.log(`[Agent] Including ${existingComments.length} existing comments for ${issue.identifier}`);
       }
@@ -553,8 +548,8 @@ export class ClaudeOrchestrator {
 
     // Fetch workflow states for dynamic state ID generation
     let workflowStates;
-    if (realmInfo?.apiKey && issue.team?.key) {
-      workflowStates = await fetchTeamWorkflowStates(issue.team.key, realmInfo.apiKey);
+    if (linearApiKey && issue.team?.key) {
+      workflowStates = await fetchTeamWorkflowStates(issue.team.key, linearApiKey);
       if (workflowStates.length > 0) {
         console.log(`[Agent] Fetched ${workflowStates.length} workflow states for team ${issue.team.key}`);
       }

@@ -6,7 +6,7 @@ import {
   CONFIG,
   REALM_CONFIG,
   getAllWebhookSecrets,
-  getRealmByTeamKey,
+  resolveLinearApiKey,
   getSecurityConfig,
   getRouterConfig,
   getConfigYaml,
@@ -180,6 +180,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
   async function handleIssueWebhook(
     action: string,
     issue: LinearIssue,
+    orgId: string,
     repoPathOverride?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor) {
@@ -234,18 +235,20 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     }
 
     if (ctx.orchestrator.shouldStartAgent(issue)) {
+      const teamKey = issue.identifier.split("-")[0];
+      const apiKey = await resolveLinearApiKey(orgId, teamKey, issue.assignee?.id);
+
       if (ctx.orchestrator.hasAgent(agentKey)) {
         let workflowStates;
-        const realmInfo = issue.team?.key ? getRealmByTeamKey(issue.team.key) : undefined;
-        if (realmInfo?.apiKey && issue.team?.key) {
-          workflowStates = await fetchTeamWorkflowStates(issue.team.key, realmInfo.apiKey);
+        if (apiKey && issue.team?.key) {
+          workflowStates = await fetchTeamWorkflowStates(issue.team.key, apiKey);
         }
         await ctx.orchestrator.sendMessage(
           agentKey,
           buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName, undefined, undefined, workflowStates)
         );
       } else {
-        await ctx.orchestrator.startAgent(issue, repoPathOverride);
+        await ctx.orchestrator.startAgent(issue, repoPathOverride, apiKey ?? undefined);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
       }
@@ -255,6 +258,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
   async function handleCommentWebhook(
     action: string,
     comment: LinearComment,
+    orgId: string,
     repoPathOverride?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor || !ctx.persistence) {
@@ -286,11 +290,11 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     if (!agentKey) {
       const teamKey = comment.issue.identifier.split("-")[0];
-      const realmInfo = getRealmByTeamKey(teamKey);
+      const apiKey = await resolveLinearApiKey(orgId, teamKey, comment.issue.assignee?.id);
       let issue = comment.issue;
 
-      if (realmInfo?.apiKey && (!issue.state?.name || !issue.labels?.length)) {
-        const fullIssue = await fetchIssueDetails(comment.issueId, realmInfo.apiKey);
+      if (apiKey && (!issue.state?.name || !issue.labels?.length)) {
+        const fullIssue = await fetchIssueDetails(comment.issueId, apiKey);
         if (fullIssue) {
           issue = fullIssue;
           console.log(
@@ -322,7 +326,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           `[${new Date().toISOString()}] Recovering agent for ${comment.issue.identifier} from saved state`
         );
 
-        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -335,8 +339,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         }
 
         let workflowStates;
-        if (realmInfo?.apiKey && issue.team?.key) {
-          workflowStates = await fetchTeamWorkflowStates(issue.team.key, realmInfo.apiKey);
+        if (apiKey && issue.team?.key) {
+          workflowStates = await fetchTeamWorkflowStates(issue.team.key, apiKey);
         }
 
         const recoveryPrompt = buildRecoveryPrompt(comment.issue, savedState, undefined, CONFIG.agentName, workflowStates);
@@ -347,7 +351,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         console.log(
           `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
         );
-        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -440,13 +444,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     return null;
   }
 
-  async function handleWebhook(payload: LinearWebhookPayload, repoPathOverride?: string): Promise<void> {
+  async function handleWebhook(payload: LinearWebhookPayload, orgId: string, repoPathOverride?: string): Promise<void> {
     const { action, type, data } = payload;
 
     if (type === "Issue" && !isComment(data)) {
-      await handleIssueWebhook(action, data, repoPathOverride);
+      await handleIssueWebhook(action, data, orgId, repoPathOverride);
     } else if (type === "Comment" && isComment(data)) {
-      await handleCommentWebhook(action, data, repoPathOverride);
+      await handleCommentWebhook(action, data, orgId, repoPathOverride);
     }
   }
 
@@ -575,7 +579,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("OK", { status: 200 });
       }
 
-      handleWebhook(data, routing?.localRepoPath).catch((err) => {
+      handleWebhook(data, orgId, routing?.localRepoPath).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
       });
 
@@ -1045,9 +1049,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         );
 
         const teamKey = parsed.issueIdentifier.split("-")[0];
-        const realmInfo = getRealmByTeamKey(teamKey);
-        const env = realmInfo?.apiKey
-          ? { ...process.env, LINEAR_API_KEY: realmInfo.apiKey }
+        const apiKey = await resolveLinearApiKey("default", teamKey);
+        const env = apiKey
+          ? { ...process.env, LINEAR_API_KEY: apiKey }
           : process.env;
 
         await $`linear-cli comments create --body ${parsed.message} ${parsed.issueIdentifier}`

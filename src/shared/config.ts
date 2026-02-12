@@ -10,6 +10,7 @@ export {
   isStandaloneMode,
   getMachineConfig,
   getRealmByTeamKey,
+  resolveLinearApiKey,
   getAllWebhookSecrets,
   getSecurityConfig,
   getRouterConfig,
