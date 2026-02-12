@@ -736,7 +736,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         if (hash) {
           const dbAuth = await authenticateMachine(hash);
           console.log(`[Hub] Heartbeat auth: machine="${machineName}", hasToken=${!!token}, dbMatch=${!!dbAuth}, dbName="${dbAuth?.machineName}"`);
-          if (dbAuth && dbAuth.machineName === machineName) {
+          if (dbAuth) {
             ctx.machineRegistry?.register(machineName, heartbeatMachineUrl ?? "", token);
             machine = ctx.machineRegistry?.get(machineName);
             await updateMachineLastSeen(dbAuth.machineId);
