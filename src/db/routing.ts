@@ -10,6 +10,7 @@ export interface RouteQuery {
 }
 
 export interface ResolvedRoute {
+  machineId: string;
   machineUrl: string;
   machineName: string;
   localRepoPath: string;
@@ -45,7 +46,7 @@ export async function resolveRoute(
   // Step 2: If assignee provided, try to find their specific machine assignment
   if (query.assigneeLinearId) {
     const [row] = await sql`
-      SELECT m.url, m.name AS machine_name, mp.local_repo_path
+      SELECT m.id AS machine_id, m.url, m.name AS machine_name, mp.local_repo_path
       FROM users u
       JOIN project_members pm ON pm.user_id = u.id
       JOIN machines m ON m.id = pm.machine_id
@@ -56,6 +57,7 @@ export async function resolveRoute(
     `;
     if (row) {
       return {
+        machineId: row.machine_id,
         machineUrl: row.url,
         machineName: row.machine_name,
         localRepoPath: row.local_repo_path,
@@ -67,7 +69,7 @@ export async function resolveRoute(
 
   // Step 3: Fallback — any machine that has this project mapped
   const [row] = await sql`
-    SELECT m.url, m.name AS machine_name, mp.local_repo_path
+    SELECT m.id AS machine_id, m.url, m.name AS machine_name, mp.local_repo_path
     FROM machine_projects mp
     JOIN machines m ON m.id = mp.machine_id
     WHERE mp.project_id = ${project.id}
@@ -75,6 +77,7 @@ export async function resolveRoute(
   `;
   if (row) {
     return {
+      machineId: row.machine_id,
       machineUrl: row.url,
       machineName: row.machine_name,
       localRepoPath: row.local_repo_path,

@@ -373,7 +373,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     payload: string,
     signature: string | null,
     teamKey: string,
-    localRepoPath?: string | null
+    localRepoPath?: string | null,
+    machineApiKey?: string | null
   ): Promise<void> {
     try {
       const headers: Record<string, string> = {
@@ -384,9 +385,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         headers["linear-signature"] = signature;
       }
 
-      const currentRouterConfig = getRouterConfig();
-      if (currentRouterConfig) {
-        headers["X-Amadeus-Secret"] = currentRouterConfig.secret;
+      if (machineApiKey) {
+        headers["X-Amadeus-Secret"] = machineApiKey;
+      } else {
+        const currentRouterConfig = getRouterConfig();
+        if (currentRouterConfig) {
+          headers["X-Amadeus-Secret"] = currentRouterConfig.secret;
+        }
       }
 
       let forwardPayload = payload;
@@ -555,7 +560,12 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       if (isHubMode()) {
         const route = await routeWebhook(orgId, data);
         if (route.machineUrl) {
-          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath).catch((err) => {
+          let machineKey: string | null = null;
+          if (route.machineId) {
+            const { getSecret: getMachineSecret } = await import("./db");
+            machineKey = await getMachineSecret(orgId, `machine:${route.machineId}:api_key`);
+          }
+          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey).catch((err) => {
             console.error("[HubForward] Error:", err);
           });
           return new Response("OK", { status: 200 });

@@ -1,7 +1,7 @@
 // ABOUTME: Machine API key generation and verification for amadeus-cloud.
 // ABOUTME: Keys use amk_ prefix with SHA-256 hashing for storage.
 
-import { createMachine, authenticateMachine } from "../../src/db";
+import { createMachine, authenticateMachine, setSecret } from "../../src/db";
 
 function hashApiKey(apiKey: string): string {
   const hasher = new Bun.CryptoHasher("sha256");
@@ -18,6 +18,8 @@ export async function generateMachineApiKey(
   const apiKey = `amk_${Buffer.from(bytes).toString("base64url")}`;
   const hash = hashApiKey(apiKey);
   const machine = await createMachine(orgId, name, url, hash);
+  // Store plaintext key as secret so hub can use it for webhook forwarding
+  await setSecret(orgId, `machine:${machine.id}:api_key`, apiKey);
   return { machineId: machine.id, apiKey };
 }
 

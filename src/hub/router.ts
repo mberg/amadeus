@@ -5,6 +5,7 @@ import type { LinearWebhookPayload, LinearIssue, LinearComment } from "../shared
 import { resolveRoute } from "../db/routing";
 
 export interface RouteResult {
+  machineId: string | null;
   machineUrl: string | null;
   machineName: string | null;
   localRepoPath: string | null;
@@ -76,6 +77,7 @@ export async function routeWebhook(orgId: string, payload: LinearWebhookPayload)
 
   if (route) {
     return {
+      machineId: route.machineId,
       machineUrl: route.machineUrl,
       machineName: route.machineName,
       localRepoPath: route.localRepoPath,
@@ -83,5 +85,5 @@ export async function routeWebhook(orgId: string, payload: LinearWebhookPayload)
     };
   }
 
-  return { machineUrl: null, machineName: null, localRepoPath: null, reason: "No matching project in database" };
+  return { machineId: null, machineUrl: null, machineName: null, localRepoPath: null, reason: "No matching project in database" };
 }
