@@ -27,6 +27,8 @@ import {
   getProjectsByRealm,
   createRealm,
   createProject,
+  getUserByLinearId,
+  getProjectByLinearKey,
 } from "./db";
 import type { DbRealm } from "./db/realms";
 
@@ -522,6 +524,42 @@ export function getMachineUrlForProject(projectName: string | undefined, teamKey
     const entry = REALM_CONFIG.projectByTeamKey.get(teamKey);
     return entry?.project.machineUrl ?? null;
   }
+
+  return null;
+}
+
+/**
+ * Resolve a Linear API key for a given team and optional assignee.
+ * Fallback chain:
+ *   1. Realm-specific PAT for the assignee's hub user
+ *   2. Global PAT for the assignee's hub user
+ *   3. Static apiKey from YAML-based realm config
+ *   4. null
+ */
+export async function resolveLinearApiKey(
+  orgId: string,
+  teamKey: string,
+  assigneeLinearId?: string
+): Promise<string | null> {
+  if (assigneeLinearId) {
+    const hubUser = await getUserByLinearId(orgId, assigneeLinearId);
+    if (hubUser) {
+      // Find the realm DB ID via the project's team key
+      const project = await getProjectByLinearKey(orgId, teamKey);
+      if (project?.realmId) {
+        const realmPat = await getSecret(orgId, `user:${hubUser.id}:realm:${project.realmId}:linear_pat`);
+        if (realmPat) return realmPat;
+      }
+
+      // Fall back to user's global PAT
+      const globalPat = await getSecret(orgId, `user:${hubUser.id}:linear_pat`);
+      if (globalPat) return globalPat;
+    }
+  }
+
+  // Fall back to static apiKey from YAML config (non-empty for YAML-sourced realms)
+  const realmInfo = getRealmByTeamKey(teamKey);
+  if (realmInfo?.apiKey) return realmInfo.apiKey;
 
   return null;
 }
