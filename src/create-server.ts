@@ -1,6 +1,8 @@
 // ABOUTME: Factory for the HTTP fetch handler, decoupled from server startup.
 // ABOUTME: Enables amadeus-cloud to wrap the handler with org resolution.
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 import { $ } from "bun";
 import {
   CONFIG,
@@ -405,8 +407,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         method: "POST",
         headers,
         body: forwardPayload,
+        // @ts-ignore - Bun-specific TLS option
         tls: { rejectUnauthorized: false },
-      } as any);
+      });
 
       if (!response.ok) {
         console.warn(
