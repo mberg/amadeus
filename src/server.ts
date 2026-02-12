@@ -253,8 +253,11 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
         // Use resolved API key for this issue
         const teamKey = agent.issueIdentifier.split("-")[0];
         const apiKey = await resolveLinearApiKey("default", teamKey);
-        const env = apiKey ? { ...process.env, LINEAR_API_KEY: apiKey } : process.env;
-        await $`linear-cli issues update ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.env(env).quiet();
+        const homeBin = `${process.env.HOME}/.local/bin`;
+        const basePath = process.env.PATH?.includes(homeBin) ? process.env.PATH : `${homeBin}:${process.env.PATH}`;
+        const key = apiKey ?? process.env.LINEAR_API_KEY ?? process.env.LINEAR_TOKEN;
+        const env = { ...process.env, PATH: basePath };
+        await $`linear-cli issues update --api-key ${key} ${agent.issueIdentifier} --state ${DONE_STATE_ID}`.env(env).quiet();
         console.log(
           `[PR Check] Successfully updated ${agent.issueIdentifier} to Done`
         );

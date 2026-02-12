@@ -355,10 +355,11 @@ export class ClaudeOrchestrator {
     try {
       // Use realm-specific API key if provided
       // linear-cli expects LINEAR_TOKEN, so set both for compatibility
-      const env = apiKey
-        ? { ...process.env, LINEAR_API_KEY: apiKey, LINEAR_TOKEN: apiKey }
-        : process.env;
-      await Bun.$`linear-cli comments create --body ${message} ${issue.identifier}`.env(env).quiet();
+      const homeBin = `${process.env.HOME}/.local/bin`;
+      const basePath = process.env.PATH?.includes(homeBin) ? process.env.PATH : `${homeBin}:${process.env.PATH}`;
+      const key = apiKey ?? process.env.LINEAR_API_KEY ?? process.env.LINEAR_TOKEN;
+      const env = { ...process.env, PATH: basePath };
+      await Bun.$`linear-cli comments create --api-key ${key} --body ${message} ${issue.identifier}`.env(env).quiet();
     } catch (err) {
       console.error(`[Agent] Failed to acknowledge issue ${issue.identifier}:`, err);
     }
