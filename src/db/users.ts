@@ -58,6 +58,16 @@ export async function getUserByEmail(
   return row ? rowToUser(row) : null;
 }
 
+export async function getUserByEmailAnyOrg(
+  email: string
+): Promise<DbUser | null> {
+  const [row] = await sql`
+    SELECT id, org_id, name, email, linear_user_id, auth_method, api_key_hash, created_at
+    FROM users WHERE email = ${email} LIMIT 1
+  `;
+  return row ? rowToUser(row) : null;
+}
+
 export async function getUserByLinearId(
   orgId: string,
   linearUserId: string

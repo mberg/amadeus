@@ -7,6 +7,9 @@ import {
   CONFIG,
   REALM_CONFIG,
   getAllWebhookSecrets,
+  getOrgWebhookSecrets,
+  getOrgConfig,
+  invalidateOrgConfig,
   resolveLinearApiKey,
   getSecurityConfig,
   getRouterConfig,
@@ -25,7 +28,7 @@ import {
   getCompletedTasks,
   getCompletedTaskCount,
 } from "./db";
-import { getRequestOrgId } from "./org";
+import { getWebhookOrgId, DEFAULT_ORG_ID } from "./org";
 import { routeWebhook, getAssigneeIdFromPayload } from "./hub/router";
 import { verifyLinearSignature } from "./signature";
 import { requireAuth as checkAuth, getAuthInfo, isBetterAuthEnabled } from "./auth";
@@ -62,6 +65,8 @@ export interface ServerContext {
   hubHeartbeat: HubHeartbeat | null;
   routerHeartbeat: RouterHeartbeat | null;
   idleScanner: IdleScanner | null;
+  /** Optional org resolver provided by cloud layer. Falls back to DEFAULT_ORG_ID. */
+  resolveOrgId?: (req: Request) => Promise<string>;
 }
 
 export function createFetchHandler(ctx: ServerContext): (req: Request) => Promise<Response> {
@@ -250,7 +255,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName, undefined, undefined, workflowStates)
         );
       } else {
-        await ctx.orchestrator.startAgent(issue, repoPathOverride, apiKey ?? undefined);
+        await ctx.orchestrator.startAgent(issue, repoPathOverride, apiKey ?? undefined, orgId);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
       }
@@ -329,7 +334,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           `[${new Date().toISOString()}] Recovering agent for ${comment.issue.identifier} from saved state`
         );
 
-        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined, orgId);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -354,7 +359,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         console.log(
           `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
         );
-        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined, orgId);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -490,7 +495,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     }
   }
 
-  async function requireViewer(req: Request): Promise<Response | null> {
+  async function requireViewer(req: Request, orgId: string = DEFAULT_ORG_ID): Promise<Response | null> {
     const security = getSecurityConfig();
     if (security.publicDashboard) {
       return null;
@@ -498,11 +503,12 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     const result = await checkAuth(req, "viewer", {
       apiToken: CONFIG.apiToken,
       enableAgentMessaging: security.enableAgentMessaging,
+      orgId,
     });
     return result.authorized ? null : result.response;
   }
 
-  async function requireOperator(req: Request): Promise<Response | null> {
+  async function requireOperator(req: Request, orgId: string = DEFAULT_ORG_ID): Promise<Response | null> {
     const security = getSecurityConfig();
     if (security.enableAgentMessaging) {
       return null;
@@ -510,17 +516,27 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     const result = await checkAuth(req, "operator", {
       apiToken: CONFIG.apiToken,
       enableAgentMessaging: security.enableAgentMessaging,
+      orgId,
     });
     return result.authorized ? null : result.response;
   }
 
-  async function requireAdmin(req: Request): Promise<Response | null> {
+  async function requireAdmin(req: Request, orgId: string = DEFAULT_ORG_ID): Promise<Response | null> {
     const security = getSecurityConfig();
     const result = await checkAuth(req, "admin", {
       apiToken: CONFIG.apiToken,
       enableAgentMessaging: security.enableAgentMessaging,
+      orgId,
     });
     return result.authorized ? null : result.response;
+  }
+
+  /** Resolve orgId for non-webhook requests (API, dashboard, etc.) */
+  async function resolveApiOrgId(req: Request): Promise<string> {
+    if (ctx.resolveOrgId) {
+      return ctx.resolveOrgId(req);
+    }
+    return DEFAULT_ORG_ID;
   }
 
   return async (req: Request): Promise<Response> => {
@@ -544,7 +560,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     // Linear webhook endpoint
     if (req.method === "POST" && (url.pathname === "/webhook" || url.pathname.startsWith("/webhook/"))) {
       console.log(`[Webhook] Received POST ${url.pathname} from ${req.headers.get("user-agent") ?? "unknown"}`);
-      const orgId = getRequestOrgId(url);
+      const orgId = getWebhookOrgId(url);
       const payload = await req.text();
       const signature = req.headers.get("linear-signature");
 
@@ -563,7 +579,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           return new Response("Unauthorized", { status: 401 });
         }
       } else {
-        const secrets = getAllWebhookSecrets();
+        const secrets = await getOrgWebhookSecrets(orgId);
         let verified = false;
 
         for (const { secret, realmName } of secrets) {
@@ -575,7 +591,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         }
 
         if (!verified) {
-          console.warn("[Webhook] Invalid signature - no matching realm secret");
+          console.warn(`[Webhook] Invalid signature - no matching realm secret for org ${orgId}`);
           return new Response("Unauthorized", { status: 401 });
         }
       }
@@ -657,30 +673,31 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         }
         const { getUserByEmail, createUser } = await import("./db/users");
         const { getOrgMemberRole, addOrgMember } = await import("./db/org-members");
+        const meOrgId = DEFAULT_ORG_ID; // TODO: resolve from session org plugin
         let hubUser = session.user.email
-          ? await getUserByEmail("default", session.user.email)
+          ? await getUserByEmail(meOrgId, session.user.email)
           : null;
         // Auto-create hub user for authenticated Better Auth users
         if (!hubUser && session.user.email) {
           const { getUsersByOrg } = await import("./db/users");
-          const existingUsers = await getUsersByOrg("default");
+          const existingUsers = await getUsersByOrg(meOrgId);
           hubUser = await createUser({
-            orgId: "default",
+            orgId: meOrgId,
             name: session.user.name ?? session.user.email,
             email: session.user.email,
             authMethod: "betterauth",
           });
           // First user in the org becomes admin
           const role = existingUsers.length === 0 ? "admin" : "member";
-          await addOrgMember("default", hubUser.id, role);
+          await addOrgMember(meOrgId, hubUser.id, role);
         }
         let orgRole = hubUser
-          ? await getOrgMemberRole("default", hubUser.id)
+          ? await getOrgMemberRole(meOrgId, hubUser.id)
           : null;
         // Promote sole member to admin (bootstrap case)
         if (hubUser && orgRole === "member") {
           const { getOrgMembers } = await import("./db/org-members");
-          const members = await getOrgMembers("default");
+          const members = await getOrgMembers(meOrgId);
           if (members.length === 1) {
             await addOrgMember("default", hubUser.id, "admin");
             orgRole = "admin";
@@ -707,10 +724,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Status dashboard (JSON)
     if (req.method === "GET" && url.pathname === "/status") {
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
 
-      const agents = ctx.orchestrator ? await ctx.orchestrator.getStatusWithMemory() : [];
+      const allAgents = ctx.orchestrator ? await ctx.orchestrator.getStatusWithMemory() : [];
+      // Filter agents by orgId (in standalone mode, all agents belong to the requesting org)
+      const agents = allAgents.filter(a => !a.orgId || a.orgId === orgId);
       return Response.json({
         agents,
         timestamp: new Date().toISOString(),
@@ -724,10 +744,11 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("Not available in machine mode", { status: 404 });
       }
 
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
 
-      const machineStatuses = ctx.machineRegistry?.getCachedStatus() ?? [];
+      const machineStatuses = ctx.machineRegistry?.getCachedStatusForOrg(orgId) ?? [];
 
       let localStatus = null;
       if (isStandaloneMode() && ctx.orchestrator) {
@@ -780,7 +801,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           const dbAuth = await authenticateMachine(hash);
           console.log(`[Hub] Heartbeat auth: machine="${machineName}", hasToken=${!!token}, dbMatch=${!!dbAuth}, dbName="${dbAuth?.machineName}"`);
           if (dbAuth) {
-            ctx.machineRegistry?.register(machineName, heartbeatMachineUrl ?? "", token);
+            ctx.machineRegistry?.register(machineName, heartbeatMachineUrl ?? "", token, dbAuth.orgId);
             machine = ctx.machineRegistry?.get(machineName);
             await updateMachineLastSeen(dbAuth.machineId);
           }
@@ -833,6 +854,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       // Authenticate the same way as heartbeat
       const { authenticateMachine } = await import("./db");
       let authenticated = false;
+      let machineOrgId = DEFAULT_ORG_ID;
 
       const machine = ctx.machineRegistry?.get(machineName);
       if (machine) {
@@ -844,7 +866,10 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           ?? (token ? new Bun.CryptoHasher("sha256").update(token).digest("hex") : null);
         if (hash) {
           const dbAuth = await authenticateMachine(hash);
-          if (dbAuth) authenticated = true;
+          if (dbAuth) {
+            authenticated = true;
+            machineOrgId = dbAuth.orgId;
+          }
         }
       }
 
@@ -852,7 +877,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("Unauthorized", { status: 403 });
       }
 
-      const orgId = getRequestOrgId(url);
+      const orgId = machineOrgId;
       await recordCompletedTask(orgId, {
         key: completion.key,
         issueId: completion.issueId,
@@ -995,11 +1020,11 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     {
       const patMatch = url.pathname.match(/^\/hub\/api\/users\/([^/]+)\/(linear-pats?)$/);
       if (patMatch) {
-        const authError = await requireViewer(req);
+        const orgId = await resolveApiOrgId(req);
+        const authError = await requireViewer(req, orgId);
         if (authError) return authError;
 
         const targetUserId = patMatch[1];
-        const orgId = getRequestOrgId(url);
         const api = await import("./hub/api");
 
         if (patMatch[2] === "linear-pats" && req.method === "GET") {
@@ -1016,10 +1041,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Hub API endpoints for entity management
     if (url.pathname.startsWith("/hub/api/")) {
-      const authError = await requireAdmin(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireAdmin(req, orgId);
       if (authError) return authError;
-
-      const orgId = getRequestOrgId(url);
       const parts = url.pathname.split("/").filter(Boolean); // ["hub", "api", "users", ...]
 
       const resource = parts[2];
@@ -1076,7 +1100,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Completed tasks history
     if (req.method === "GET" && url.pathname === "/status/history") {
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
 
       const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
@@ -1096,8 +1121,6 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           offset,
         });
       }
-
-      const orgId = getRequestOrgId(url);
       const completedTasksList = await getCompletedTasks(orgId, limit, offset);
       const total = await getCompletedTaskCount(orgId);
 
@@ -1114,12 +1137,15 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Dashboard config (read)
     if (req.method === "GET" && url.pathname === "/config") {
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
 
-      const setup = REALM_CONFIG
+      const { realmConfig, legacyConfig } = await getOrgConfig(orgId);
+
+      const setup = realmConfig
         ? {
-            realms: REALM_CONFIG.realms.map((realm) => ({
+            realms: realmConfig.realms.map((realm) => ({
               name: realm.name,
               linearWorkspace: realm.linearWorkspace,
               projects: realm.projects.map((project) => ({
@@ -1131,12 +1157,12 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
               })),
             })),
             global: {
-              agentName: REALM_CONFIG.global.agentName,
-              port: REALM_CONFIG.global.port,
-              triggerStates: REALM_CONFIG.global.triggerStates,
-              useWorktrees: REALM_CONFIG.global.useWorktrees,
-              defaultProfile: REALM_CONFIG.global.defaultProfile,
-              security: REALM_CONFIG.global.security,
+              agentName: realmConfig.global.agentName,
+              port: realmConfig.global.port,
+              triggerStates: realmConfig.global.triggerStates,
+              useWorktrees: realmConfig.global.useWorktrees,
+              defaultProfile: realmConfig.global.defaultProfile,
+              security: realmConfig.global.security,
             },
           }
         : null;
@@ -1147,7 +1173,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       const effectiveMode = isBetterAuthEnabled() && actualMode !== "machine" ? "hub" : actualMode;
 
       return Response.json({
-        linearWorkspace: CONFIG.linearWorkspace,
+        linearWorkspace: legacyConfig.linearWorkspace,
         machineName: machineConfig.name,
         runtimeMode: effectiveMode,
         setup,
@@ -1156,10 +1182,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Config YAML (read raw)
     if (req.method === "GET" && url.pathname === "/config/yaml") {
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
-
-      const orgId = getRequestOrgId(url);
       const yaml = await getConfigYaml(orgId);
       if (!yaml) {
         return new Response("No config file found", { status: 404 });
@@ -1172,7 +1197,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Config YAML (validate without saving)
     if (req.method === "POST" && url.pathname === "/config/validate") {
-      const authError = await requireAdmin(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireAdmin(req, orgId);
       if (authError) return authError;
 
       const yamlContent = await req.text();
@@ -1186,10 +1212,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Config YAML (save and reload)
     if (req.method === "POST" && url.pathname === "/config") {
-      const authError = await requireAdmin(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireAdmin(req, orgId);
       if (authError) return authError;
-
-      const orgId = getRequestOrgId(url);
       const yamlContent = await req.text();
       const result = reloadConfig(yamlContent, orgId);
 
@@ -1201,7 +1226,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     // Manual trigger endpoint
     if (req.method === "POST" && url.pathname === "/trigger") {
-      const authError = await requireOperator(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireOperator(req, orgId);
       if (authError) return authError;
 
       if (!ctx.orchestrator) {
@@ -1243,7 +1269,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         );
 
         const teamKey = parsed.issueIdentifier.split("-")[0];
-        const apiKey = await resolveLinearApiKey("default", teamKey);
+        const apiKey = await resolveLinearApiKey(DEFAULT_ORG_ID, teamKey);
         const env = apiKey
           ? { ...process.env, LINEAR_API_KEY: apiKey }
           : process.env;
@@ -1266,7 +1292,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     // Agent messages proxy endpoint
     const messagesMatch = url.pathname.match(/^\/agents\/([^/]+)\/messages$/);
     if (req.method === "GET" && messagesMatch) {
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
 
       if (!ctx.orchestrator) {
@@ -1292,7 +1319,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     // Stop agent endpoint
     const stopMatch = url.pathname.match(/^\/agents\/([^/]+)\/stop$/);
     if (req.method === "POST" && stopMatch) {
-      const authError = await requireOperator(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireOperator(req, orgId);
       if (authError) return authError;
 
       if (!ctx.orchestrator || !ctx.healthMonitor) {
@@ -1313,7 +1341,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("Not available in hub mode", { status: 404 });
       }
 
-      const authError = await requireViewer(req);
+      const orgId = await resolveApiOrgId(req);
+      const authError = await requireViewer(req, orgId);
       if (authError) return authError;
 
       const resources = await getSystemResources();

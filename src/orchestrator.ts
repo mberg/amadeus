@@ -155,6 +155,7 @@ export class ClaudeOrchestrator {
       key,
       pid: agent.pid,
       port: agent.port,
+      orgId: agent.orgId,
       issueId: agent.linearIssueId,
       issueIdentifier: agent.issueIdentifier,
       issueTitle: agent.issueTitle,
@@ -365,7 +366,7 @@ export class ClaudeOrchestrator {
     }
   }
 
-  async startAgent(issue: LinearIssue, repoPathOverride?: string, linearApiKey?: string): Promise<void> {
+  async startAgent(issue: LinearIssue, repoPathOverride?: string, linearApiKey?: string, orgId: string = "default"): Promise<void> {
     const key = this.getAgentKey(issue);
 
     // Look up project path: hub-provided override first, then project name, team key, DEFAULT
@@ -480,6 +481,7 @@ export class ClaudeOrchestrator {
       process: proc,
       pid: proc.pid,
       port,
+      orgId,
       projectPath,
       worktreePath,
       linearIssueId: issue.id,

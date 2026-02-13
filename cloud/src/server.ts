@@ -16,6 +16,7 @@ import {
 } from "../../src/config";
 import { getMachines, recordCompletedTask } from "../../src/db";
 import { isBetterAuthEnabled } from "../../src/auth";
+import { DEFAULT_ORG_ID } from "../../src/org";
 import { createFetchHandler, type ServerContext } from "../../src/create-server";
 import { createCloudHandler } from "./cloud-handler";
 import { migrateCloud } from "./db/cloud-db";
@@ -99,7 +100,7 @@ const { HealthMonitor } = await import("../../src/health-monitor.ts");
 let machineRegistry: InstanceType<typeof MachineRegistry> | null = null;
 if (isHubMode() || isStandaloneMode()) {
   machineRegistry = new MachineRegistry();
-  const dbMachines = await getMachines("default");
+  const dbMachines = await getMachines(DEFAULT_ORG_ID);
   if (dbMachines.length > 0) {
     machineRegistry.loadFromDb(dbMachines);
     console.log(`[Cloud] Loaded ${dbMachines.length} machine(s) from database`);
@@ -124,7 +125,7 @@ if (isMachineMode() || isStandaloneMode()) {
     linearProject?: string; completionReason: string; finalLinearState?: string; duration: number;
   }): void => {
     console.log(`[AgentComplete] Agent ${info.key} completed (${info.completionReason})`);
-    recordCompletedTask("default", {
+    recordCompletedTask(DEFAULT_ORG_ID, {
       key: info.key,
       issueId: info.issueId,
       issueIdentifier: info.issueIdentifier,

@@ -37,6 +37,7 @@ export interface AgentInstance {
   process: Subprocess;
   pid?: number;
   port: number;
+  orgId: string;
   projectPath: string;
   worktreePath?: string;
   linearIssueId: string;
@@ -53,6 +54,7 @@ export interface AgentStatus {
   key: string;
   pid?: number;
   port: number;
+  orgId?: string;
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;

@@ -217,6 +217,79 @@ export let CONFIG: LegacyConfig;
 let _configInitialized = false;
 
 /**
+ * Per-org config cache for multi-tenant hub/cloud mode.
+ * Maps orgId → { config, timestamp } with a TTL for cache invalidation.
+ */
+interface CachedOrgConfig {
+  config: ResolvedConfig;
+  legacy: LegacyConfig;
+  loadedAt: number;
+}
+
+const ORG_CONFIG_CACHE = new Map<string, CachedOrgConfig>();
+const ORG_CONFIG_TTL_MS = 5 * 60 * 1000; // 5 minute cache TTL
+
+/**
+ * Get the resolved config for a specific org.
+ * Uses an in-memory cache with TTL. Falls back to DB on cache miss.
+ * For standalone/machine mode, always returns the global REALM_CONFIG.
+ */
+export async function getOrgConfig(orgId: string): Promise<{
+  realmConfig: ResolvedConfig | null;
+  legacyConfig: LegacyConfig;
+}> {
+  // Standalone/machine mode: use global singletons
+  if (!isHubMode()) {
+    return { realmConfig: REALM_CONFIG, legacyConfig: CONFIG };
+  }
+
+  // Check cache
+  const cached = ORG_CONFIG_CACHE.get(orgId);
+  if (cached && (Date.now() - cached.loadedAt) < ORG_CONFIG_TTL_MS) {
+    return { realmConfig: cached.config, legacyConfig: cached.legacy };
+  }
+
+  // Cache miss — load from DB
+  const dbConfig = await buildRealmConfigFromDb(orgId);
+  if (dbConfig) {
+    const legacy = buildLegacyConfigFromResolved(dbConfig);
+    ORG_CONFIG_CACHE.set(orgId, {
+      config: dbConfig,
+      legacy,
+      loadedAt: Date.now(),
+    });
+    return { realmConfig: dbConfig, legacyConfig: legacy };
+  }
+
+  // Fallback to global config
+  return { realmConfig: REALM_CONFIG, legacyConfig: CONFIG };
+}
+
+/**
+ * Invalidate the cached config for a specific org.
+ * Call this after config changes (realm CRUD, config save, etc.).
+ */
+export function invalidateOrgConfig(orgId: string): void {
+  ORG_CONFIG_CACHE.delete(orgId);
+}
+
+/**
+ * Get all webhook secrets for a specific org.
+ * Hub/cloud mode: loads from the org's config.
+ * Standalone: uses global REALM_CONFIG.
+ */
+export async function getOrgWebhookSecrets(orgId: string): Promise<Array<{ secret: string; realmName: string }>> {
+  const { realmConfig } = await getOrgConfig(orgId);
+  if (realmConfig) {
+    return realmConfig.realms.map((r: ResolvedRealm) => ({
+      secret: r.webhookSecret,
+      realmName: r.name,
+    }));
+  }
+  return [{ secret: CONFIG.linearWebhookSecret, realmName: "default" }];
+}
+
+/**
  * Parse global settings from the YAML stored in organizations.config_yaml.
  * Returns defaults if no YAML exists or if parsing fails.
  */
@@ -325,6 +398,7 @@ async function seedRealmsFromYaml(orgId: string, config: ResolvedConfig): Promis
  * Rebuild in-memory REALM_CONFIG from DB after realm API changes.
  */
 export async function rebuildRealmConfig(orgId: string = "default"): Promise<void> {
+  invalidateOrgConfig(orgId);
   const dbConfig = await buildRealmConfigFromDb(orgId);
   if (dbConfig) {
     REALM_CONFIG = dbConfig;
@@ -635,6 +709,9 @@ export function reloadConfig(yamlContent: string, orgId: string = "default"): Re
 
   REALM_CONFIG = validation.config;
   CONFIG = buildLegacyConfigFromResolved(validation.config);
+
+  // Invalidate per-org cache so next request reloads from DB
+  invalidateOrgConfig(orgId);
 
   // Save to Postgres (fire and forget — in-memory is already updated)
   dbSaveConfigYaml(orgId, yamlContent).catch((err) => {

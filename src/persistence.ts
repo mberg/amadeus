@@ -80,6 +80,8 @@ export class AgentPersistence {
 
     // Migration: add linear_project column to existing tables
     this.migrateAddLinearProject();
+    // Migration: add org_id column for multi-tenant support
+    this.migrateAddOrgId();
   }
 
   private migrateAddLinearProject(): void {
@@ -97,6 +99,22 @@ export class AgentPersistence {
       .all() as { name: string }[];
     if (!taskColumns.some((c) => c.name === "linear_project")) {
       this.db.run("ALTER TABLE completed_tasks ADD COLUMN linear_project TEXT");
+    }
+  }
+
+  private migrateAddOrgId(): void {
+    const agentColumns = this.db
+      .query("PRAGMA table_info(agents)")
+      .all() as { name: string }[];
+    if (!agentColumns.some((c) => c.name === "org_id")) {
+      this.db.run("ALTER TABLE agents ADD COLUMN org_id TEXT NOT NULL DEFAULT 'default'");
+    }
+
+    const taskColumns = this.db
+      .query("PRAGMA table_info(completed_tasks)")
+      .all() as { name: string }[];
+    if (!taskColumns.some((c) => c.name === "org_id")) {
+      this.db.run("ALTER TABLE completed_tasks ADD COLUMN org_id TEXT NOT NULL DEFAULT 'default'");
     }
   }
 
