@@ -596,7 +596,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         const teamKey = getTeamKeyFromPayload(data);
         const projectName = getProjectNameFromPayload(data);
         const assigneeLinearId = getAssigneeIdFromPayload(data);
-        console.log(`[Webhook] type=${data.type} action=${data.action} teamKey=${teamKey} projectName=${projectName} assigneeLinearId=${assigneeLinearId}`);
+        console.log(`[Webhook] type=${data.type} action=${data.action} teamKey=${teamKey} projectName=${projectName}`);
         const route = await routeWebhook(orgId, data);
         if (route.machineUrl) {
           let machineKey: string | null = null;

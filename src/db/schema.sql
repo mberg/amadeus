@@ -146,6 +146,12 @@ CREATE TABLE IF NOT EXISTS realm_members (
   PRIMARY KEY (realm_id, user_id)
 );
 
+-- Per-realm Linear identity for users (different Linear accounts per workspace)
+ALTER TABLE realm_members ADD COLUMN IF NOT EXISTS linear_user_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_realm_members_linear_id
+  ON realm_members (linear_user_id);
+
 CREATE INDEX IF NOT EXISTS idx_realms_org
   ON realms (org_id);
 

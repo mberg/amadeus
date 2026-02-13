@@ -7,6 +7,7 @@ export interface RealmMember {
   realmId: string;
   userId: string;
   role: string;
+  linearUserId: string | null;
 }
 
 export async function addRealmMember(realmId: string, userId: string, role: string): Promise<RealmMember> {
@@ -14,16 +15,16 @@ export async function addRealmMember(realmId: string, userId: string, role: stri
     INSERT INTO realm_members (realm_id, user_id, role)
     VALUES (${realmId}, ${userId}, ${role})
     ON CONFLICT (realm_id, user_id) DO UPDATE SET role = ${role}
-    RETURNING realm_id, user_id, role
+    RETURNING realm_id, user_id, role, linear_user_id
   `;
-  return { realmId: row.realm_id, userId: row.user_id, role: row.role };
+  return { realmId: row.realm_id, userId: row.user_id, role: row.role, linearUserId: row.linear_user_id ?? null };
 }
 
 export async function getRealmMembers(realmId: string): Promise<RealmMember[]> {
   const rows = await sql`
-    SELECT realm_id, user_id, role FROM realm_members WHERE realm_id = ${realmId}
+    SELECT realm_id, user_id, role, linear_user_id FROM realm_members WHERE realm_id = ${realmId}
   `;
-  return rows.map((row) => ({ realmId: row.realm_id, userId: row.user_id, role: row.role }));
+  return rows.map((row) => ({ realmId: row.realm_id, userId: row.user_id, role: row.role, linearUserId: row.linear_user_id ?? null }));
 }
 
 export async function getRealmMemberRole(realmId: string, userId: string): Promise<string | null> {
@@ -35,9 +36,24 @@ export async function getRealmMemberRole(realmId: string, userId: string): Promi
 
 export async function getUserRealms(userId: string): Promise<RealmMember[]> {
   const rows = await sql`
-    SELECT realm_id, user_id, role FROM realm_members WHERE user_id = ${userId}
+    SELECT realm_id, user_id, role, linear_user_id FROM realm_members WHERE user_id = ${userId}
   `;
-  return rows.map((row) => ({ realmId: row.realm_id, userId: row.user_id, role: row.role }));
+  return rows.map((row) => ({ realmId: row.realm_id, userId: row.user_id, role: row.role, linearUserId: row.linear_user_id ?? null }));
+}
+
+export async function updateRealmMemberLinearId(realmId: string, userId: string, linearUserId: string): Promise<void> {
+  await sql`
+    UPDATE realm_members SET linear_user_id = ${linearUserId}
+    WHERE realm_id = ${realmId} AND user_id = ${userId}
+  `;
+}
+
+export async function getUserByRealmLinearId(realmId: string, linearUserId: string): Promise<{ userId: string } | null> {
+  const [row] = await sql`
+    SELECT user_id FROM realm_members
+    WHERE realm_id = ${realmId} AND linear_user_id = ${linearUserId}
+  `;
+  return row ? { userId: row.user_id } : null;
 }
 
 export async function removeRealmMember(realmId: string, userId: string): Promise<boolean> {

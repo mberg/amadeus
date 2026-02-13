@@ -16,7 +16,7 @@ import {
 import { addProjectMember, getProjectMembers, removeProjectMember } from "../db/project-members";
 import { getMachines, setSecret, getSecret, deleteSecret, listSecretKeys } from "../db";
 import { createRealm, getRealmsByOrg, getRealm, updateRealm, deleteRealm as dbDeleteRealm } from "../db/realms";
-import { addRealmMember, getRealmMembers, removeRealmMember, getUserRealms } from "../db/realm-members";
+import { addRealmMember, getRealmMembers, removeRealmMember, getUserRealms, updateRealmMemberLinearId } from "../db/realm-members";
 import { rebuildRealmConfig } from "../config";
 import { fetchLinearUserId } from "../linear";
 
@@ -64,6 +64,11 @@ export async function handleSetUserLinearPat(
     : `user:${userId}:linear_pat`;
   await setSecret(orgId, secretKey, body.pat);
   await updateUserLinearId(userId, linearUserId);
+
+  // Store per-realm Linear identity for webhook routing
+  if (body.realmId) {
+    await updateRealmMemberLinearId(body.realmId, userId, linearUserId);
+  }
 
   return Response.json({ linearUserId });
 }
