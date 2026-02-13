@@ -1,14 +1,14 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
 // ABOUTME: Contains logo, navigation items, theme toggle, and user menu.
 
-import { ListTodo, Settings, Blocks, Sun, Moon, Server, Shield, User } from "lucide-react";
+import { ListTodo, Settings, Blocks, Sun, Moon, Server, User } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { useAuth } from "./AuthProvider";
 import { UserMenu, SignOutButton } from "./UserMenu";
 import type { RuntimeMode } from "../types";
 
-export type NavItem = "tasks" | "machines" | "settings" | "admin" | "account";
+export type NavItem = "tasks" | "machines" | "settings" | "account";
 
 interface SidebarProps {
   activeItem: NavItem;
@@ -19,7 +19,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, runtimeMode }: SidebarProps) {
-  const showMachinesNav = runtimeMode !== "machine";
   const { theme, toggleTheme } = useTheme();
   const { isSignedIn } = useAuth();
 
@@ -62,7 +61,7 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, r
               <ListTodo className="h-4 w-4 shrink-0" />
               {!collapsed && "Tasks"}
             </button>
-            {showMachinesNav && (
+            {runtimeMode !== "machine" && (
               <button
                 onClick={() => onNavigate("machines")}
                 title="Machines"
@@ -92,23 +91,6 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, r
               >
                 <Settings className="h-4 w-4 shrink-0" />
                 {!collapsed && "Settings"}
-              </button>
-            )}
-
-            {showMachinesNav && (
-              <button
-                onClick={() => onNavigate("admin")}
-                title="Admin"
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  activeItem === "admin"
-                    ? "bg-muted/50 text-foreground"
-                    : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
-                  collapsed && "justify-center px-2"
-                )}
-              >
-                <Shield className="h-4 w-4 shrink-0" />
-                {!collapsed && "Admin"}
               </button>
             )}
 
