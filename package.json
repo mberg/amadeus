@@ -23,7 +23,8 @@
     "css:build": "tailwindcss -i src/dashboard/styles.css -o src/dashboard/index.css --minify",
     "css:watch": "tailwindcss -i src/dashboard/styles.css -o src/dashboard/index.css --watch",
     "cloud:build": "bun run css:build && cd cloud && bun install && bun run css:build",
-    "cloud:start": "bun run cloud/src/server.ts"
+    "cloud:start": "bun run cloud/src/server.ts",
+    "setup-machine": "bun run scripts/setup-machine.ts"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

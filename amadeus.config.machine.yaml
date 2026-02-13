@@ -1,0 +1,31 @@
+# Amadeus Machine Mode Configuration
+# Minimal config for a machine that connects to a hub.
+# No realms needed — the hub handles Linear webhooks, API keys, and routing.
+#
+# Quick setup: bun scripts/setup-machine.ts
+# Manual setup: copy this file to amadeus.config.yaml and fill in the values.
+
+global:
+  runtimeMode: machine
+  port: 5678
+  agentName: Amadeus
+
+  machine:
+    name: "my-machine"               # Friendly name shown in hub dashboard
+    hubUrl: "https://hub.example.com" # Hub URL to register with
+    heartbeat: true                   # Send status heartbeats to hub
+
+  # Workflow states that trigger agent spawn (must match hub config)
+  triggerStates:
+    - Planning
+
+  # Git worktrees for issue isolation
+  useWorktrees: true
+  worktreesDir: ~/.amadeus-worktrees
+
+  # Agent profiles
+  profilesDir: ./agent-profiles
+  defaultProfile: base
+
+  # SQLite database for local agent state
+  dbPath: ./amadeus-agents.db
