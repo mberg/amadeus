@@ -66,12 +66,15 @@ if (isMachineMode() || isStandaloneMode()) {
     persistence!.markAgentDead(info.issueId);
   };
 
-  // Handle agent completion - save to Postgres (skip in machine mode without DB)
+  // Handle agent completion - save to Postgres or forward to hub
   const handleAgentComplete = (info: AgentCompletionInfo): void => {
     console.log(
       `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
     );
-    if (!isMachineMode()) {
+    if (isMachineMode()) {
+      // Machine mode: forward to hub (no local Postgres)
+      hubHeartbeat?.reportCompletion(info);
+    } else {
       recordCompletedTask("default", {
         key: info.key,
         issueId: info.issueId,

@@ -504,6 +504,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
   async function requireOperator(req: Request): Promise<Response | null> {
     const security = getSecurityConfig();
+    if (security.enableAgentMessaging) {
+      return null;
+    }
     const result = await checkAuth(req, "operator", {
       apiToken: CONFIG.apiToken,
       enableAgentMessaging: security.enableAgentMessaging,
@@ -794,6 +797,75 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       ctx.machineRegistry?.updateStatus(machineName, "healthy", agents ?? []);
 
       console.log(`[Hub] Heartbeat from ${machineName}: ${agents?.length ?? 0} agents`);
+
+      return new Response("OK", { status: 200 });
+    }
+
+    // Receive agent completion events from machines
+    if (req.method === "POST" && url.pathname === "/hub/agent-complete") {
+      if (!isHubMode() && !isStandaloneMode()) {
+        return new Response("Not available in machine mode", { status: 404 });
+      }
+
+      const tokenHash = req.headers.get("X-Machine-Token-Hash");
+      const authHeader = req.headers.get("Authorization");
+      const token = authHeader?.replace("Bearer ", "");
+
+      const body = await req.json();
+      const { machineName, completion } = body as {
+        machineName: string;
+        completion: {
+          key: string;
+          issueId: string;
+          issueIdentifier: string;
+          issueTitle: string;
+          linearProject?: string;
+          completionReason: string;
+          finalLinearState?: string;
+          duration: number;
+        };
+      };
+
+      if (!machineName || !completion) {
+        return new Response("Missing machineName or completion", { status: 400 });
+      }
+
+      // Authenticate the same way as heartbeat
+      const { authenticateMachine } = await import("./db");
+      let authenticated = false;
+
+      const machine = ctx.machineRegistry?.get(machineName);
+      if (machine) {
+        if (!machine.apiKey || machine.apiKey === token) {
+          authenticated = true;
+        }
+      } else {
+        const hash = tokenHash
+          ?? (token ? new Bun.CryptoHasher("sha256").update(token).digest("hex") : null);
+        if (hash) {
+          const dbAuth = await authenticateMachine(hash);
+          if (dbAuth) authenticated = true;
+        }
+      }
+
+      if (!authenticated) {
+        return new Response("Unauthorized", { status: 403 });
+      }
+
+      const orgId = getRequestOrgId(url);
+      await recordCompletedTask(orgId, {
+        key: completion.key,
+        issueId: completion.issueId,
+        issueIdentifier: completion.issueIdentifier,
+        issueTitle: completion.issueTitle,
+        linearProject: completion.linearProject,
+        completedAt: new Date(),
+        completionReason: completion.completionReason,
+        finalLinearState: completion.finalLinearState,
+        duration: completion.duration,
+      });
+
+      console.log(`[Hub] Agent completion from ${machineName}: ${completion.issueIdentifier} (${completion.completionReason})`);
 
       return new Response("OK", { status: 200 });
     }

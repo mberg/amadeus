@@ -439,7 +439,12 @@ export function getRealmByTeamKey(teamKey: string): {
  */
 export function getSecurityConfig(): SecurityConfig {
   if (REALM_CONFIG) {
-    return REALM_CONFIG.global.security;
+    const security = REALM_CONFIG.global.security;
+    // Machine mode: enable agent messaging by default (local tool)
+    if (isMachineMode() && !security.enableAgentMessaging) {
+      return { ...security, enableAgentMessaging: true };
+    }
+    return security;
   }
   return { enableAgentMessaging: false, publicDashboard: false };
 }
