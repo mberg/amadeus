@@ -65,8 +65,9 @@ export async function handleSetUserLinearPat(
   await setSecret(orgId, secretKey, body.pat);
   await updateUserLinearId(userId, linearUserId);
 
-  // Store per-realm Linear identity for webhook routing
+  // Ensure user is a realm member and store per-realm Linear identity
   if (body.realmId) {
+    await addRealmMember(body.realmId, userId, "member");
     await updateRealmMemberLinearId(body.realmId, userId, linearUserId);
   }
 
