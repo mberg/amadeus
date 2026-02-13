@@ -504,6 +504,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
   async function requireOperator(req: Request): Promise<Response | null> {
     const security = getSecurityConfig();
+    if (security.enableAgentMessaging) {
+      return null;
+    }
     const result = await checkAuth(req, "operator", {
       apiToken: CONFIG.apiToken,
       enableAgentMessaging: security.enableAgentMessaging,
