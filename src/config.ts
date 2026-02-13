@@ -32,7 +32,7 @@ import {
   getProjectByLinearKey,
 } from "./db";
 import type { DbRealm } from "./db/realms";
-import { getUserByRealmLinearId } from "./db/realm-members";
+import { getUserByRealmLinearId, getRealmMembers } from "./db/realm-members";
 
 /**
  * Legacy CONFIG interface for backward compatibility.
@@ -584,10 +584,8 @@ export async function resolveLinearApiKey(
           const realmPat = await getSecret(orgId, `user:${realmMember.userId}:realm:${project.realmId}:linear_pat`);
           if (realmPat) return realmPat;
         }
-      }
 
-      // Fall back to legacy single-user lookup
-      if (assigneeLinearId) {
+        // Fall back to legacy single-user lookup
         const hubUser = await getUserByLinearId(orgId, assigneeLinearId);
         if (hubUser) {
           const realmPat = await getSecret(orgId, `user:${hubUser.id}:realm:${project.realmId}:linear_pat`);
@@ -596,6 +594,13 @@ export async function resolveLinearApiKey(
           const globalPat = await getSecret(orgId, `user:${hubUser.id}:linear_pat`);
           if (globalPat) return globalPat;
         }
+      }
+
+      // No assignee or assignee not found — use any realm member's PAT
+      const realmMembers = await getRealmMembers(project.realmId);
+      for (const member of realmMembers) {
+        const pat = await getSecret(orgId, `user:${member.userId}:realm:${project.realmId}:linear_pat`);
+        if (pat) return pat;
       }
     }
   }

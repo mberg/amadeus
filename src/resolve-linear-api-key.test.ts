@@ -95,14 +95,24 @@ describe("resolveLinearApiKey", () => {
     await deleteSecret(TEST_ORG, secretKey);
   });
 
-  test("returns null when no assignee and no YAML apiKey", async () => {
+  test("falls back to any realm member PAT when no assignee provided", async () => {
+    const secretKey = `user:${userId}:realm:${realmId}:linear_pat`;
+    await setSecret(TEST_ORG, secretKey, "fallback-pat-value");
+
     const result = await resolveLinearApiKey(TEST_ORG, "TPAT");
-    expect(result).toBeNull();
+    expect(result).toBe("fallback-pat-value");
+
+    await deleteSecret(TEST_ORG, secretKey);
   });
 
-  test("returns null when assignee not found in any lookup", async () => {
+  test("falls back to any realm member PAT when assignee not found", async () => {
+    const secretKey = `user:${userId}:realm:${realmId}:linear_pat`;
+    await setSecret(TEST_ORG, secretKey, "fallback-pat-value");
+
     const result = await resolveLinearApiKey(TEST_ORG, "TPAT", "completely-unknown-id");
-    expect(result).toBeNull();
+    expect(result).toBe("fallback-pat-value");
+
+    await deleteSecret(TEST_ORG, secretKey);
   });
 
   test("returns null for unknown team key", async () => {
