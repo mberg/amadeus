@@ -1074,15 +1074,30 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       return new Response("Not Found", { status: 404 });
     }
 
-    // Completed tasks history (from Postgres)
+    // Completed tasks history
     if (req.method === "GET" && url.pathname === "/status/history") {
       const authError = await requireViewer(req);
       if (authError) return authError;
 
-      const orgId = getRequestOrgId(url);
       const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
       const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
 
+      // Machine mode: use local SQLite; otherwise use Postgres
+      if (isMachineMode() && ctx.persistence) {
+        const completedTasksList = ctx.persistence.getCompletedTasks(limit, offset);
+        const total = ctx.persistence.getCompletedTasksCount();
+        return Response.json({
+          completedTasks: completedTasksList.map((task) => ({
+            ...task,
+            completedAt: task.completedAt.toISOString(),
+          })),
+          total,
+          limit,
+          offset,
+        });
+      }
+
+      const orgId = getRequestOrgId(url);
       const completedTasksList = await getCompletedTasks(orgId, limit, offset);
       const total = await getCompletedTaskCount(orgId);
 
