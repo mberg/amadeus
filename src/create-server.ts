@@ -26,7 +26,7 @@ import {
   getCompletedTaskCount,
 } from "./db";
 import { getRequestOrgId } from "./org";
-import { routeWebhook } from "./hub/router";
+import { routeWebhook, getAssigneeIdFromPayload } from "./hub/router";
 import { verifyLinearSignature } from "./signature";
 import { requireAuth as checkAuth, getAuthInfo, isBetterAuthEnabled } from "./auth";
 import { auth } from "./better-auth";
@@ -182,7 +182,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     action: string,
     issue: LinearIssue,
     orgId: string,
-    repoPathOverride?: string
+    repoPathOverride?: string,
+    routingApiKey?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor) {
       console.error("[Webhook] Machine components not initialized");
@@ -237,7 +238,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     if (ctx.orchestrator.shouldStartAgent(issue)) {
       const teamKey = issue.identifier.split("-")[0];
-      const apiKey = await resolveLinearApiKey(orgId, teamKey, issue.assignee?.id);
+      const apiKey = routingApiKey ?? await resolveLinearApiKey(orgId, teamKey, issue.assignee?.id);
 
       if (ctx.orchestrator.hasAgent(agentKey)) {
         let workflowStates;
@@ -260,7 +261,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     action: string,
     comment: LinearComment,
     orgId: string,
-    repoPathOverride?: string
+    repoPathOverride?: string,
+    routingApiKey?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor || !ctx.persistence) {
       console.error("[Webhook] Machine components not initialized");
@@ -291,7 +293,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
     if (!agentKey) {
       const teamKey = comment.issue.identifier.split("-")[0];
-      const apiKey = await resolveLinearApiKey(orgId, teamKey, comment.issue.assignee?.id);
+      const apiKey = routingApiKey ?? await resolveLinearApiKey(orgId, teamKey, comment.issue.assignee?.id);
       let issue = comment.issue;
 
       if (apiKey && (!issue.state?.name || !issue.labels?.length)) {
@@ -375,7 +377,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     signature: string | null,
     teamKey: string,
     localRepoPath?: string | null,
-    machineApiKey?: string | null
+    machineApiKey?: string | null,
+    linearApiKey?: string | null
   ): Promise<void> {
     try {
       const headers: Record<string, string> = {
@@ -396,9 +399,12 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       let forwardPayload = payload;
-      if (localRepoPath) {
+      if (localRepoPath || linearApiKey) {
         const parsed = JSON.parse(payload);
-        parsed._routing = { localRepoPath };
+        parsed._routing = {
+          ...(localRepoPath && { localRepoPath }),
+          ...(linearApiKey && { linearApiKey }),
+        };
         forwardPayload = JSON.stringify(parsed);
       }
 
@@ -474,13 +480,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     return null;
   }
 
-  async function handleWebhook(payload: LinearWebhookPayload, orgId: string, repoPathOverride?: string): Promise<void> {
+  async function handleWebhook(payload: LinearWebhookPayload, orgId: string, repoPathOverride?: string, routingApiKey?: string): Promise<void> {
     const { action, type, data } = payload;
 
     if (type === "Issue" && !isComment(data)) {
-      await handleIssueWebhook(action, data, orgId, repoPathOverride);
+      await handleIssueWebhook(action, data, orgId, repoPathOverride, routingApiKey);
     } else if (type === "Comment" && isComment(data)) {
-      await handleCommentWebhook(action, data, orgId, repoPathOverride);
+      await handleCommentWebhook(action, data, orgId, repoPathOverride, routingApiKey);
     }
   }
 
@@ -572,7 +578,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
-      const routing = (data as any)._routing as { localRepoPath?: string } | undefined;
+      const routing = (data as any)._routing as { localRepoPath?: string; linearApiKey?: string } | undefined;
 
       const MAX_AGE_MS = 60000;
       const now = Date.now();
@@ -586,6 +592,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       if (isHubMode()) {
         const teamKey = getTeamKeyFromPayload(data);
         const projectName = getProjectNameFromPayload(data);
+        const assigneeLinearId = getAssigneeIdFromPayload(data);
         console.log(`[Webhook] type=${data.type} action=${data.action} teamKey=${teamKey} projectName=${projectName}`);
         const route = await routeWebhook(orgId, data);
         if (route.machineUrl) {
@@ -594,8 +601,12 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
             const { getSecret: getMachineSecret } = await import("./db");
             machineKey = await getMachineSecret(orgId, `machine:${route.machineId}:api_key`);
           }
-          console.log(`[HubForward] Routing to ${route.machineName} (id=${route.machineId}), hasApiKey=${!!machineKey}`);
-          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey).catch((err) => {
+          // Resolve Linear API key so machine doesn't need its own
+          const linearApiKey = teamKey
+            ? await resolveLinearApiKey(orgId, teamKey, assigneeLinearId ?? undefined)
+            : null;
+          console.log(`[HubForward] Routing to ${route.machineName} (id=${route.machineId}), hasApiKey=${!!machineKey}, hasLinearKey=${!!linearApiKey}`);
+          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey, linearApiKey).catch((err) => {
             console.error("[HubForward] Error:", err);
           });
           return new Response("OK", { status: 200 });
@@ -619,7 +630,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("OK", { status: 200 });
       }
 
-      handleWebhook(data, orgId, routing?.localRepoPath).catch((err) => {
+      handleWebhook(data, orgId, routing?.localRepoPath, routing?.linearApiKey).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
       });
 

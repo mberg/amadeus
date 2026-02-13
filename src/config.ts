@@ -338,6 +338,20 @@ export async function rebuildRealmConfig(orgId: string = "default"): Promise<voi
  * Must be called before using CONFIG or REALM_CONFIG.
  */
 export async function initConfig(orgId: string = "default"): Promise<void> {
+  // In machine mode, skip Postgres entirely — load from local YAML only
+  const localYaml = getConfigYamlFromFile();
+  if (localYaml) {
+    const parsed = yaml.load(localYaml) as Record<string, unknown>;
+    const globalConfig = parsed?.global as Record<string, unknown> | undefined;
+    if (globalConfig?.runtimeMode === "machine") {
+      REALM_CONFIG = loadConfigFromYaml(localYaml);
+      CONFIG = buildLegacyConfigFromResolved(REALM_CONFIG);
+      console.log(`[Config] Machine mode: loaded ${REALM_CONFIG.realms.length} realm(s) from local YAML`);
+      _configInitialized = true;
+      return;
+    }
+  }
+
   // Run Postgres migration and ensure org exists
   await migrate();
   await ensureOrg(orgId);
@@ -357,7 +371,6 @@ export async function initConfig(orgId: string = "default"): Promise<void> {
 
   // If no config in Postgres, seed from local YAML file
   if (!yamlContent) {
-    const localYaml = getConfigYamlFromFile();
     if (localYaml) {
       yamlContent = localYaml;
       await dbSaveConfigYaml(orgId, yamlContent);
@@ -541,7 +554,8 @@ export async function resolveLinearApiKey(
   teamKey: string,
   assigneeLinearId?: string
 ): Promise<string | null> {
-  if (assigneeLinearId) {
+  // In machine mode, skip DB lookups (no Postgres) — use static YAML config only
+  if (!isMachineMode() && assigneeLinearId) {
     const hubUser = await getUserByLinearId(orgId, assigneeLinearId);
     if (hubUser) {
       // Find the realm DB ID via the project's team key

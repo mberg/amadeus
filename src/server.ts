@@ -66,24 +66,26 @@ if (isMachineMode() || isStandaloneMode()) {
     persistence!.markAgentDead(info.issueId);
   };
 
-  // Handle agent completion - save to Postgres
+  // Handle agent completion - save to Postgres (skip in machine mode without DB)
   const handleAgentComplete = (info: AgentCompletionInfo): void => {
     console.log(
       `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
     );
-    recordCompletedTask("default", {
-      key: info.key,
-      issueId: info.issueId,
-      issueIdentifier: info.issueIdentifier,
-      issueTitle: info.issueTitle,
-      linearProject: info.linearProject,
-      completedAt: new Date(),
-      completionReason: info.completionReason,
-      finalLinearState: info.finalLinearState,
-      duration: info.duration,
-    }).catch((err) => {
-      console.error("[AgentComplete] Failed to persist to database:", err);
-    });
+    if (!isMachineMode()) {
+      recordCompletedTask("default", {
+        key: info.key,
+        issueId: info.issueId,
+        issueIdentifier: info.issueIdentifier,
+        issueTitle: info.issueTitle,
+        linearProject: info.linearProject,
+        completedAt: new Date(),
+        completionReason: info.completionReason,
+        finalLinearState: info.finalLinearState,
+        duration: info.duration,
+      }).catch((err) => {
+        console.error("[AgentComplete] Failed to persist to database:", err);
+      });
+    }
   };
 
   orchestrator = new ClaudeOrchestrator({
