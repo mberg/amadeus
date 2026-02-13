@@ -464,6 +464,7 @@ export class ClaudeOrchestrator {
       cwd: workingDir,
       env: {
         ...process.env,
+        CLAUDECODE: undefined, // Allow spawning Claude Code from within a Claude Code session
         LINEAR_ISSUE_ID: issue.id,
         LINEAR_ISSUE_IDENTIFIER: issue.identifier,
         ...(linearApiKey && {
