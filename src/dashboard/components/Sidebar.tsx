@@ -8,7 +8,7 @@ import { useAuth } from "./AuthProvider";
 import { UserMenu, SignOutButton } from "./UserMenu";
 import type { RuntimeMode } from "../types";
 
-export type NavItem = "tasks" | "machines" | "settings" | "account";
+export type NavItem = "tasks" | "machines" | "settings" | "admin" | "account";
 
 interface SidebarProps {
   activeItem: NavItem;
@@ -95,17 +95,20 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, r
             )}
 
             {runtimeMode !== "machine" && (
-              <a
-                href="/admin"
+              <button
+                onClick={() => onNavigate("admin")}
                 title="Admin"
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  activeItem === "admin"
+                    ? "bg-muted/50 text-foreground"
+                    : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
                   collapsed && "justify-center px-2"
                 )}
               >
                 <Shield className="h-4 w-4 shrink-0" />
                 {!collapsed && "Admin"}
-              </a>
+              </button>
             )}
 
             {isSignedIn && (

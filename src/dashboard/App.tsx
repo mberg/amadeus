@@ -9,6 +9,7 @@ import { MessagePanel } from "./components/MessagePanel";
 import { SearchFilterBar } from "./components/SearchFilterBar";
 import { SettingsPage } from "./components/SettingsPage";
 import { MachinesView } from "./components/MachinesView";
+import { AdminView } from "./components/AdminView";
 import { AccountPage } from "./components/AccountPage";
 import { useStatus } from "./hooks/useStatus";
 import { useAuth } from "./components/AuthProvider";
@@ -152,6 +153,8 @@ export function App() {
           )}
 
           {activeNav === "machines" && <MachinesView />}
+
+          {activeNav === "admin" && <AdminView />}
 
           {activeNav === "account" && <AccountPage />}
 
