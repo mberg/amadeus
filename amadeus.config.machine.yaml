@@ -27,5 +27,10 @@ global:
   profilesDir: ./agent-profiles
   defaultProfile: base
 
+  # Security settings
+  # security:
+  #   publicDashboard: true       # Default in machine mode without Better Auth
+  #   enableAgentMessaging: true   # Allow sending messages from dashboard
+
   # SQLite database for local agent state
   dbPath: ./amadeus-agents.db

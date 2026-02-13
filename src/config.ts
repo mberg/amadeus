@@ -14,6 +14,7 @@ import {
   type ConfigValidationResult,
 } from "./config-loader";
 import type { SecurityConfig, RuntimeMode, GlobalConfig, Project } from "./config-schema";
+import { isBetterAuthEnabled } from "./auth";
 import { GlobalConfigSchema } from "./config-schema";
 import yaml from "js-yaml";
 import {
@@ -438,15 +439,27 @@ export function getRealmByTeamKey(teamKey: string): {
  * Get current security configuration.
  */
 export function getSecurityConfig(): SecurityConfig {
-  if (REALM_CONFIG) {
-    const security = REALM_CONFIG.global.security;
+  const base = REALM_CONFIG
+    ? REALM_CONFIG.global.security
+    : { enableAgentMessaging: false, publicDashboard: false };
+
+  if (isMachineMode()) {
+    const overrides: Partial<SecurityConfig> = {};
     // Machine mode: enable agent messaging by default (local tool)
-    if (isMachineMode() && !security.enableAgentMessaging) {
-      return { ...security, enableAgentMessaging: true };
+    if (!base.enableAgentMessaging) {
+      overrides.enableAgentMessaging = true;
     }
-    return security;
+    // Machine mode without Better Auth: allow dashboard access without auth.
+    // Machines are on private networks (Tailscale); the operator needs dashboard access.
+    // When Better Auth IS enabled, session cookies handle auth instead.
+    if (!isBetterAuthEnabled()) {
+      overrides.publicDashboard = true;
+    }
+    if (Object.keys(overrides).length > 0) {
+      return { ...base, ...overrides };
+    }
   }
-  return { enableAgentMessaging: false, publicDashboard: false };
+  return base;
 }
 
 /**

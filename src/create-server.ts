@@ -1126,8 +1126,10 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           }
         : null;
 
-      // Cloud deployments (Better Auth enabled) are effectively hub mode
-      const effectiveMode = isBetterAuthEnabled() ? "hub" : getRuntimeMode();
+      // Cloud deployments (Better Auth enabled) are effectively hub mode,
+      // but machines should stay "machine" even with Better Auth (for Tailscale auth)
+      const actualMode = getRuntimeMode();
+      const effectiveMode = isBetterAuthEnabled() && actualMode !== "machine" ? "hub" : actualMode;
 
       return Response.json({
         linearWorkspace: CONFIG.linearWorkspace,
