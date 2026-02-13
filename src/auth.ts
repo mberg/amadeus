@@ -36,7 +36,7 @@ export interface AuthContext {
   role: UserRole;
 }
 
-const MACHINE_API_KEY = process.env.MACHINE_API_KEY;
+const MACHINE_API_KEY = process.env.AMADEUS_API_KEY;
 
 /**
  * Check if request has valid machine-to-machine API key.

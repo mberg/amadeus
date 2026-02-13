@@ -2,6 +2,7 @@
 // ABOUTME: Enables push-based status updates, preventing hub from polling idle machines.
 
 import type { AgentStatus } from "./types";
+import type { AgentCompletionInfo } from "./orchestrator";
 
 export interface HubHeartbeatConfig {
   hubUrl: string;
@@ -137,6 +138,36 @@ export class HubHeartbeat {
     this.intervalId = setInterval(() => this.sendHeartbeat(), this.config.intervalMs);
 
     console.log(`[HubHeartbeat] Started sending heartbeats to ${this.config.hubUrl}`);
+  }
+
+  async reportCompletion(info: AgentCompletionInfo): Promise<void> {
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (this.config.apiKey) {
+        headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+      }
+      if (this.config.token) {
+        const hash = new Bun.CryptoHasher("sha256").update(this.config.token).digest("hex");
+        headers["X-Machine-Token-Hash"] = hash;
+      }
+
+      const response = await fetch(`${this.config.hubUrl}/hub/agent-complete`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          machineName: this.config.machineName,
+          completion: info,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[HubHeartbeat] Failed to report completion: HTTP ${response.status}`);
+      }
+    } catch (err) {
+      console.warn(`[HubHeartbeat] Failed to report completion: ${err instanceof Error ? err.message : "Unknown"}`);
+    }
   }
 
   stop(): void {
