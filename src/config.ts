@@ -572,27 +572,37 @@ export async function resolveLinearApiKey(
   teamKey: string,
   assigneeLinearId?: string
 ): Promise<string | null> {
+  console.log(`[resolveLinearApiKey] orgId=${orgId} teamKey=${teamKey} assigneeLinearId=${assigneeLinearId ?? "none"} machineMode=${isMachineMode()}`);
+
   // In machine mode, skip DB lookups (no Postgres) — use static YAML config only
   if (!isMachineMode() && assigneeLinearId) {
     const hubUser = await getUserByLinearId(orgId, assigneeLinearId);
+    console.log(`[resolveLinearApiKey] hubUser=${hubUser ? `found(id=${hubUser.id},linearId=${hubUser.linearUserId})` : "null"}`);
     if (hubUser) {
       // Find the realm DB ID via the project's team key
       const project = await getProjectByLinearKey(orgId, teamKey);
+      console.log(`[resolveLinearApiKey] project=${project ? `found(id=${project.id},realmId=${project.realmId})` : "null"}`);
       if (project?.realmId) {
-        const realmPat = await getSecret(orgId, `user:${hubUser.id}:realm:${project.realmId}:linear_pat`);
+        const secretKey = `user:${hubUser.id}:realm:${project.realmId}:linear_pat`;
+        const realmPat = await getSecret(orgId, secretKey);
+        console.log(`[resolveLinearApiKey] realmPat key=${secretKey} found=${!!realmPat}`);
         if (realmPat) return realmPat;
       }
 
       // Fall back to user's global PAT
-      const globalPat = await getSecret(orgId, `user:${hubUser.id}:linear_pat`);
+      const globalSecretKey = `user:${hubUser.id}:linear_pat`;
+      const globalPat = await getSecret(orgId, globalSecretKey);
+      console.log(`[resolveLinearApiKey] globalPat key=${globalSecretKey} found=${!!globalPat}`);
       if (globalPat) return globalPat;
     }
   }
 
   // Fall back to static apiKey from YAML config (non-empty for YAML-sourced realms)
   const realmInfo = getRealmByTeamKey(teamKey);
+  console.log(`[resolveLinearApiKey] yamlFallback realmInfo=${realmInfo ? `found(apiKey=${!!realmInfo.apiKey})` : "null"}`);
   if (realmInfo?.apiKey) return realmInfo.apiKey;
 
+  console.log(`[resolveLinearApiKey] returning null`);
   return null;
 }
 
