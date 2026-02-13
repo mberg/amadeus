@@ -273,19 +273,19 @@ The codebase has significant **scaffolding** for multi-tenancy, but it's all wir
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-1. **Org identity model:** Should orgs be UUID-based or slug-based? Slugs are nicer for webhook URLs (`/webhook/acme`) but need uniqueness enforcement.
+1. **Org identity model:** **Slug-based.** Webhook URLs use slugs (`/webhook/acme`). Uniqueness enforced at DB level.
 
-2. **User-to-org mapping:** Can a user belong to multiple orgs? If so, how do they switch context? (Better Auth org plugin supports this, but it adds UI complexity.)
+2. **User-to-org mapping:** **No multi-org users.** Each user belongs to one org. The same email can exist across different orgs (a Better Auth concern, not ours).
 
-3. **Machine sharing:** Can a machine serve multiple orgs? Currently machines are org-scoped in the DB. If shared, the orchestrator needs cross-org isolation on the same machine.
+3. **Machine sharing:** **No.** Machines are single-org. Each machine serves exactly one org.
 
-4. **Standalone mode impact:** Should standalone mode remain single-tenant forever, or should it eventually support multi-tenant too?
+4. **Standalone mode:** **Stays single-tenant.** No multi-tenant support needed for standalone.
 
-5. **Org-level quotas/limits:** Should there be limits on agents per org, machines per org, etc.? This affects the orchestrator design.
+5. **Org-level quotas:** **None.** No agent/machine quotas per org.
 
-6. **Existing "default" org migration:** When the first real org is created in cloud mode, should existing "default" data be migrated to it, or start fresh?
+6. **Existing "default" org migration:** **Yes, migrate.** When the first real org is created, existing "default" data can be migrated to it.
 
 ---
 
