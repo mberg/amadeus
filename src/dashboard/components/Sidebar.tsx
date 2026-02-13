@@ -78,20 +78,22 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, r
                 {!collapsed && "Machines"}
               </button>
             )}
-            <button
-              onClick={() => onNavigate("settings")}
-              title="Settings"
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                activeItem === "settings"
-                  ? "bg-muted/50 text-foreground"
-                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
-                collapsed && "justify-center px-2"
-              )}
-            >
-              <Settings className="h-4 w-4 shrink-0" />
-              {!collapsed && "Settings"}
-            </button>
+            {runtimeMode !== "hub" && (
+              <button
+                onClick={() => onNavigate("settings")}
+                title="Settings"
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  activeItem === "settings"
+                    ? "bg-muted/50 text-foreground"
+                    : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                  collapsed && "justify-center px-2"
+                )}
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                {!collapsed && "Settings"}
+              </button>
+            )}
 
             {showMachinesNav && (
               <button
