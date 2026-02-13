@@ -1,7 +1,7 @@
 // ABOUTME: Sidebar navigation component for the dashboard.
 // ABOUTME: Contains logo, navigation items, theme toggle, and user menu.
 
-import { ListTodo, Settings, Blocks, Sun, Moon, Server, User } from "lucide-react";
+import { ListTodo, Settings, Blocks, Sun, Moon, Server, Shield, User } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { useAuth } from "./AuthProvider";
@@ -92,6 +92,20 @@ export function Sidebar({ activeItem, onNavigate, collapsed, onToggleCollapse, r
                 <Settings className="h-4 w-4 shrink-0" />
                 {!collapsed && "Settings"}
               </button>
+            )}
+
+            {runtimeMode !== "machine" && (
+              <a
+                href="/admin"
+                title="Admin"
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                  collapsed && "justify-center px-2"
+                )}
+              >
+                <Shield className="h-4 w-4 shrink-0" />
+                {!collapsed && "Admin"}
+              </a>
             )}
 
             {isSignedIn && (
