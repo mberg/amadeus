@@ -30,6 +30,7 @@ import { isBetterAuthEnabled } from "./auth";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged, deleteBranch } from "./github";
 import { createFetchHandler, type ServerContext } from "./create-server";
+import { DEFAULT_ORG_ID } from "./org";
 
 // Initialize config from Postgres (seeds from local YAML on first run)
 await initConfig();
@@ -42,7 +43,7 @@ console.log(`[Server] Starting in ${getRuntimeMode()} mode as "${machineConfig.n
 let machineRegistry: MachineRegistry | null = null;
 if (isHubMode() || isStandaloneMode()) {
   machineRegistry = new MachineRegistry();
-  const dbMachines = await getMachines("default");
+  const dbMachines = await getMachines(DEFAULT_ORG_ID);
   if (dbMachines.length > 0) {
     machineRegistry.loadFromDb(dbMachines);
     console.log(`[Server] Loaded ${dbMachines.length} machine(s) from database`);
@@ -75,7 +76,7 @@ if (isMachineMode() || isStandaloneMode()) {
       // Machine mode: forward to hub (no local Postgres)
       hubHeartbeat?.reportCompletion(info);
     } else {
-      recordCompletedTask("default", {
+      recordCompletedTask(DEFAULT_ORG_ID, {
         key: info.key,
         issueId: info.issueId,
         issueIdentifier: info.issueIdentifier,
@@ -257,7 +258,7 @@ async function checkMergedPRsAndUpdateLinear(): Promise<void> {
       try {
         // Use resolved API key for this issue
         const teamKey = agent.issueIdentifier.split("-")[0];
-        const apiKey = await resolveLinearApiKey("default", teamKey);
+        const apiKey = await resolveLinearApiKey(DEFAULT_ORG_ID, teamKey);
         const homeBin = `${process.env.HOME}/.local/bin`;
         const basePath = process.env.PATH?.includes(homeBin) ? process.env.PATH : `${homeBin}:${process.env.PATH}`;
         const key = apiKey ?? process.env.LINEAR_API_KEY ?? process.env.LINEAR_TOKEN;

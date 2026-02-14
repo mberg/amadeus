@@ -3,17 +3,23 @@
 
 import { createFetchHandler, type ServerContext } from "../../src/create-server";
 import { resolveOrgId } from "./org-auth";
+import { DEFAULT_ORG_ID } from "../../src/org";
 import { handleOnboardingRoutes } from "./onboarding";
 import { handleAdminRoutes } from "./admin";
 
 export function createCloudHandler(ctx: ServerContext): (req: Request) => Promise<Response> {
+  // Inject org resolver so create-server's API endpoints resolve org from session
+  ctx.resolveOrgId = async (req: Request) => {
+    return (await resolveOrgId(req)) ?? DEFAULT_ORG_ID;
+  };
+
   const amadeusHandler = createFetchHandler(ctx);
 
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
 
     // Resolve org from session (falls back to "default" if auth is not enabled)
-    const orgId = (await resolveOrgId(req)) ?? "default";
+    const orgId = (await resolveOrgId(req)) ?? DEFAULT_ORG_ID;
 
     // Cloud routes first (onboarding, admin, etc.)
     const onboardingResponse = await handleOnboardingRoutes(req, url, orgId);

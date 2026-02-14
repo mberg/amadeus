@@ -198,7 +198,14 @@ bun scripts/setup-machine.ts --non-interactive
 
 6. Start:
    ```bash
-   bun src/server.ts
+   # Foreground (interactive)
+   bun run dev
+
+   # Background with logs
+   bun run dev >> /tmp/amadeus.log 2>&1 &
+
+   # Watch logs
+   tail -f /tmp/amadeus.log
    ```
 
 ### Self-Hosted Hub

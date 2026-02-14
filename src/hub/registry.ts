@@ -7,6 +7,7 @@ import type { DbMachine } from "../db";
 export interface MachineInfo {
   name: string;
   url: string;
+  orgId: string;
   apiKey?: string;
   lastSeen?: Date;
   lastHeartbeat?: Date;
@@ -27,10 +28,11 @@ export class MachineRegistry {
   /**
    * Register or update a machine.
    */
-  register(name: string, url: string, apiKey?: string): void {
+  register(name: string, url: string, apiKey?: string, orgId: string = "default"): void {
     this.machines.set(name, {
       name,
       url,
+      orgId,
       apiKey,
       lastSeen: new Date(),
       status: "unknown",
@@ -42,6 +44,13 @@ export class MachineRegistry {
    */
   getAll(): MachineInfo[] {
     return Array.from(this.machines.values());
+  }
+
+  /**
+   * Get all machines for a specific org.
+   */
+  getAllForOrg(orgId: string): MachineInfo[] {
+    return Array.from(this.machines.values()).filter(m => m.orgId === orgId);
   }
 
   /**
@@ -162,10 +171,22 @@ export class MachineRegistry {
    * Marks machines as dormant if no heartbeat received in 2+ minutes.
    */
   getCachedStatus(): Array<MachineInfo & { agents: AgentStatus[] }> {
+    return this.buildCachedStatus(Array.from(this.machines.values()));
+  }
+
+  /**
+   * Get cached status for machines belonging to a specific org.
+   */
+  getCachedStatusForOrg(orgId: string): Array<MachineInfo & { agents: AgentStatus[] }> {
+    const orgMachines = Array.from(this.machines.values()).filter(m => m.orgId === orgId);
+    return this.buildCachedStatus(orgMachines);
+  }
+
+  private buildCachedStatus(machines: MachineInfo[]): Array<MachineInfo & { agents: AgentStatus[] }> {
     const now = Date.now();
     const DORMANT_THRESHOLD_MS = 5_000; // 5 seconds (machines already wait 2 min before stopping)
 
-    return Array.from(this.machines.values()).map(m => ({
+    return machines.map(m => ({
       ...m,
       agents: m.agents ?? [],
       status: m.lastHeartbeat && (now - m.lastHeartbeat.getTime() > DORMANT_THRESHOLD_MS)
@@ -181,16 +202,16 @@ export class MachineRegistry {
    */
   loadFromDb(machines: DbMachine[]): void {
     for (const m of machines) {
-      this.register(m.name, m.url);
+      this.register(m.name, m.url, undefined, m.orgId);
     }
   }
 
   /**
    * Load machines from static config.
    */
-  loadFromConfig(machines: Array<{ name: string; url: string; apiKey?: string }>): void {
+  loadFromConfig(machines: Array<{ name: string; url: string; apiKey?: string }>, orgId: string = "default"): void {
     for (const m of machines) {
-      this.register(m.name, m.url, m.apiKey);
+      this.register(m.name, m.url, m.apiKey, orgId);
     }
   }
 }

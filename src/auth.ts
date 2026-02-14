@@ -33,10 +33,13 @@ export interface AuthContext {
   mode: AuthMode;
   authenticated: boolean;
   userId?: string;
+  orgId: string;
   role: UserRole;
 }
 
 const MACHINE_API_KEY = process.env.AMADEUS_API_KEY;
+
+const DEFAULT_ORG_ID = "default";
 
 /**
  * Check if request has valid machine-to-machine API key.
@@ -50,6 +53,7 @@ function checkMachineApiKey(req: Request): AuthContext | null {
       mode: "simple",
       authenticated: true,
       userId: "machine",
+      orgId: DEFAULT_ORG_ID,
       role: "operator",
     };
   }
@@ -72,25 +76,25 @@ function mapOrgRoleToUserRole(orgRole: string | null): UserRole {
   }
 }
 
-async function getBetterAuthSession(req: Request): Promise<AuthContext> {
+async function getBetterAuthSession(req: Request, orgId: string = DEFAULT_ORG_ID): Promise<AuthContext> {
   if (!auth) {
-    return { mode: "simple", authenticated: false, role: "viewer" };
+    return { mode: "simple", authenticated: false, orgId, role: "viewer" };
   }
 
   try {
     const session = await auth.api.getSession({ headers: req.headers });
 
     if (!session?.user) {
-      return { mode: "betterauth", authenticated: false, role: "viewer" };
+      return { mode: "betterauth", authenticated: false, orgId, role: "viewer" };
     }
 
     const email = session.user.email;
     let role: UserRole = "viewer";
 
     if (email) {
-      const hubUser = await getUserByEmail("default", email);
+      const hubUser = await getUserByEmail(orgId, email);
       if (hubUser) {
-        const orgRole = await getOrgMemberRole("default", hubUser.id);
+        const orgRole = await getOrgMemberRole(orgId, hubUser.id);
         role = mapOrgRoleToUserRole(orgRole);
       }
     }
@@ -99,46 +103,51 @@ async function getBetterAuthSession(req: Request): Promise<AuthContext> {
       mode: "betterauth",
       authenticated: true,
       userId: session.user.id,
+      orgId,
       role,
     };
   } catch {
-    return { mode: "betterauth", authenticated: false, role: "viewer" };
+    return { mode: "betterauth", authenticated: false, orgId, role: "viewer" };
   }
 }
 
-function getSimpleAuth(req: Request, apiToken?: string): AuthContext {
+function getSimpleAuth(req: Request, apiToken?: string, orgId: string = DEFAULT_ORG_ID): AuthContext {
   if (!apiToken) {
-    return { mode: "simple", authenticated: false, role: "viewer" };
+    return { mode: "simple", authenticated: false, orgId, role: "viewer" };
   }
 
   const token = req.headers.get("X-Amadeus-Token");
   if (token === apiToken) {
-    return { mode: "simple", authenticated: true, role: "admin" };
+    return { mode: "simple", authenticated: true, orgId, role: "admin" };
   }
 
-  return { mode: "simple", authenticated: false, role: "viewer" };
+  return { mode: "simple", authenticated: false, orgId, role: "viewer" };
 }
 
 export async function getAuthContext(
   req: Request,
-  apiToken?: string
+  apiToken?: string,
+  orgId: string = DEFAULT_ORG_ID
 ): Promise<AuthContext> {
   // Check machine-to-machine API key first
   const machineAuth = checkMachineApiKey(req);
-  if (machineAuth) return machineAuth;
+  if (machineAuth) {
+    machineAuth.orgId = orgId;
+    return machineAuth;
+  }
 
   // Check API token (works regardless of auth mode)
   if (apiToken) {
     const token = req.headers.get("X-Amadeus-Token");
     if (token === apiToken) {
-      return { mode: "simple", authenticated: true, role: "admin" };
+      return { mode: "simple", authenticated: true, orgId, role: "admin" };
     }
   }
 
   if (isBetterAuthEnabled()) {
-    return getBetterAuthSession(req);
+    return getBetterAuthSession(req, orgId);
   }
-  return getSimpleAuth(req, apiToken);
+  return getSimpleAuth(req, apiToken, orgId);
 }
 
 const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -158,9 +167,9 @@ export type AuthResult =
 export async function requireAuth(
   req: Request,
   requiredRole: UserRole,
-  options: { apiToken?: string; enableAgentMessaging?: boolean } = {}
+  options: { apiToken?: string; enableAgentMessaging?: boolean; orgId?: string } = {}
 ): Promise<AuthResult> {
-  const context = await getAuthContext(req, options.apiToken);
+  const context = await getAuthContext(req, options.apiToken, options.orgId);
 
   if (!context.authenticated) {
     return {

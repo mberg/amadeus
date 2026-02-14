@@ -33,6 +33,13 @@ export async function getOrgMemberRole(orgId: string, userId: string): Promise<s
   return row?.role ?? null;
 }
 
+export async function getOrgsForUser(userId: string): Promise<OrgMember[]> {
+  const rows = await sql`
+    SELECT org_id, user_id, role FROM org_members WHERE user_id = ${userId}
+  `;
+  return rows.map((row) => ({ orgId: row.org_id, userId: row.user_id, role: row.role }));
+}
+
 export async function removeOrgMember(orgId: string, userId: string): Promise<boolean> {
   const result = await sql`
     DELETE FROM org_members WHERE org_id = ${orgId} AND user_id = ${userId}
