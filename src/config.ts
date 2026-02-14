@@ -267,6 +267,7 @@ async function buildRealmConfigFromDb(orgId: string): Promise<ResolvedConfig | n
       apiKey: "",
       webhookSecret,
       claudeBotUserId: dbRealm.claudeBotUserId ?? undefined,
+      promptTemplate: dbRealm.promptTemplate ?? undefined,
       projects,
     };
 
@@ -433,6 +434,17 @@ export function getRealmByTeamKey(teamKey: string): {
     workspace: realm.linearWorkspace,
     realmName: realm.name,
   };
+}
+
+/**
+ * Get the prompt template for a team key's realm.
+ * Returns null if no custom template is set.
+ */
+export function getPromptTemplateByTeamKey(teamKey: string): string | null {
+  if (!REALM_CONFIG) return null;
+
+  const realm = REALM_CONFIG.realmByTeamKey.get(teamKey);
+  return realm?.promptTemplate ?? null;
 }
 
 /**

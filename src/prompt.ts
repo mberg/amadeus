@@ -1,9 +1,180 @@
 // ABOUTME: Builds Claude prompts from Linear issue data.
-// ABOUTME: Formats issue details into actionable instructions for the agent.
+// ABOUTME: Supports editable prompt templates with {{variable}} substitution.
 
 import type { LinearIssue, LinearComment, AgentProfile, WorkflowState } from "./types";
 import type { PersistedAgentState } from "./persistence";
 import type { FetchedComment } from "./linear";
+
+/**
+ * Default prompt template with {{variable}} placeholders.
+ * This is the template used when no custom template is set on the realm.
+ * Admins can edit this per-realm via the admin UI.
+ *
+ * Available variables:
+ *   {{issueIdentifier}}        - e.g. "ONA-2118"
+ *   {{issueTitle}}             - issue title
+ *   {{issueId}}                - issue UUID
+ *   {{issuePriority}}          - priority number or "None"
+ *   {{issueLabels}}            - comma-separated labels or "None"
+ *   {{issueDescription}}       - issue body text
+ *   {{agentName}}              - e.g. "Amadeus"
+ *   {{stateIdTable}}           - rendered state ID table
+ *   {{feedbackNeededStateId}}  - state ID for "Feedback Needed"
+ *   {{buildingStateId}}        - state ID for "Building"
+ *   {{reviewStateId}}          - state ID for "Review"
+ *   {{gitBranch}}              - e.g. "issue/ONA-2118"
+ *   {{fileLinkingSection}}     - file reference instructions (if GitHub URL available)
+ *   {{commentHistorySection}}  - previous discussion history
+ *   {{profileSection}}         - profile capabilities
+ *   {{notificationSection}}    - creator notification instructions
+ *   {{reviewNotificationSection}} - review notification instructions
+ */
+export const DEFAULT_PROMPT_TEMPLATE = `## New Task from Linear
+
+**Issue**: {{issueIdentifier}} - {{issueTitle}}
+**Issue ID**: {{issueId}}
+**Priority**: {{issuePriority}}
+**Labels**: {{issueLabels}}
+
+### Description
+{{issueDescription}}
+
+### How to Communicate with Linear
+
+Use the \`linear-cli\` command line tool for all Linear interactions.
+
+**Post a comment:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 {{agentName}}:** Your message here" {{issueIdentifier}}
+\`\`\`
+**Important:** Always prefix your comments with \`**🤖 {{agentName}}:**\` so users know it's from the AI agent.
+
+**Update status:**
+\`\`\`bash
+linear-cli issues update {{issueIdentifier}} --state "<state-id>"
+\`\`\`
+
+**State IDs:**
+{{stateIdTable}}
+
+**Issue details:**
+- Issue ID: {{issueId}}
+- Issue identifier: {{issueIdentifier}}
+
+These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_ISSUE_IDENTIFIER.
+
+### Git Branch
+
+You are working in branch \`issue/{{issueIdentifier}}\`. All commits go to this branch.
+{{fileLinkingSection}}
+### Status Workflow
+
+The workflow has distinct phases:
+1. **Planning** → Analyze requirements, create implementation plan
+2. **Feedback Needed** → Present plan to user, wait for approval
+3. **Building** → Implement after user approves (only entered via user feedback)
+4. **Review** → Work complete, PR created
+
+### Workflow (Planning Phase)
+
+You are currently in the **Planning** phase. Do NOT start building yet.
+
+**Note:** The issue has already been acknowledged automatically. Proceed with the workflow below.
+
+**Step 1:** Analyze the requirements thoroughly:
+- Read and understand the issue description
+- Explore the codebase to understand the context
+- Identify files that need to be modified
+- Consider edge cases and potential challenges
+
+**Step 2:** Post your implementation plan as a comment:
+\`\`\`bash
+linear-cli comments create --body "**🤖 {{agentName}}:** Here's my implementation plan:
+
+[Your detailed plan here - include:
+- What files will be modified/created
+- The approach you'll take
+- Any assumptions you're making
+- Estimated scope of changes]
+
+Please review and let me know if you'd like any changes to this plan." {{issueIdentifier}}
+\`\`\`
+
+**Step 3:** Set status to Feedback Needed and STOP:
+\`\`\`bash
+linear-cli issues update {{issueIdentifier}} --state "{{feedbackNeededStateId}}"
+\`\`\`
+{{notificationSection}}
+**IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
+{{reviewNotificationSection}}
+### CRITICAL - User Communication
+
+**⚠️ THE USER CANNOT SEE YOUR TERMINAL OUTPUT ⚠️**
+
+The user can ONLY see messages you post to Linear. Your thoughts, questions, reasoning, and terminal output are completely invisible to them.
+
+**If you need to communicate ANYTHING to the user:**
+1. Ask a clarifying question → **POST IT TO LINEAR** via \`linear-cli comments create\`
+2. Share your analysis or findings → **POST IT TO LINEAR**
+3. Request feedback or approval → **POST IT TO LINEAR**
+4. Report progress or blockers → **POST IT TO LINEAR**
+
+**DO NOT:**
+- Output questions to the terminal and wait for a response (user won't see it)
+- Assume the user can read your internal monologue
+- Skip posting to Linear because you already "said" something in your output
+
+**DO:**
+- Use \`linear-cli comments create --body "**🤖 {{agentName}}:** your message" {{issueIdentifier}}\`
+- Update status to "Feedback Needed" when waiting for user input
+- STOP and wait after posting questions (don't keep working)
+
+**REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
+{{commentHistorySection}}{{profileSection}}`;
+
+/**
+ * Render a prompt template by substituting {{variable}} placeholders.
+ */
+export function renderTemplate(template: string, variables: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    return key in variables ? variables[key] : match;
+  });
+}
+
+/**
+ * Build the template variables from issue data and context.
+ */
+export function buildTemplateVariables(
+  issue: LinearIssue,
+  profile?: AgentProfile,
+  workspace?: string,
+  agentName: string = "Amadeus",
+  githubRepoUrl?: string,
+  existingComments?: FetchedComment[],
+  workflowStates?: WorkflowState[]
+): Record<string, string> {
+  return {
+    issueIdentifier: issue.identifier,
+    issueTitle: issue.title,
+    issueId: issue.id,
+    issuePriority: String(issue.priority ?? "None"),
+    issueLabels: issue.labels?.map((l) => l.name).join(", ") || "None",
+    issueDescription: issue.description || "No description provided.",
+    agentName,
+    stateIdTable: workflowStates?.length
+      ? buildStateIdTable(workflowStates)
+      : `*Use \`linear-cli statuses list --team <team>\` to find state IDs.*`,
+    feedbackNeededStateId: getStateId(workflowStates, "Feedback Needed"),
+    buildingStateId: getStateId(workflowStates, "Building"),
+    reviewStateId: getStateId(workflowStates, "Review"),
+    gitBranch: `issue/${issue.identifier}`,
+    fileLinkingSection: buildFileLinkingSection(githubRepoUrl, issue.identifier),
+    commentHistorySection: buildCommentHistorySection(existingComments),
+    profileSection: buildProfileSection(profile),
+    notificationSection: buildNotificationSection(workspace, issue.identifier),
+    reviewNotificationSection: buildReviewNotificationSection(workspace, issue.identifier),
+  };
+}
 
 /**
  * Build the state ID table from workflow states.
@@ -55,16 +226,27 @@ export function buildPrompt(
   agentName: string = "Amadeus",
   githubRepoUrl?: string,
   existingComments?: FetchedComment[],
-  workflowStates?: WorkflowState[]
+  workflowStates?: WorkflowState[],
+  promptTemplate?: string | null
 ): string {
-  const profileSection = buildProfileSection(profile);
   const yolo = isYoloMode(issue);
   const ultrathink = hasUltrathinkLabel(issue);
+  const ultrathinkPrefix = ultrathink ? "ultrathink\n\n" : "";
+
+  // If a custom prompt template is set and NOT in YOLO mode, use the template
+  if (promptTemplate && !yolo) {
+    const variables = buildTemplateVariables(
+      issue, profile, workspace, agentName, githubRepoUrl, existingComments, workflowStates
+    );
+    return `${ultrathinkPrefix}${renderTemplate(promptTemplate, variables)}`.trim();
+  }
+
+  // Fall back to the code-driven prompt (original logic)
+  const profileSection = buildProfileSection(profile);
   const notificationSection = buildNotificationSection(workspace, issue.identifier);
   const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace, workflowStates);
   const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
   const commentHistorySection = buildCommentHistorySection(existingComments);
-  const ultrathinkPrefix = ultrathink ? "ultrathink\n\n" : "";
 
   return `${ultrathinkPrefix}
 ## New Task from Linear
@@ -334,6 +516,34 @@ linear-cli issues update ${issueIdentifier ?? "<identifier>"} --assignee "<user-
 \`\`\`
 
 This triggers a reliable inbox notification for the user.
+`;
+}
+
+function buildReviewNotificationSection(
+  workspace?: string,
+  issueIdentifier?: string
+): string {
+  if (!workspace) {
+    return "";
+  }
+
+  return `
+### When Setting Status to Review
+
+After the user approves and you complete implementation:
+1. Push your changes and create a PR
+2. Set status to Review
+3. Notify the issue creator by assigning the issue to them:
+
+\`\`\`bash
+linear-cli users list
+\`\`\`
+Find the creator's user ID (UUID), then assign:
+\`\`\`bash
+linear-cli issues update ${issueIdentifier ?? "<identifier>"} --assignee "<user-uuid>"
+\`\`\`
+
+This ensures they receive an inbox notification that the PR is ready for review.
 `;
 }
 

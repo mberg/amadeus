@@ -365,7 +365,7 @@ export class ClaudeOrchestrator {
     }
   }
 
-  async startAgent(issue: LinearIssue, repoPathOverride?: string, linearApiKey?: string): Promise<void> {
+  async startAgent(issue: LinearIssue, repoPathOverride?: string, linearApiKey?: string, promptTemplate?: string | null): Promise<void> {
     const key = this.getAgentKey(issue);
 
     // Look up project path: hub-provided override first, then project name, team key, DEFAULT
@@ -557,7 +557,7 @@ export class ClaudeOrchestrator {
       }
     }
 
-    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments, workflowStates));
+    await this.sendMessage(key, buildPrompt(processedIssue, profile, this.config.linearWorkspace, this.config.agentName, githubRepoUrl ?? undefined, existingComments, workflowStates, promptTemplate));
   }
 
   private setupExitHandler(

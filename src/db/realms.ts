@@ -9,6 +9,7 @@ export interface DbRealm {
   name: string;
   linearWorkspace: string;
   claudeBotUserId: string | null;
+  promptTemplate: string | null;
   createdAt: Date;
 }
 
@@ -17,31 +18,34 @@ export interface CreateRealmParams {
   name: string;
   linearWorkspace: string;
   claudeBotUserId?: string;
+  promptTemplate?: string;
 }
 
-interface UpdateRealmParams {
+export interface UpdateRealmParams {
   name?: string;
   linearWorkspace?: string;
   claudeBotUserId?: string | null;
+  promptTemplate?: string | null;
 }
 
 export async function createRealm(params: CreateRealmParams): Promise<DbRealm> {
   const [row] = await sql`
-    INSERT INTO realms (org_id, name, linear_workspace, claude_bot_user_id)
+    INSERT INTO realms (org_id, name, linear_workspace, claude_bot_user_id, prompt_template)
     VALUES (
       ${params.orgId},
       ${params.name},
       ${params.linearWorkspace},
-      ${params.claudeBotUserId ?? null}
+      ${params.claudeBotUserId ?? null},
+      ${params.promptTemplate ?? null}
     )
-    RETURNING id, org_id, name, linear_workspace, claude_bot_user_id, created_at
+    RETURNING id, org_id, name, linear_workspace, claude_bot_user_id, prompt_template, created_at
   `;
   return rowToRealm(row);
 }
 
 export async function getRealm(id: string): Promise<DbRealm | null> {
   const [row] = await sql`
-    SELECT id, org_id, name, linear_workspace, claude_bot_user_id, created_at
+    SELECT id, org_id, name, linear_workspace, claude_bot_user_id, prompt_template, created_at
     FROM realms WHERE id = ${id}
   `;
   return row ? rowToRealm(row) : null;
@@ -49,7 +53,7 @@ export async function getRealm(id: string): Promise<DbRealm | null> {
 
 export async function getRealmByName(orgId: string, name: string): Promise<DbRealm | null> {
   const [row] = await sql`
-    SELECT id, org_id, name, linear_workspace, claude_bot_user_id, created_at
+    SELECT id, org_id, name, linear_workspace, claude_bot_user_id, prompt_template, created_at
     FROM realms WHERE org_id = ${orgId} AND name = ${name}
   `;
   return row ? rowToRealm(row) : null;
@@ -57,7 +61,7 @@ export async function getRealmByName(orgId: string, name: string): Promise<DbRea
 
 export async function getRealmsByOrg(orgId: string): Promise<DbRealm[]> {
   const rows = await sql`
-    SELECT id, org_id, name, linear_workspace, claude_bot_user_id, created_at
+    SELECT id, org_id, name, linear_workspace, claude_bot_user_id, prompt_template, created_at
     FROM realms WHERE org_id = ${orgId}
     ORDER BY created_at
   `;
@@ -71,14 +75,16 @@ export async function updateRealm(id: string, params: UpdateRealmParams): Promis
   const newName = params.name ?? current.name;
   const newWorkspace = params.linearWorkspace ?? current.linearWorkspace;
   const newBotUserId = params.claudeBotUserId !== undefined ? params.claudeBotUserId : current.claudeBotUserId;
+  const newPromptTemplate = params.promptTemplate !== undefined ? params.promptTemplate : current.promptTemplate;
 
   const [row] = await sql`
     UPDATE realms
     SET name = ${newName},
         linear_workspace = ${newWorkspace},
-        claude_bot_user_id = ${newBotUserId}
+        claude_bot_user_id = ${newBotUserId},
+        prompt_template = ${newPromptTemplate}
     WHERE id = ${id}
-    RETURNING id, org_id, name, linear_workspace, claude_bot_user_id, created_at
+    RETURNING id, org_id, name, linear_workspace, claude_bot_user_id, prompt_template, created_at
   `;
   return row ? rowToRealm(row) : null;
 }
@@ -97,6 +103,7 @@ function rowToRealm(row: Record<string, unknown>): DbRealm {
     name: row.name as string,
     linearWorkspace: row.linear_workspace as string,
     claudeBotUserId: (row.claude_bot_user_id as string) ?? null,
+    promptTemplate: (row.prompt_template as string) ?? null,
     createdAt: new Date(row.created_at as string),
   };
 }
