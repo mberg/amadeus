@@ -118,6 +118,19 @@ To set up a new machine for running agents, use the setup script:
 bun scripts/setup-machine.ts
 ```
 
+### Running the Machine Server
+
+```bash
+# Foreground (interactive)
+bun run dev
+
+# Background with logs
+bun run dev >> /tmp/amadeus.log 2>&1 &
+
+# Watch logs
+tail -f /tmp/amadeus.log
+```
+
 See README.md for full hub, cloud, and deployment documentation.
 
 ## Sprites (Remote Execution)

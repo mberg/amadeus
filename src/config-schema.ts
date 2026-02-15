@@ -157,6 +157,7 @@ export interface ResolvedRealm {
   apiKey: string;
   webhookSecret: string;
   claudeBotUserId?: string;
+  promptTemplate?: string;
   projects: Project[];
 }
 

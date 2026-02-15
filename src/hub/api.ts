@@ -253,6 +253,7 @@ export async function handleCreateRealm(req: Request, orgId: string): Promise<Re
     linearWorkspace: string;
     claudeBotUserId?: string;
     webhookSecret?: string;
+    promptTemplate?: string;
   };
   if (!body.name || !body.linearWorkspace) {
     return Response.json({ error: "name and linearWorkspace are required" }, { status: 400 });
@@ -263,6 +264,7 @@ export async function handleCreateRealm(req: Request, orgId: string): Promise<Re
     name: body.name,
     linearWorkspace: body.linearWorkspace,
     claudeBotUserId: body.claudeBotUserId,
+    promptTemplate: body.promptTemplate,
   });
 
   if (body.webhookSecret) {
@@ -283,6 +285,7 @@ export async function handleUpdateRealm(
     linearWorkspace?: string;
     claudeBotUserId?: string | null;
     webhookSecret?: string;
+    promptTemplate?: string | null;
   };
 
   const realm = await getRealm(realmId);
@@ -294,6 +297,7 @@ export async function handleUpdateRealm(
     name: body.name,
     linearWorkspace: body.linearWorkspace,
     claudeBotUserId: body.claudeBotUserId,
+    promptTemplate: body.promptTemplate,
   });
 
   if (body.webhookSecret) {

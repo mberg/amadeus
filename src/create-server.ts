@@ -19,6 +19,7 @@ import {
   isHubMode,
   isMachineMode,
   isStandaloneMode,
+  getPromptTemplateByTeamKey,
 } from "./config";
 import {
   recordCompletedTask,
@@ -183,7 +184,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     issue: LinearIssue,
     orgId: string,
     repoPathOverride?: string,
-    routingApiKey?: string
+    routingApiKey?: string,
+    routingPromptTemplate?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor) {
       console.error("[Webhook] Machine components not initialized");
@@ -239,6 +241,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     if (ctx.orchestrator.shouldStartAgent(issue)) {
       const teamKey = issue.identifier.split("-")[0];
       const apiKey = routingApiKey ?? await resolveLinearApiKey(orgId, teamKey, issue.assignee?.id);
+      const promptTemplate = routingPromptTemplate ?? getPromptTemplateByTeamKey(teamKey);
 
       if (ctx.orchestrator.hasAgent(agentKey)) {
         let workflowStates;
@@ -247,10 +250,10 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         }
         await ctx.orchestrator.sendMessage(
           agentKey,
-          buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName, undefined, undefined, workflowStates)
+          buildPrompt(issue, undefined, CONFIG.linearWorkspace, CONFIG.agentName, undefined, undefined, workflowStates, promptTemplate)
         );
       } else {
-        await ctx.orchestrator.startAgent(issue, repoPathOverride, apiKey ?? undefined);
+        await ctx.orchestrator.startAgent(issue, repoPathOverride, apiKey ?? undefined, promptTemplate);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
       }
@@ -262,7 +265,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     comment: LinearComment,
     orgId: string,
     repoPathOverride?: string,
-    routingApiKey?: string
+    routingApiKey?: string,
+    routingPromptTemplate?: string
   ): Promise<void> {
     if (!ctx.orchestrator || !ctx.healthMonitor || !ctx.persistence) {
       console.error("[Webhook] Machine components not initialized");
@@ -323,13 +327,14 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       comment.issue = issue;
 
       const savedState = ctx.persistence.getAgentByIssueId(comment.issueId);
+      const promptTemplate = routingPromptTemplate ?? getPromptTemplateByTeamKey(teamKey);
 
       if (savedState?.status === "dead") {
         console.log(
           `[${new Date().toISOString()}] Recovering agent for ${comment.issue.identifier} from saved state`
         );
 
-        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined, promptTemplate);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -354,7 +359,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         console.log(
           `[${new Date().toISOString()}] No active agent for ${comment.issue.identifier} - spawning new agent`
         );
-        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined);
+        await ctx.orchestrator.startAgent(comment.issue, repoPathOverride, apiKey ?? undefined, promptTemplate);
         ctx.healthMonitor.notifyAgentCountChanged();
         ctx.hubHeartbeat?.notifyAgentChange();
         agentKey = ctx.orchestrator.findAgentByIssueId(comment.issueId);
@@ -378,7 +383,8 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     teamKey: string,
     localRepoPath?: string | null,
     machineApiKey?: string | null,
-    linearApiKey?: string | null
+    linearApiKey?: string | null,
+    promptTemplate?: string | null
   ): Promise<void> {
     try {
       const headers: Record<string, string> = {
@@ -399,11 +405,12 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       let forwardPayload = payload;
-      if (localRepoPath || linearApiKey) {
+      if (localRepoPath || linearApiKey || promptTemplate) {
         const parsed = JSON.parse(payload);
         parsed._routing = {
           ...(localRepoPath && { localRepoPath }),
           ...(linearApiKey && { linearApiKey }),
+          ...(promptTemplate && { promptTemplate }),
         };
         forwardPayload = JSON.stringify(parsed);
       }
@@ -480,13 +487,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     return null;
   }
 
-  async function handleWebhook(payload: LinearWebhookPayload, orgId: string, repoPathOverride?: string, routingApiKey?: string): Promise<void> {
+  async function handleWebhook(payload: LinearWebhookPayload, orgId: string, repoPathOverride?: string, routingApiKey?: string, routingPromptTemplate?: string): Promise<void> {
     const { action, type, data } = payload;
 
     if (type === "Issue" && !isComment(data)) {
-      await handleIssueWebhook(action, data, orgId, repoPathOverride, routingApiKey);
+      await handleIssueWebhook(action, data, orgId, repoPathOverride, routingApiKey, routingPromptTemplate);
     } else if (type === "Comment" && isComment(data)) {
-      await handleCommentWebhook(action, data, orgId, repoPathOverride, routingApiKey);
+      await handleCommentWebhook(action, data, orgId, repoPathOverride, routingApiKey, routingPromptTemplate);
     }
   }
 
@@ -581,7 +588,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const data = JSON.parse(payload) as LinearWebhookPayload;
-      const routing = (data as any)._routing as { localRepoPath?: string; linearApiKey?: string } | undefined;
+      const routing = (data as any)._routing as { localRepoPath?: string; linearApiKey?: string; promptTemplate?: string } | undefined;
 
       const MAX_AGE_MS = 60000;
       const now = Date.now();
@@ -608,8 +615,9 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           const linearApiKey = teamKey
             ? await resolveLinearApiKey(orgId, teamKey, assigneeLinearId ?? undefined)
             : null;
-          console.log(`[HubForward] Routing to ${route.machineName} (id=${route.machineId}), hasApiKey=${!!machineKey}, hasLinearKey=${!!linearApiKey}`);
-          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey, linearApiKey).catch((err) => {
+          const promptTemplate = teamKey ? getPromptTemplateByTeamKey(teamKey) : null;
+          console.log(`[HubForward] Routing to ${route.machineName} (id=${route.machineId}), hasApiKey=${!!machineKey}, hasLinearKey=${!!linearApiKey}, hasPromptTemplate=${!!promptTemplate}`);
+          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey, linearApiKey, promptTemplate).catch((err) => {
             console.error("[HubForward] Error:", err);
           });
           return new Response("OK", { status: 200 });
@@ -633,7 +641,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("OK", { status: 200 });
       }
 
-      handleWebhook(data, orgId, routing?.localRepoPath, routing?.linearApiKey).catch((err) => {
+      handleWebhook(data, orgId, routing?.localRepoPath, routing?.linearApiKey, routing?.promptTemplate).catch((err) => {
         console.error("[Webhook] Error handling webhook:", err);
       });
 
@@ -1051,6 +1059,10 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
       // Realms
       if (resource === "realms") {
+        if (resourceId === "default-prompt-template" && req.method === "GET") {
+          const { DEFAULT_PROMPT_TEMPLATE } = await import("./prompt");
+          return Response.json({ template: DEFAULT_PROMPT_TEMPLATE });
+        }
         if (!resourceId && req.method === "GET") return api.handleGetRealms(orgId);
         if (!resourceId && req.method === "POST") return api.handleCreateRealm(req, orgId);
         if (resourceId && !subResource && req.method === "PUT") return api.handleUpdateRealm(req, orgId, resourceId);

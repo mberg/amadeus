@@ -164,6 +164,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_linear
 CREATE INDEX IF NOT EXISTS idx_projects_realm
   ON projects (realm_id);
 
+-- Add editable prompt template per realm
+ALTER TABLE realms ADD COLUMN IF NOT EXISTS prompt_template TEXT;
+
 -- Ensure a default org exists for open-source single-tenant mode
 INSERT INTO organizations (org_id) VALUES ('default')
   ON CONFLICT (org_id) DO NOTHING;

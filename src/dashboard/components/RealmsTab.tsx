@@ -1,14 +1,15 @@
-// ABOUTME: Admin tab for managing realms with list, add, delete, and webhook secret management.
+// ABOUTME: Admin tab for managing realms with list, add, delete, webhook secret, and prompt template management.
 // ABOUTME: Uses /hub/api/realms endpoints for CRUD operations including member management.
 
 import { useState, useEffect, useCallback } from "react";
-import { Trash2, Eye, EyeOff, Users, X, Pencil, Check } from "lucide-react";
+import { Trash2, Eye, EyeOff, Users, X, Pencil, Check, FileText } from "lucide-react";
 
 interface Realm {
   id: string;
   name: string;
   linearWorkspace: string;
   claudeBotUserId: string | null;
+  promptTemplate: string | null;
   hasWebhookSecret: boolean;
 }
 
@@ -60,6 +61,13 @@ export function RealmsTab() {
   const [addMemberUserId, setAddMemberUserId] = useState("");
   const [membersLoading, setMembersLoading] = useState(false);
 
+  // Prompt template editing state
+  const [promptRealmId, setPromptRealmId] = useState<string | null>(null);
+  const [promptTemplate, setPromptTemplate] = useState("");
+  const [defaultTemplate, setDefaultTemplate] = useState<string | null>(null);
+  const [promptSubmitting, setPromptSubmitting] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+
   const fetchRealms = useCallback(async () => {
     try {
       const res = await fetch("/hub/api/realms");
@@ -91,6 +99,21 @@ export function RealmsTab() {
       setMembersLoading(false);
     }
   }, []);
+
+  const fetchDefaultTemplate = useCallback(async () => {
+    if (defaultTemplate !== null) return defaultTemplate;
+    try {
+      const res = await fetch("/hub/api/realms/default-prompt-template");
+      if (res.ok) {
+        const data = await res.json();
+        setDefaultTemplate(data.template);
+        return data.template as string;
+      }
+    } catch (err) {
+      console.error("Failed to fetch default template:", err);
+    }
+    return null;
+  }, [defaultTemplate]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -231,6 +254,45 @@ export function RealmsTab() {
     }
   }
 
+  async function openPromptEditor(realm: Realm) {
+    const newId = promptRealmId === realm.id ? null : realm.id;
+    setPromptRealmId(newId);
+    setPromptError(null);
+    if (newId) {
+      const defTemplate = await fetchDefaultTemplate();
+      setPromptTemplate(realm.promptTemplate ?? defTemplate ?? "");
+    }
+  }
+
+  async function handleSavePromptTemplate(realmId: string) {
+    setPromptError(null);
+    setPromptSubmitting(true);
+    try {
+      const res = await fetch(`/hub/api/realms/${realmId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptTemplate: promptTemplate || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setPromptRealmId(null);
+      await fetchRealms();
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : "Failed to save prompt template");
+    } finally {
+      setPromptSubmitting(false);
+    }
+  }
+
+  async function handleResetToDefault() {
+    const defTemplate = await fetchDefaultTemplate();
+    if (defTemplate) {
+      setPromptTemplate(defTemplate);
+    }
+  }
+
   if (loading) {
     return <div className="text-muted-foreground">Loading realms...</div>;
   }
@@ -332,6 +394,7 @@ export function RealmsTab() {
               <th className="pb-2 font-medium">Name</th>
               <th className="pb-2 font-medium">Workspace</th>
               <th className="pb-2 font-medium">Webhook Secret</th>
+              <th className="pb-2 font-medium">Prompt</th>
               <th className="pb-2 font-medium w-32">Actions</th>
             </tr>
           </thead>
@@ -364,6 +427,17 @@ export function RealmsTab() {
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
                           missing
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5">
+                      {realm.promptTemplate ? (
+                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+                          custom
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          default
                         </span>
                       )}
                     </td>
@@ -403,6 +477,17 @@ export function RealmsTab() {
                       )}
                     </td>
                     <td className="py-2.5">
+                      {realm.promptTemplate ? (
+                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+                          custom
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          default
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => startEditingRealm(realm)}
@@ -410,6 +495,13 @@ export function RealmsTab() {
                           title="Edit realm"
                         >
                           <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => openPromptEditor(realm)}
+                          className={`p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors ${promptRealmId === realm.id ? "bg-muted/50 text-foreground" : ""}`}
+                          title="Edit prompt template"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => {
@@ -453,6 +545,59 @@ export function RealmsTab() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {/* Prompt template editor */}
+      {promptRealmId && (
+        <div className="p-4 rounded-md border border-border bg-card space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">
+              Prompt Template — {realms.find((r) => r.id === promptRealmId)?.name}
+            </h4>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleResetToDefault}
+                className="rounded-md border border-input px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
+              >
+                Reset to Default
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Edit the prompt template sent to agents. Use {"{{variables}}"} for dynamic values:
+            {" "}{"{{issueIdentifier}}"}, {"{{issueTitle}}"}, {"{{issueId}}"}, {"{{issuePriority}}"}, {"{{issueLabels}}"},
+            {" "}{"{{issueDescription}}"}, {"{{agentName}}"}, {"{{stateIdTable}}"}, {"{{feedbackNeededStateId}}"},
+            {" "}{"{{buildingStateId}}"}, {"{{reviewStateId}}"}, {"{{gitBranch}}"}, {"{{fileLinkingSection}}"},
+            {" "}{"{{commentHistorySection}}"}, {"{{profileSection}}"}, {"{{notificationSection}}"},
+            {" "}{"{{reviewNotificationSection}}"}
+          </p>
+          <textarea
+            value={promptTemplate}
+            onChange={(e) => setPromptTemplate(e.target.value)}
+            rows={20}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+            placeholder="Enter custom prompt template..."
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleSavePromptTemplate(promptRealmId)}
+              disabled={promptSubmitting}
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {promptSubmitting ? "Saving..." : "Save Template"}
+            </button>
+            <button
+              onClick={() => {
+                setPromptRealmId(null);
+                setPromptError(null);
+              }}
+              className="rounded-md border border-input px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+            >
+              Cancel
+            </button>
+            {promptError && <p className="text-xs text-destructive">{promptError}</p>}
+          </div>
+        </div>
       )}
 
       {/* Members management */}
