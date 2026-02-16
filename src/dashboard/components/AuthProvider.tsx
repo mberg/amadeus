@@ -14,6 +14,8 @@ interface AuthInfo {
 
 interface MeResponse {
   authenticated: boolean;
+  accessDenied?: boolean;
+  message?: string;
   user?: { id: string; name: string; email: string; image?: string };
   role?: UserRole;
   hubUserId?: string | null;
@@ -69,6 +71,11 @@ function BetterAuthContent({ children, enableAgentMessaging }: { children: React
   const canMessage = role === "operator" || role === "admin";
   const canEditConfig = role === "admin";
   const isSignedIn = !!session?.user;
+
+  // Show access denied screen if user is authenticated but not registered
+  if (!loading && me?.accessDenied) {
+    return <AccessDeniedPage message={me.message} />;
+  }
 
   const value: AuthContextValue = {
     mode: "betterauth",
@@ -166,6 +173,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
     <SimpleAuthContent enableAgentMessaging={enableAgentMessaging}>
       {children}
     </SimpleAuthContent>
+  );
+}
+
+function AccessDeniedPage({ message }: { message?: string }) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="w-full max-w-sm text-center">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight">Amadeus</h1>
+        </div>
+        <div className="bg-card border rounded-lg shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-foreground">Access Denied</h2>
+          <p className="text-sm text-muted-foreground">
+            {message ?? "Your account has not been registered. Please contact your administrator to request access."}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              authClient.signOut().then(() => window.location.reload());
+            }}
+            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
