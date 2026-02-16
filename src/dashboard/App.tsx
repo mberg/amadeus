@@ -51,11 +51,9 @@ export function App() {
       let response: Response;
 
       if (machineUrl) {
-        // Remote task - use hub proxy
-        response = await fetch("/hub/proxy/stop", {
+        // Remote task - fetch directly from machine
+        response = await fetch(`${machineUrl}/agents/${encodeURIComponent(taskKey)}/stop`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ machineUrl, taskKey }),
         });
       } else {
         // Local task

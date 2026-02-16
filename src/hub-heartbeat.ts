@@ -11,6 +11,7 @@ export interface HubHeartbeatConfig {
   apiKey?: string;
   token?: string;
   intervalMs?: number;
+  onStopCommand?: (agentKey: string, reason: string) => void;
 }
 
 const DEFAULT_INTERVAL_MS = 2000; // Match dashboard poll rate for real-time feel
@@ -60,6 +61,18 @@ export class HubHeartbeat {
 
       if (!response.ok) {
         console.warn(`[HubHeartbeat] Failed: HTTP ${response.status}`);
+      } else {
+        // Process commands from hub
+        try {
+          const body = await response.json() as { commands?: { stop?: Array<{ agentKey: string; reason: string }> } };
+          const stopCommands = body?.commands?.stop ?? [];
+          for (const cmd of stopCommands) {
+            console.log(`[HubHeartbeat] Received stop command for ${cmd.agentKey} (${cmd.reason})`);
+            this.config.onStopCommand?.(cmd.agentKey, cmd.reason);
+          }
+        } catch {
+          // Hub may return non-JSON (backward compatibility)
+        }
       }
 
       // Track agent count for adaptive interval
