@@ -39,6 +39,8 @@ import type { HealthMonitor } from "./health-monitor";
 import type { MachineRegistry } from "./hub/registry";
 import type { RouterHeartbeat } from "./router-heartbeat";
 import type { HubHeartbeat } from "./hub-heartbeat";
+import type { HubConnection } from "./hub-connection";
+import type { WsConnections } from "./hub/ws-connections";
 import type { IdleScanner } from "./hub/idle-scanner";
 import type { LinearWebhookPayload, LinearIssue, LinearComment, AgentStatus } from "./types";
 import { checkPRMerged, deleteBranch } from "./github";
@@ -61,8 +63,10 @@ export interface ServerContext {
   healthMonitor: HealthMonitor | null;
   persistence: AgentPersistence | null;
   hubHeartbeat: HubHeartbeat | null;
+  hubConnection: HubConnection | null;
   routerHeartbeat: RouterHeartbeat | null;
   idleScanner: IdleScanner | null;
+  wsConnections: WsConnections | null;
 }
 
 export function createFetchHandler(ctx: ServerContext): (req: Request) => Promise<Response> {
@@ -377,6 +381,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
   }
 
   async function forwardWebhookToMachine(
+    machineName: string,
     machineUrl: string,
     payload: string,
     signature: string | null,
@@ -386,6 +391,89 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
     linearApiKey?: string | null,
     promptTemplate?: string | null
   ): Promise<void> {
+    // Prefer WebSocket delivery when machine is connected
+    if (ctx.wsConnections && ctx.wsConnections.isConnected(machineName)) {
+      const routing = (localRepoPath || linearApiKey || promptTemplate)
+        ? {
+            ...(localRepoPath && { localRepoPath }),
+            ...(linearApiKey && { linearApiKey }),
+            ...(promptTemplate && { promptTemplate }),
+          }
+        : undefined;
+
+      const sent = ctx.wsConnections.send(machineName, {
+        type: "webhook",
+        payload,
+        signature,
+        routing,
+      });
+
+      if (sent) {
+        console.log(`[WebhookForward] Delivered webhook to ${machineName} via WebSocket for ${teamKey}`);
+        return;
+      }
+      console.warn(`[WebhookForward] WebSocket send failed for ${machineName}, falling back to HTTP`);
+    }
+
+    // If machine has a WS connection tracker but isn't connected, retry with delay
+    if (ctx.wsConnections && machineName) {
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY_MS = 5_000;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+
+        if (ctx.wsConnections.isConnected(machineName)) {
+          const routing = (localRepoPath || linearApiKey || promptTemplate)
+            ? {
+                ...(localRepoPath && { localRepoPath }),
+                ...(linearApiKey && { linearApiKey }),
+                ...(promptTemplate && { promptTemplate }),
+              }
+            : undefined;
+
+          const sent = ctx.wsConnections.send(machineName, {
+            type: "webhook",
+            payload,
+            signature,
+            routing,
+          });
+
+          if (sent) {
+            console.log(`[WebhookForward] Delivered webhook to ${machineName} via WebSocket (retry ${attempt}) for ${teamKey}`);
+            return;
+          }
+        }
+
+        console.log(`[WebhookForward] Machine ${machineName} not connected (retry ${attempt}/${MAX_RETRIES})`);
+      }
+
+      // All retries exhausted — post Linear comment
+      console.warn(`[WebhookForward] Machine ${machineName} unreachable after ${MAX_RETRIES} retries`);
+      try {
+        const parsedPayload = JSON.parse(payload);
+        const apiKey = linearApiKey
+          ?? await resolveLinearApiKey(
+            getRequestOrgId(new URL("http://localhost")),
+            teamKey
+          );
+        if (apiKey) {
+          const issueId = parsedPayload?.data?.id ?? parsedPayload?.data?.issueId;
+          if (issueId) {
+            await postLinearComment(
+              issueId,
+              `⚠️ Machine \`${machineName}\` is not connected. This webhook could not be delivered.`,
+              apiKey
+            );
+          }
+        }
+      } catch (commentErr) {
+        console.warn(`[WebhookForward] Failed to post Linear comment: ${commentErr instanceof Error ? commentErr.message : "Unknown"}`);
+      }
+      return;
+    }
+
+    // HTTP fallback (for backward compatibility during migration)
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -460,6 +548,26 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           err instanceof Error ? err.message : "Unknown error"
         }`
       );
+    }
+  }
+
+  /**
+   * Post a comment on a Linear issue.
+   */
+  async function postLinearComment(issueId: string, body: string, apiKey: string): Promise<void> {
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({
+        query: `mutation($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success } }`,
+        variables: { issueId, body },
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Linear API returned ${response.status}`);
     }
   }
 
@@ -617,7 +725,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
             : null;
           const promptTemplate = teamKey ? getPromptTemplateByTeamKey(teamKey) : null;
           console.log(`[HubForward] Routing to ${route.machineName} (id=${route.machineId}), hasApiKey=${!!machineKey}, hasLinearKey=${!!linearApiKey}, hasPromptTemplate=${!!promptTemplate}`);
-          forwardWebhookToMachine(route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey, linearApiKey, promptTemplate).catch((err) => {
+          forwardWebhookToMachine(route.machineName ?? "unknown", route.machineUrl, payload, signature, route.machineName ?? "unknown", route.localRepoPath, machineKey, linearApiKey, promptTemplate).catch((err) => {
             console.error("[HubForward] Error:", err);
           });
           return new Response("OK", { status: 200 });
@@ -635,7 +743,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       const machineUrl = getMachineUrlForProject(projectName ?? undefined, teamKey ?? undefined);
       if (machineUrl) {
         const identifier = projectName ?? teamKey ?? "unknown";
-        forwardWebhookToMachine(machineUrl, payload, signature, identifier).catch((err) => {
+        forwardWebhookToMachine(identifier, machineUrl, payload, signature, identifier).catch((err) => {
           console.error("[WebhookForward] Error:", err);
         });
         return new Response("OK", { status: 200 });
@@ -902,6 +1010,26 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const machine = ctx.machineRegistry?.getAll().find(m => m.url === proxyMachineUrl);
+
+      // Prefer WebSocket
+      if (machine && ctx.wsConnections?.isConnected(machine.name)) {
+        try {
+          const requestId = crypto.randomUUID();
+          const response = await ctx.wsConnections.sendRequest(machine.name, {
+            type: "get-messages",
+            id: requestId,
+            agentKey: taskKey,
+          });
+          if (response.type === "messages-response") {
+            return Response.json(response.messages);
+          }
+        } catch (err) {
+          console.warn(`[Hub] WS proxy messages failed: ${err instanceof Error ? err.message : "Unknown"}`);
+          // Fall through to HTTP
+        }
+      }
+
+      // HTTP fallback
       const headers: Record<string, string> = {};
       if (machine?.apiKey) {
         headers["Authorization"] = `Bearer ${machine.apiKey}`;
@@ -927,7 +1055,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
     }
 
-    // Hub proxy for remote machine agent stop - queues command for next heartbeat
+    // Hub proxy for remote machine agent stop - sends via WS or queues for heartbeat
     if (req.method === "POST" && url.pathname === "/hub/proxy/stop") {
       if (!isHubMode() && !isStandaloneMode()) {
         return new Response("Not available in machine mode", { status: 404 });
@@ -945,6 +1073,20 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("Unknown machine", { status: 404 });
       }
 
+      // Prefer WebSocket for instant delivery
+      if (ctx.wsConnections?.isConnected(machine.name)) {
+        const sent = ctx.wsConnections.send(machine.name, {
+          type: "stop",
+          agentKey: taskKey,
+          reason: "stopped",
+        });
+        if (sent) {
+          console.log(`[Hub] Sent stop command for ${taskKey} to ${machine.name} via WebSocket`);
+          return Response.json({ success: true });
+        }
+      }
+
+      // Fallback to heartbeat queue
       ctx.machineRegistry?.queueStopCommand(machine.name, taskKey, "stopped");
       console.log(`[Hub] Queued stop command for ${taskKey} on ${machine.name}`);
       return Response.json({ success: true, queued: true });
@@ -964,6 +1106,29 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const machine = ctx.machineRegistry?.getAll().find(m => m.url === proxyMachineUrl);
+
+      // Prefer WebSocket
+      if (machine && ctx.wsConnections?.isConnected(machine.name)) {
+        try {
+          const requestId = crypto.randomUUID();
+          const response = await ctx.wsConnections.sendRequest(machine.name, {
+            type: "trigger",
+            id: requestId,
+            agentKey,
+            message,
+          });
+          if (response.type === "trigger-response") {
+            return new Response(response.success ? "Sent" : "Failed", {
+              status: response.success ? 200 : 500,
+            });
+          }
+        } catch (err) {
+          console.warn(`[Hub] WS proxy trigger failed: ${err instanceof Error ? err.message : "Unknown"}`);
+          // Fall through to HTTP
+        }
+      }
+
+      // HTTP fallback
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (machine?.apiKey) {
         headers["Authorization"] = `Bearer ${machine.apiKey}`;

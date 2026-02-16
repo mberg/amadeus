@@ -20,9 +20,11 @@ import {
   recordCompletedTask,
 } from "./db";
 import { MachineRegistry } from "./hub/registry";
+import { WsConnections, type WsConnectionData } from "./hub/ws-connections";
 import { IdleScanner } from "./hub/idle-scanner";
 import { RouterHeartbeat } from "./router-heartbeat";
 import { HubHeartbeat } from "./hub-heartbeat";
+import { HubConnection } from "./hub-connection";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
@@ -30,6 +32,10 @@ import { isBetterAuthEnabled } from "./auth";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged, deleteBranch } from "./github";
 import { createFetchHandler, type ServerContext } from "./create-server";
+import {
+  parseWsMessage,
+  type MachineToHubMessage,
+} from "./ws-protocol";
 
 // Initialize config from Postgres (seeds from local YAML on first run)
 await initConfig();
@@ -40,8 +46,10 @@ console.log(`[Server] Starting in ${getRuntimeMode()} mode as "${machineConfig.n
 
 // Hub components (hub or standalone mode)
 let machineRegistry: MachineRegistry | null = null;
+let wsConnections: WsConnections | null = null;
 if (isHubMode() || isStandaloneMode()) {
   machineRegistry = new MachineRegistry();
+  wsConnections = new WsConnections();
   const dbMachines = await getMachines("default");
   if (dbMachines.length > 0) {
     machineRegistry.loadFromDb(dbMachines);
@@ -72,6 +80,7 @@ if (isMachineMode() || isStandaloneMode()) {
       `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
     );
     if (isMachineMode()) {
+      hubConnection?.reportCompletion(info);
       hubHeartbeat?.reportCompletion(info);
       persistence?.saveCompletedTask({
         key: info.key,
@@ -110,7 +119,7 @@ if (isMachineMode() || isStandaloneMode()) {
     onAgentDeath: handleAgentDeath,
     onAgentComplete: handleAgentComplete,
     onAgentChange: () => {
-      // Notify hub heartbeat immediately when agents change
+      hubConnection?.notifyAgentChange();
       hubHeartbeat?.notifyAgentChange();
       healthMonitor?.notifyAgentCountChanged();
     },
@@ -163,9 +172,70 @@ if (routerConfig && machineConfig.heartbeat) {
   console.log("[RouterHeartbeat] Heartbeat disabled in machine config");
 }
 
-// Initialize hub heartbeat if machine has hubUrl configured
+// Initialize hub connection (WebSocket) if machine has hubUrl configured
+let hubConnection: HubConnection | null = null;
+if (isMachineMode() && machineConfig.hubUrl && machineConfig.token) {
+  const getAgents = async () => {
+    return orchestrator ? await orchestrator.getStatusWithMemory() : [];
+  };
+
+  hubConnection = new HubConnection(
+    {
+      hubUrl: machineConfig.hubUrl,
+      machineName: machineConfig.name,
+      token: machineConfig.token,
+      onStopCommand: async (agentKey, reason) => {
+        if (orchestrator?.hasAgent(agentKey)) {
+          console.log(`[HubConnection] Stopping agent ${agentKey} (${reason})`);
+          await orchestrator.stopAgent(agentKey, reason as any);
+          healthMonitor?.notifyAgentCountChanged();
+        }
+      },
+      onWebhook: (payload, signature, routing) => {
+        // Process webhook as if received via HTTP
+        server.fetch(new Request(`http://localhost:${getServerPort()}/webhook`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(signature ? { "linear-signature": signature } : {}),
+            ...(process.env.AMADEUS_API_KEY ? { "X-Amadeus-Secret": process.env.AMADEUS_API_KEY } : {}),
+          },
+          body: routing
+            ? JSON.stringify({ ...JSON.parse(payload), _routing: routing })
+            : payload,
+        })).catch(err => console.error("[HubConnection] Webhook processing error:", err));
+      },
+      onGetMessages: async (agentKey) => {
+        if (!orchestrator) return [];
+        const agent = orchestrator.getStatus().find(a => a.key === agentKey);
+        if (!agent) return [];
+        try {
+          const res = await fetch(`http://localhost:${agent.port}/messages`);
+          return await res.json();
+        } catch {
+          return [];
+        }
+      },
+      onTrigger: async (agentKey, message) => {
+        if (!orchestrator) return false;
+        try {
+          await orchestrator.sendMessage(agentKey, message);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    },
+    getAgents
+  );
+
+  hubConnection.start();
+  console.log(`[HubConnection] Connecting via WebSocket to ${machineConfig.hubUrl}`);
+}
+
+// Initialize hub heartbeat (HTTP fallback) if machine has hubUrl but no token for WS
 let hubHeartbeat: HubHeartbeat | null = null;
-if (isMachineMode() && machineConfig.hubUrl) {
+if (isMachineMode() && machineConfig.hubUrl && !hubConnection) {
   const getAgents = async () => {
     return orchestrator ? await orchestrator.getStatusWithMemory() : [];
   };
@@ -210,12 +280,25 @@ if ((isHubMode() || isStandaloneMode()) && machineRegistry) {
       return;
     }
 
-    // For remote machines, queue stop command for delivery via heartbeat
+    // For remote machines, prefer WebSocket for instant delivery
     const machine = machineRegistry!.getAll().find(m => m.url === machineUrl);
     if (!machine) {
       throw new Error(`Machine not found for URL: ${machineUrl}`);
     }
 
+    if (wsConnections?.isConnected(machine.name)) {
+      const sent = wsConnections.send(machine.name, {
+        type: "stop",
+        agentKey,
+        reason: "idle",
+      });
+      if (sent) {
+        console.log(`[IdleScanner] Sent stop command for ${agentKey} to ${machine.name} via WebSocket`);
+        return;
+      }
+    }
+
+    // Fallback to heartbeat queue
     machineRegistry!.queueStopCommand(machine.name, agentKey, "idle");
     console.log(`[IdleScanner] Queued stop command for ${agentKey} on ${machine.name}`);
   };
@@ -303,21 +386,160 @@ const ctx: ServerContext = {
   healthMonitor,
   persistence,
   hubHeartbeat,
+  hubConnection,
   routerHeartbeat,
   idleScanner,
+  wsConnections,
 };
 const handler = createFetchHandler(ctx);
 
 const serverPort = getServerPort();
 
-export const server = Bun.serve({
+// WebSocket handler for hub mode (machines connect to this)
+async function handleWsAuth(
+  ws: import("bun").ServerWebSocket<WsConnectionData>,
+  msg: MachineToHubMessage
+): Promise<void> {
+  if (msg.type !== "auth") {
+    ws.send(JSON.stringify({ type: "auth-fail", reason: "Expected auth message" }));
+    ws.close(1008, "Expected auth message");
+    return;
+  }
+
+  const { authenticateMachine, updateMachineLastSeen } = await import("./db");
+  const dbAuth = await authenticateMachine(msg.tokenHash);
+
+  if (!dbAuth) {
+    console.log(`[WS] Auth failed for machine "${msg.machineName}"`);
+    ws.send(JSON.stringify({ type: "auth-fail", reason: "Invalid token" }));
+    ws.close(1008, "Invalid token");
+    return;
+  }
+
+  ws.data.machineName = msg.machineName;
+  ws.data.machineId = dbAuth.machineId;
+  ws.data.orgId = dbAuth.orgId;
+  ws.data.authenticated = true;
+
+  // Register in both places
+  machineRegistry?.register(msg.machineName, "", machineConfig.token);
+  wsConnections?.register(msg.machineName, ws);
+  await updateMachineLastSeen(dbAuth.machineId);
+
+  ws.send(JSON.stringify({ type: "auth-ok" }));
+  console.log(`[WS] Machine "${msg.machineName}" authenticated`);
+}
+
+async function handleWsMessage(
+  ws: import("bun").ServerWebSocket<WsConnectionData>,
+  msg: MachineToHubMessage
+): Promise<void> {
+  if (!ws.data.authenticated || !ws.data.machineName) return;
+
+  switch (msg.type) {
+    case "heartbeat": {
+      machineRegistry?.updateStatus(ws.data.machineName, "healthy", msg.agents);
+      console.log(`[WS] Heartbeat from ${ws.data.machineName}: ${msg.agents.length} agents`);
+
+      // Drain any pending stop commands (for backward compatibility during migration)
+      const stopCommands = machineRegistry?.drainStopCommands(ws.data.machineName) ?? [];
+      for (const cmd of stopCommands) {
+        ws.send(JSON.stringify({ type: "stop", agentKey: cmd.agentKey, reason: cmd.reason }));
+      }
+
+      ws.send(JSON.stringify({ type: "heartbeat-ack" }));
+      break;
+    }
+
+    case "agent-complete": {
+      const orgId = ws.data.orgId ?? "default";
+      await recordCompletedTask(orgId, {
+        key: msg.completion.key,
+        issueId: msg.completion.issueId,
+        issueIdentifier: msg.completion.issueIdentifier,
+        issueTitle: msg.completion.issueTitle,
+        linearProject: msg.completion.linearProject,
+        completedAt: new Date(),
+        completionReason: msg.completion.completionReason,
+        finalLinearState: msg.completion.finalLinearState,
+        duration: msg.completion.duration,
+      });
+      console.log(`[WS] Agent completion from ${ws.data.machineName}: ${msg.completion.issueIdentifier} (${msg.completion.completionReason})`);
+      break;
+    }
+
+    case "messages-response":
+    case "trigger-response": {
+      wsConnections?.handleResponse(msg);
+      break;
+    }
+  }
+}
+
+export const server = Bun.serve<WsConnectionData>({
   port: serverPort,
 
   routes: {
     "/dashboard": dashboardHtml,
   },
 
-  fetch: handler,
+  fetch(req, server) {
+    const url = new URL(req.url);
+
+    // WebSocket upgrade for machine connections
+    if (url.pathname === "/ws" && (isHubMode() || isStandaloneMode())) {
+      const upgraded = server.upgrade(req, {
+        data: {
+          machineName: null,
+          machineId: null,
+          orgId: null,
+          authenticated: false,
+        },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    return handler(req);
+  },
+
+  websocket: {
+    open(ws) {
+      console.log("[WS] New connection");
+    },
+
+    message(ws, message) {
+      const msg = parseWsMessage(message as string);
+      if (!msg) {
+        console.warn("[WS] Unparseable message");
+        return;
+      }
+
+      // Type guard: only handle machine→hub messages
+      if (!("type" in msg)) return;
+      const machineMsg = msg as MachineToHubMessage;
+
+      if (!ws.data.authenticated) {
+        handleWsAuth(ws, machineMsg).catch(err =>
+          console.error("[WS] Auth error:", err)
+        );
+      } else {
+        handleWsMessage(ws, machineMsg).catch(err =>
+          console.error("[WS] Message error:", err)
+        );
+      }
+    },
+
+    close(ws, code, reason) {
+      if (ws.data.machineName) {
+        wsConnections?.remove(ws.data.machineName, ws);
+        console.log(`[WS] Machine "${ws.data.machineName}" disconnected (code=${code})`);
+      }
+    },
+
+    ping(ws) {},
+    pong(ws) {},
+  },
 });
 
 // Start polling for merged PRs (unless disabled)
@@ -343,6 +565,11 @@ async function shutdown(): Promise<void> {
     routerHeartbeat.stop();
   }
 
+  // Stop hub connection if running
+  if (hubConnection) {
+    hubConnection.stop();
+  }
+
   // Stop hub heartbeat if running
   if (hubHeartbeat) {
     hubHeartbeat.stop();
@@ -351,6 +578,11 @@ async function shutdown(): Promise<void> {
   // Stop idle scanner if running
   if (idleScanner) {
     idleScanner.stop();
+  }
+
+  // Close WebSocket connections
+  if (wsConnections) {
+    wsConnections.close();
   }
 
   if (prCheckInterval) {
@@ -378,6 +610,7 @@ process.on("SIGTERM", shutdown);
 
 console.log(`🎼 Amadeus listening on http://localhost:${server.port}`);
 console.log(`   Webhook:   https://your-machine.ts.net/webhook`);
+console.log(`   WebSocket: ws://localhost:${server.port}/ws`);
 console.log(`   Status:    http://localhost:${server.port}/status`);
 console.log(`   Dashboard: http://localhost:${server.port}/dashboard`);
 console.log(`   PR Check:  ${CONFIG.disablePRCheck ? "Disabled" : `Every ${PR_CHECK_INTERVAL_MS / 1000 / 60} minutes`}`);

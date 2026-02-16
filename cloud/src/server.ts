@@ -22,6 +22,11 @@ import { migrateCloud } from "./db/cloud-db";
 import amadeusHtml from "../../src/dashboard/index.html";
 import setupHtml from "./dashboard/index.html";
 import adminHtml from "./dashboard/admin.html";
+import {
+  parseWsMessage,
+  type MachineToHubMessage,
+} from "../../src/ws-protocol";
+import type { WsConnectionData } from "../../src/hub/ws-connections";
 
 // Initialize config from Postgres
 await initConfig();
@@ -88,6 +93,7 @@ console.log(`[Cloud] Starting in ${getRuntimeMode()} mode as "${machineConfig.na
 
 // Dynamic imports for amadeus components (not all are re-exported)
 const { MachineRegistry } = await import("../../src/hub/registry.ts");
+const { WsConnections } = await import("../../src/hub/ws-connections.ts");
 const { IdleScanner } = await import("../../src/hub/idle-scanner.ts");
 const { RouterHeartbeat } = await import("../../src/router-heartbeat.ts");
 const { HubHeartbeat } = await import("../../src/hub-heartbeat.ts");
@@ -97,8 +103,10 @@ const { HealthMonitor } = await import("../../src/health-monitor.ts");
 
 // Hub components (hub or standalone mode)
 let machineRegistry: InstanceType<typeof MachineRegistry> | null = null;
+let wsConnections: InstanceType<typeof WsConnections> | null = null;
 if (isHubMode() || isStandaloneMode()) {
   machineRegistry = new MachineRegistry();
+  wsConnections = new WsConnections();
   const dbMachines = await getMachines("default");
   if (dbMachines.length > 0) {
     machineRegistry.loadFromDb(dbMachines);
@@ -226,6 +234,21 @@ if ((isHubMode() || isStandaloneMode()) && machineRegistry) {
     }
     const machine = machineRegistry!.getAll().find((m: any) => m.url === machineUrl);
     if (!machine) throw new Error(`Machine not found for URL: ${machineUrl}`);
+
+    // Prefer WebSocket for instant delivery
+    if (wsConnections?.isConnected(machine.name)) {
+      const sent = wsConnections.send(machine.name, {
+        type: "stop",
+        agentKey,
+        reason: "idle",
+      });
+      if (sent) {
+        console.log(`[IdleScanner] Sent stop command for ${agentKey} to ${machine.name} via WebSocket`);
+        return;
+      }
+    }
+
+    // Fallback to HTTP
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (machine.apiKey) headers["Authorization"] = `Bearer ${machine.apiKey}`;
     const res = await fetch(`${machineUrl}/agents/${encodeURIComponent(agentKey)}/stop`, { method: "POST", headers });
@@ -240,21 +263,157 @@ const ctx: ServerContext = {
   healthMonitor,
   persistence,
   hubHeartbeat,
+  hubConnection: null,
   routerHeartbeat,
   idleScanner,
+  wsConnections,
 };
 
 const handler = createCloudHandler(ctx);
 const serverPort = getServerPort();
 
-export const server = Bun.serve({
+// WebSocket handler for hub mode (machines connect to this)
+async function handleWsAuth(
+  ws: import("bun").ServerWebSocket<WsConnectionData>,
+  msg: MachineToHubMessage
+): Promise<void> {
+  if (msg.type !== "auth") {
+    ws.send(JSON.stringify({ type: "auth-fail", reason: "Expected auth message" }));
+    ws.close(1008, "Expected auth message");
+    return;
+  }
+
+  const { authenticateMachine, updateMachineLastSeen } = await import("../../src/db");
+  const dbAuth = await authenticateMachine(msg.tokenHash);
+
+  if (!dbAuth) {
+    console.log(`[WS] Auth failed for machine "${msg.machineName}"`);
+    ws.send(JSON.stringify({ type: "auth-fail", reason: "Invalid token" }));
+    ws.close(1008, "Invalid token");
+    return;
+  }
+
+  ws.data.machineName = msg.machineName;
+  ws.data.machineId = dbAuth.machineId;
+  ws.data.orgId = dbAuth.orgId;
+  ws.data.authenticated = true;
+
+  machineRegistry?.register(msg.machineName, "");
+  wsConnections?.register(msg.machineName, ws);
+  await updateMachineLastSeen(dbAuth.machineId);
+
+  ws.send(JSON.stringify({ type: "auth-ok" }));
+  console.log(`[WS] Machine "${msg.machineName}" authenticated`);
+}
+
+async function handleWsMessage(
+  ws: import("bun").ServerWebSocket<WsConnectionData>,
+  msg: MachineToHubMessage
+): Promise<void> {
+  if (!ws.data.authenticated || !ws.data.machineName) return;
+
+  switch (msg.type) {
+    case "heartbeat": {
+      machineRegistry?.updateStatus(ws.data.machineName, "healthy", msg.agents);
+      console.log(`[WS] Heartbeat from ${ws.data.machineName}: ${msg.agents.length} agents`);
+
+      const stopCommands = machineRegistry?.drainStopCommands(ws.data.machineName) ?? [];
+      for (const cmd of stopCommands) {
+        ws.send(JSON.stringify({ type: "stop", agentKey: cmd.agentKey, reason: cmd.reason }));
+      }
+
+      ws.send(JSON.stringify({ type: "heartbeat-ack" }));
+      break;
+    }
+
+    case "agent-complete": {
+      const orgId = ws.data.orgId ?? "default";
+      await recordCompletedTask(orgId, {
+        key: msg.completion.key,
+        issueId: msg.completion.issueId,
+        issueIdentifier: msg.completion.issueIdentifier,
+        issueTitle: msg.completion.issueTitle,
+        linearProject: msg.completion.linearProject,
+        completedAt: new Date(),
+        completionReason: msg.completion.completionReason,
+        finalLinearState: msg.completion.finalLinearState,
+        duration: msg.completion.duration,
+      });
+      console.log(`[WS] Agent completion from ${ws.data.machineName}: ${msg.completion.issueIdentifier} (${msg.completion.completionReason})`);
+      break;
+    }
+
+    case "messages-response":
+    case "trigger-response": {
+      wsConnections?.handleResponse(msg);
+      break;
+    }
+  }
+}
+
+export const server = Bun.serve<WsConnectionData>({
   port: serverPort,
   routes: {
     "/dashboard": amadeusHtml,
     "/setup": setupHtml,
     "/admin": adminHtml,
   },
-  fetch: handler,
+
+  fetch(req, server) {
+    const url = new URL(req.url);
+
+    // WebSocket upgrade for machine connections
+    if (url.pathname === "/ws" && (isHubMode() || isStandaloneMode())) {
+      const upgraded = server.upgrade(req, {
+        data: {
+          machineName: null,
+          machineId: null,
+          orgId: null,
+          authenticated: false,
+        },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    return handler(req);
+  },
+
+  websocket: {
+    open(ws) {
+      console.log("[WS] New connection");
+    },
+
+    message(ws, message) {
+      const msg = parseWsMessage(message as string);
+      if (!msg) {
+        console.warn("[WS] Unparseable message");
+        return;
+      }
+
+      const machineMsg = msg as MachineToHubMessage;
+
+      if (!ws.data.authenticated) {
+        handleWsAuth(ws, machineMsg).catch(err =>
+          console.error("[WS] Auth error:", err)
+        );
+      } else {
+        handleWsMessage(ws, machineMsg).catch(err =>
+          console.error("[WS] Message error:", err)
+        );
+      }
+    },
+
+    close(ws, code, reason) {
+      if (ws.data.machineName) {
+        wsConnections?.remove(ws.data.machineName, ws);
+        console.log(`[WS] Machine "${ws.data.machineName}" disconnected (code=${code})`);
+      }
+    },
+
+    ping(ws) {},
+    pong(ws) {},
+  },
 });
 
 // Shutdown handler
@@ -264,6 +423,7 @@ async function shutdown(): Promise<void> {
   routerHeartbeat?.stop();
   hubHeartbeat?.stop();
   idleScanner?.stop();
+  wsConnections?.close();
   if (orchestrator) {
     for (const status of orchestrator.getStatus()) {
       await orchestrator.stopAgent(status.key);
@@ -279,6 +439,7 @@ process.on("SIGTERM", shutdown);
 
 console.log(`Amadeus Cloud listening on http://localhost:${server.port}`);
 console.log(`  Dashboard: http://localhost:${server.port}/dashboard`);
+console.log(`  WebSocket: ws://localhost:${server.port}/ws`);
 console.log(`  Admin:     http://localhost:${server.port}/admin`);
 console.log(`  Status:    http://localhost:${server.port}/status`);
 
