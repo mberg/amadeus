@@ -72,8 +72,18 @@ if (isMachineMode() || isStandaloneMode()) {
       `[AgentComplete] Agent ${info.key} completed (${info.completionReason})`
     );
     if (isMachineMode()) {
-      // Machine mode: forward to hub (no local Postgres)
       hubHeartbeat?.reportCompletion(info);
+      persistence?.saveCompletedTask({
+        key: info.key,
+        issueId: info.issueId,
+        issueIdentifier: info.issueIdentifier,
+        issueTitle: info.issueTitle,
+        linearProject: info.linearProject,
+        completedAt: new Date(),
+        completionReason: info.completionReason,
+        finalLinearState: info.finalLinearState,
+        duration: info.duration,
+      });
     } else {
       recordCompletedTask("default", {
         key: info.key,
