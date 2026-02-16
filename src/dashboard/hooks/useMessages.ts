@@ -24,8 +24,12 @@ export function useMessages(taskKey: string | null, machineUrl?: string): UseMes
       let response: Response;
 
       if (machineUrl) {
-        // Remote task - fetch directly from machine
-        response = await fetch(`${machineUrl}/agents/${encodeURIComponent(taskKey)}/messages`);
+        // Remote task - proxy through hub
+        response = await fetch("/hub/proxy/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineUrl, taskKey }),
+        });
       } else {
         // Local task
         response = await fetch(`/agents/${encodeURIComponent(taskKey)}/messages`);
