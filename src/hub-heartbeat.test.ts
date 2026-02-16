@@ -73,6 +73,92 @@ describe("HubHeartbeat token hash", () => {
   });
 });
 
+describe("HubHeartbeat stop commands", () => {
+  let originalFetch: typeof globalThis.fetch;
+  let stoppedAgents: Array<{ agentKey: string; reason: string }> = [];
+
+  beforeEach(() => {
+    stoppedAgents = [];
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("executes stop commands from heartbeat response", async () => {
+    // @ts-expect-error -- mock fetch
+    globalThis.fetch = async () => {
+      return new Response(JSON.stringify({
+        commands: { stop: [{ agentKey: "ENG-123", reason: "idle" }] }
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    };
+
+    const heartbeat = new HubHeartbeat(
+      {
+        hubUrl: "http://hub.example.com",
+        machineName: "test-machine",
+        machineUrl: "http://machine.example.com",
+        onStopCommand: (agentKey, reason) => {
+          stoppedAgents.push({ agentKey, reason });
+        },
+      },
+      async () => []
+    );
+    await heartbeat.sendHeartbeat();
+
+    expect(stoppedAgents).toHaveLength(1);
+    expect(stoppedAgents[0]).toEqual({ agentKey: "ENG-123", reason: "idle" });
+  });
+
+  test("handles empty commands gracefully", async () => {
+    // @ts-expect-error -- mock fetch
+    globalThis.fetch = async () => {
+      return new Response(JSON.stringify({ commands: { stop: [] } }), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const heartbeat = new HubHeartbeat(
+      {
+        hubUrl: "http://hub.example.com",
+        machineName: "test-machine",
+        machineUrl: "http://machine.example.com",
+        onStopCommand: (agentKey, reason) => {
+          stoppedAgents.push({ agentKey, reason });
+        },
+      },
+      async () => []
+    );
+    await heartbeat.sendHeartbeat();
+
+    expect(stoppedAgents).toHaveLength(0);
+  });
+
+  test("handles non-JSON response for backward compatibility", async () => {
+    // @ts-expect-error -- mock fetch
+    globalThis.fetch = async () => {
+      return new Response("OK", { status: 200 });
+    };
+
+    const heartbeat = new HubHeartbeat(
+      {
+        hubUrl: "http://hub.example.com",
+        machineName: "test-machine",
+        machineUrl: "http://machine.example.com",
+        onStopCommand: (agentKey, reason) => {
+          stoppedAgents.push({ agentKey, reason });
+        },
+      },
+      async () => []
+    );
+    // Should not throw
+    await heartbeat.sendHeartbeat();
+
+    expect(stoppedAgents).toHaveLength(0);
+  });
+});
+
 describe("HubHeartbeat reportCompletion", () => {
   let capturedUrl: string = "";
   let capturedBody: any = null;

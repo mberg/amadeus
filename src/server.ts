@@ -167,6 +167,13 @@ if (isMachineMode() && machineConfig.hubUrl) {
       machineUrl: `http://localhost:${getServerPort()}`,
       apiKey: process.env.AMADEUS_API_KEY,
       token: machineConfig.token,
+      onStopCommand: async (agentKey, reason) => {
+        if (orchestrator?.hasAgent(agentKey)) {
+          console.log(`[HubHeartbeat] Stopping agent ${agentKey} (${reason})`);
+          await orchestrator.stopAgent(agentKey, reason as any);
+          healthMonitor?.notifyAgentCountChanged();
+        }
+      },
     },
     getAgents
   );
@@ -193,27 +200,14 @@ if ((isHubMode() || isStandaloneMode()) && machineRegistry) {
       return;
     }
 
-    // For remote machines, use proxy
+    // For remote machines, queue stop command for delivery via heartbeat
     const machine = machineRegistry!.getAll().find(m => m.url === machineUrl);
     if (!machine) {
       throw new Error(`Machine not found for URL: ${machineUrl}`);
     }
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (machine.apiKey) {
-      headers["Authorization"] = `Bearer ${machine.apiKey}`;
-    }
-
-    const res = await fetch(`${machineUrl}/agents/${encodeURIComponent(agentKey)}/stop`, {
-      method: "POST",
-      headers,
-    });
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
+    machineRegistry!.queueStopCommand(machine.name, agentKey, "idle");
+    console.log(`[IdleScanner] Queued stop command for ${agentKey} on ${machine.name}`);
   };
 
   idleScanner = new IdleScanner(idleConfig, machineRegistry, stopRemoteAgent);

@@ -812,7 +812,11 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
       console.log(`[Hub] Heartbeat from ${machineName}: ${agents?.length ?? 0} agents`);
 
-      return new Response("OK", { status: 200 });
+      const stopCommands = ctx.machineRegistry?.drainStopCommands(machineName) ?? [];
+      if (stopCommands.length > 0) {
+        console.log(`[Hub] Sending ${stopCommands.length} stop command(s) to ${machineName}`);
+      }
+      return Response.json({ commands: { stop: stopCommands } });
     }
 
     // Receive agent completion events from machines
@@ -923,7 +927,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
     }
 
-    // Hub proxy for remote machine agent stop
+    // Hub proxy for remote machine agent stop - queues command for next heartbeat
     if (req.method === "POST" && url.pathname === "/hub/proxy/stop") {
       if (!isHubMode() && !isStandaloneMode()) {
         return new Response("Not available in machine mode", { status: 404 });
@@ -937,30 +941,13 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const machine = ctx.machineRegistry?.getAll().find(m => m.url === proxyMachineUrl);
-      const headers: Record<string, string> = {};
-      if (machine?.apiKey) {
-        headers["Authorization"] = `Bearer ${machine.apiKey}`;
+      if (!machine) {
+        return new Response("Unknown machine", { status: 404 });
       }
 
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-
-        const res = await fetch(`${proxyMachineUrl}/agents/${encodeURIComponent(taskKey)}/stop`, {
-          method: "POST",
-          signal: controller.signal,
-          headers,
-        });
-        clearTimeout(timeout);
-
-        if (!res.ok) {
-          return new Response(await res.text(), { status: res.status });
-        }
-        return Response.json(await res.json());
-      } catch (err) {
-        console.error("[Hub] Proxy stop error:", err);
-        return new Response("Failed to stop agent on remote machine", { status: 502 });
-      }
+      ctx.machineRegistry?.queueStopCommand(machine.name, taskKey, "stopped");
+      console.log(`[Hub] Queued stop command for ${taskKey} on ${machine.name}`);
+      return Response.json({ success: true, queued: true });
     }
 
     // Hub proxy for remote machine trigger

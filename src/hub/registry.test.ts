@@ -102,6 +102,27 @@ describe("MachineRegistry", () => {
     expect(registry.getAgentIdleInfo("Frank", "agent-1")?.idleStartTime).toBeUndefined();
   });
 
+  test("queueStopCommand and drainStopCommands", () => {
+    registry.register("Frank", "http://frank.local:5678");
+
+    registry.queueStopCommand("Frank", "agent-1", "idle");
+    registry.queueStopCommand("Frank", "agent-2", "stopped");
+
+    const commands = registry.drainStopCommands("Frank");
+    expect(commands).toHaveLength(2);
+    expect(commands[0]).toEqual({ agentKey: "agent-1", reason: "idle" });
+    expect(commands[1]).toEqual({ agentKey: "agent-2", reason: "stopped" });
+
+    // Drain again should be empty
+    const empty = registry.drainStopCommands("Frank");
+    expect(empty).toHaveLength(0);
+  });
+
+  test("drainStopCommands returns empty for unknown machine", () => {
+    const commands = registry.drainStopCommands("Unknown");
+    expect(commands).toHaveLength(0);
+  });
+
   test("getIdleAgents returns agents idle longer than threshold", () => {
     registry.register("Frank", "http://frank.local:5678");
 

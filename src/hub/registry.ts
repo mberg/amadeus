@@ -20,9 +20,15 @@ export interface AgentIdleInfo {
   linearState?: string;
 }
 
+export interface StopCommand {
+  agentKey: string;
+  reason: string;
+}
+
 export class MachineRegistry {
   private machines = new Map<string, MachineInfo>();
   private agentIdleTracking = new Map<string, AgentIdleInfo>();
+  private pendingStopCommands = new Map<string, StopCommand[]>();
 
   /**
    * Register or update a machine.
@@ -148,6 +154,24 @@ export class MachineRegistry {
     }
 
     return results;
+  }
+
+  /**
+   * Queue a stop command to be delivered to a machine on its next heartbeat.
+   */
+  queueStopCommand(machineName: string, agentKey: string, reason: string): void {
+    const commands = this.pendingStopCommands.get(machineName) ?? [];
+    commands.push({ agentKey, reason });
+    this.pendingStopCommands.set(machineName, commands);
+  }
+
+  /**
+   * Return and clear all pending stop commands for a machine.
+   */
+  drainStopCommands(machineName: string): StopCommand[] {
+    const commands = this.pendingStopCommands.get(machineName) ?? [];
+    this.pendingStopCommands.delete(machineName);
+    return commands;
   }
 
   /**
