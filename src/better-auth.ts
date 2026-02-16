@@ -12,10 +12,13 @@ function createAuth() {
     return null;
   }
 
+  const baseURL = process.env.BETTER_AUTH_URL;
+
   return betterAuth({
     database: new Pool({ connectionString: DATABASE_URL }),
     secret: BETTER_AUTH_SECRET,
-    baseURL: process.env.BETTER_AUTH_URL,
+    baseURL,
+    trustedOrigins: baseURL ? [baseURL] : [],
     emailAndPassword: {
       enabled: true,
     },
