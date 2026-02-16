@@ -4,13 +4,9 @@
 import { useState } from "react";
 import { authClient } from "../lib/auth-client";
 
-type Tab = "signin" | "signup";
-
 export function SignInPage() {
-  const [tab, setTab] = useState<Tab>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,23 +16,12 @@ export function SignInPage() {
     setLoading(true);
 
     try {
-      if (tab === "signin") {
-        const { error: signInError } = await authClient.signIn.email({
-          email,
-          password,
-        });
-        if (signInError) {
-          setError(signInError.message ?? "Sign in failed");
-        }
-      } else {
-        const { error: signUpError } = await authClient.signUp.email({
-          email,
-          password,
-          name,
-        });
-        if (signUpError) {
-          setError(signUpError.message ?? "Sign up failed");
-        }
+      const { error: signInError } = await authClient.signIn.email({
+        email,
+        password,
+      });
+      if (signInError) {
+        setError(signInError.message ?? "Sign in failed");
       }
     } catch {
       setError("An unexpected error occurred");
@@ -58,33 +43,11 @@ export function SignInPage() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold tracking-tight">Amadeus</h1>
           <p className="text-muted-foreground">
-            {tab === "signin" ? "Sign in to continue" : "Create an account"}
+            Sign in to continue
           </p>
         </div>
 
         <div className="bg-card border rounded-lg shadow-sm p-6 space-y-4">
-          {/* Tab toggle */}
-          <div className="flex rounded-lg bg-muted p-1">
-            <button
-              type="button"
-              onClick={() => { setTab("signin"); setError(null); }}
-              className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                tab === "signin" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => { setTab("signup"); setError(null); }}
-              className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                tab === "signup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              Sign up
-            </button>
-          </div>
-
           {/* Social providers */}
           <div className="flex gap-3">
             <button
@@ -123,16 +86,6 @@ export function SignInPage() {
 
           {/* Email/password form */}
           <form onSubmit={handleSubmit} className="space-y-3">
-            {tab === "signup" && (
-              <input
-                type="text"
-                placeholder="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            )}
             <input
               type="email"
               placeholder="Email"
@@ -158,7 +111,7 @@ export function SignInPage() {
               disabled={loading}
               className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {loading ? "..." : tab === "signin" ? "Sign in" : "Sign up"}
+              {loading ? "..." : "Sign in"}
             </button>
           </form>
         </div>

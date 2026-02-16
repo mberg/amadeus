@@ -663,24 +663,30 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         if (!session?.user) {
           return Response.json({ authenticated: false });
         }
-        const { getUserByEmail, createUser } = await import("./db/users");
+        const { getUserByEmail, createUser, getUsersByOrg } = await import("./db/users");
         const { getOrgMemberRole, addOrgMember } = await import("./db/org-members");
         let hubUser = session.user.email
           ? await getUserByEmail("default", session.user.email)
           : null;
-        // Auto-create hub user for authenticated Better Auth users
+        // Bootstrap: auto-create the first user as admin (otherwise no one can access)
         if (!hubUser && session.user.email) {
-          const { getUsersByOrg } = await import("./db/users");
           const existingUsers = await getUsersByOrg("default");
-          hubUser = await createUser({
-            orgId: "default",
-            name: session.user.name ?? session.user.email,
-            email: session.user.email,
-            authMethod: "betterauth",
-          });
-          // First user in the org becomes admin
-          const role = existingUsers.length === 0 ? "admin" : "member";
-          await addOrgMember("default", hubUser.id, role);
+          if (existingUsers.length === 0) {
+            hubUser = await createUser({
+              orgId: "default",
+              name: session.user.name ?? session.user.email,
+              email: session.user.email,
+              authMethod: "betterauth",
+            });
+            await addOrgMember("default", hubUser.id, "admin");
+          } else {
+            // User not pre-added — reject access
+            return Response.json({
+              authenticated: true,
+              accessDenied: true,
+              message: "Your account has not been registered. Please contact your administrator to request access.",
+            });
+          }
         }
         let orgRole = hubUser
           ? await getOrgMemberRole("default", hubUser.id)
