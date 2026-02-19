@@ -1,10 +1,8 @@
 // ABOUTME: React hook for fetching messages for a specific task.
-// ABOUTME: Polls messages when a task is selected and provides loading states.
+// ABOUTME: Uses a WebSocket subscription to receive real-time message updates.
 
-import { useState, useEffect, useCallback } from "react";
-import type { Message, MessagesResponse } from "../types";
-
-const POLL_INTERVAL = 1500; // 1.5 seconds
+import { useState, useEffect } from "react";
+import type { Message } from "../types";
 
 interface UseMessagesReturn {
   messages: Message[];
@@ -12,71 +10,59 @@ interface UseMessagesReturn {
   error: string | null;
 }
 
-export function useMessages(taskKey: string | null, machineUrl?: string): UseMessagesReturn {
+export function useMessages(taskKey: string | null, machineName?: string | null): UseMessagesReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMessages = useCallback(async () => {
-    if (!taskKey) return;
+  useEffect(() => {
+    if (!taskKey) {
+      setMessages([]);
+      setError(null);
+      return;
+    }
 
-    try {
-      let response: Response;
+    setIsLoading(true);
+    setMessages([]);
+    setError(null);
 
-      if (machineUrl) {
-        // Remote task - proxy through hub
-        response = await fetch("/hub/proxy/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ machineUrl, taskKey }),
-        });
-      } else {
-        // Local task
-        response = await fetch(`/agents/${encodeURIComponent(taskKey)}/messages`);
-      }
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/dashboard`);
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          setError("Task not found");
-          return;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: "subscribe-messages",
+        machineName: machineName ?? null,
+        agentKey: taskKey,
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "messages-update" && msg.agentKey === taskKey) {
+          setMessages(msg.messages || []);
+          setIsLoading(false);
+          setError(null);
+        } else if (msg.type === "messages-error" && msg.agentKey === taskKey) {
+          setError(msg.error);
+          setIsLoading(false);
         }
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data: MessagesResponse = await response.json();
-      setMessages(data.messages || []);
-      setError(null);
-    } catch (err) {
-      console.error("Failed to fetch messages:", err);
+      } catch {}
+    };
+
+    ws.onerror = () => {
       setError("Failed to load messages");
-    } finally {
       setIsLoading(false);
-    }
-  }, [taskKey, machineUrl]);
+    };
 
-  // Reset when taskKey changes
-  useEffect(() => {
-    if (taskKey) {
-      setIsLoading(true);
-      setMessages([]);
-      setError(null);
-      fetchMessages();
-    } else {
-      setMessages([]);
-      setError(null);
-    }
-  }, [taskKey, fetchMessages]);
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "unsubscribe-messages", agentKey: taskKey }));
+      }
+      ws.close();
+    };
+  }, [taskKey, machineName]);
 
-  // Polling interval
-  useEffect(() => {
-    if (!taskKey) return;
-
-    const interval = setInterval(fetchMessages, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [taskKey, fetchMessages]);
-
-  return {
-    messages,
-    isLoading,
-    error,
-  };
+  return { messages, isLoading, error };
 }

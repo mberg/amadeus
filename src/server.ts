@@ -35,6 +35,7 @@ import { createFetchHandler, type ServerContext } from "./create-server";
 import {
   parseWsMessage,
   type MachineToHubMessage,
+  type BrowserToHubMessage,
 } from "./ws-protocol";
 
 // Initialize config from Postgres (seeds from local YAML on first run)
@@ -395,6 +396,92 @@ const handler = createFetchHandler(ctx);
 
 const serverPort = getServerPort();
 
+// Dashboard WebSocket subscriptions: browser ws → agentKey → poll timer
+const dashboardSubscriptions = new Map<
+  import("bun").ServerWebSocket<WsConnectionData>,
+  Map<string, ReturnType<typeof setInterval>>
+>();
+
+async function fetchMessages(machineName: string | null, agentKey: string): Promise<unknown[]> {
+  if (!machineName) {
+    if (!orchestrator) return [];
+    const agent = orchestrator.getStatus().find(a => a.key === agentKey);
+    if (!agent) return [];
+    try {
+      const res = await fetch(`http://localhost:${agent.port}/messages`);
+      const data = await res.json();
+      return data?.messages ?? (Array.isArray(data) ? data : []);
+    } catch {
+      return [];
+    }
+  } else {
+    if (!wsConnections?.isConnected(machineName)) return [];
+    try {
+      const requestId = crypto.randomUUID();
+      const response = await wsConnections.sendRequest(machineName, {
+        type: "get-messages",
+        id: requestId,
+        agentKey,
+      });
+      if (response.type === "messages-response") {
+        const data = response.messages as any;
+        return data?.messages ?? (Array.isArray(data) ? data : []);
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+async function handleDashboardWsMessage(
+  ws: import("bun").ServerWebSocket<WsConnectionData>,
+  rawMsg: string | Buffer
+): Promise<void> {
+  let msg: BrowserToHubMessage;
+  try {
+    const str = typeof rawMsg === "string" ? rawMsg : rawMsg.toString("utf-8");
+    msg = JSON.parse(str);
+  } catch {
+    return;
+  }
+
+  if (msg.type === "subscribe-messages") {
+    const { machineName, agentKey } = msg;
+
+    if (!dashboardSubscriptions.has(ws)) {
+      dashboardSubscriptions.set(ws, new Map());
+    }
+    const subs = dashboardSubscriptions.get(ws)!;
+
+    const existing = subs.get(agentKey);
+    if (existing) clearInterval(existing);
+
+    const sendUpdate = async () => {
+      try {
+        const messages = await fetchMessages(machineName, agentKey);
+        ws.send(JSON.stringify({ type: "messages-update", agentKey, messages }));
+      } catch (err) {
+        ws.send(JSON.stringify({ type: "messages-error", agentKey, error: String(err) }));
+      }
+    };
+
+    // Send initial response immediately, then poll every second
+    sendUpdate().catch(() => {});
+    subs.set(agentKey, setInterval(sendUpdate, 1000));
+
+  } else if (msg.type === "unsubscribe-messages") {
+    const subs = dashboardSubscriptions.get(ws);
+    if (subs) {
+      const timer = subs.get(msg.agentKey);
+      if (timer) {
+        clearInterval(timer);
+        subs.delete(msg.agentKey);
+      }
+    }
+  }
+}
+
 // WebSocket handler for hub mode (machines connect to this)
 async function handleWsAuth(
   ws: import("bun").ServerWebSocket<WsConnectionData>,
@@ -422,7 +509,7 @@ async function handleWsAuth(
   ws.data.authenticated = true;
 
   // Register in both places
-  machineRegistry?.register(msg.machineName, "", machineConfig.token);
+  machineRegistry?.register(msg.machineName, dbAuth.url ?? "", machineConfig.token);
   wsConnections?.register(msg.machineName, ws);
   await updateMachineLastSeen(dbAuth.machineId);
 
@@ -490,6 +577,22 @@ export const server = Bun.serve<WsConnectionData>({
     if (url.pathname === "/ws" && (isHubMode() || isStandaloneMode())) {
       const upgraded = server.upgrade(req, {
         data: {
+          connectionType: "machine" as const,
+          machineName: null,
+          machineId: null,
+          orgId: null,
+          authenticated: false,
+        },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    // WebSocket upgrade for browser dashboard connections
+    if (url.pathname === "/ws/dashboard") {
+      const upgraded = server.upgrade(req, {
+        data: {
+          connectionType: "browser" as const,
           machineName: null,
           machineId: null,
           orgId: null,
@@ -505,10 +608,17 @@ export const server = Bun.serve<WsConnectionData>({
 
   websocket: {
     open(ws) {
-      console.log("[WS] New connection");
+      console.log(`[WS] New ${ws.data.connectionType} connection`);
     },
 
     message(ws, message) {
+      if (ws.data.connectionType === "browser") {
+        handleDashboardWsMessage(ws, message as string).catch(err =>
+          console.error("[Dashboard WS] Error:", err)
+        );
+        return;
+      }
+
       const msg = parseWsMessage(message as string);
       if (!msg) {
         console.warn("[WS] Unparseable message");
@@ -531,6 +641,15 @@ export const server = Bun.serve<WsConnectionData>({
     },
 
     close(ws, code, reason) {
+      if (ws.data.connectionType === "browser") {
+        const subs = dashboardSubscriptions.get(ws);
+        if (subs) {
+          for (const timer of subs.values()) clearInterval(timer);
+          dashboardSubscriptions.delete(ws);
+        }
+        return;
+      }
+
       if (ws.data.machineName) {
         wsConnections?.remove(ws.data.machineName, ws);
         console.log(`[WS] Machine "${ws.data.machineName}" disconnected (code=${code})`);

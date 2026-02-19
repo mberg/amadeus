@@ -106,6 +106,42 @@ describe("parseWsMessage", () => {
   });
 });
 
+describe("browser WebSocket message types", () => {
+  test("BrowserToHubMessage types are defined", async () => {
+    const { } = await import("./ws-protocol");
+    // subscribe-messages
+    const sub: import("./ws-protocol").SubscribeMessagesMessage = {
+      type: "subscribe-messages",
+      machineName: "my-machine",
+      agentKey: "ENG-1",
+    };
+    expect(sub.type).toBe("subscribe-messages");
+
+    // unsubscribe-messages
+    const unsub: import("./ws-protocol").UnsubscribeMessagesMessage = {
+      type: "unsubscribe-messages",
+      agentKey: "ENG-1",
+    };
+    expect(unsub.type).toBe("unsubscribe-messages");
+  });
+
+  test("HubToBrowserMessage types are defined", async () => {
+    const update: import("./ws-protocol").MessagesUpdateMessage = {
+      type: "messages-update",
+      agentKey: "ENG-1",
+      messages: [{ role: "user", content: "hello" }],
+    };
+    expect(update.type).toBe("messages-update");
+
+    const err: import("./ws-protocol").MessagesErrorMessage = {
+      type: "messages-error",
+      agentKey: "ENG-1",
+      error: "connection failed",
+    };
+    expect(err.type).toBe("messages-error");
+  });
+});
+
 describe("protocol constants", () => {
   test("request timeout is 10 seconds", () => {
     expect(WS_REQUEST_TIMEOUT_MS).toBe(10_000);

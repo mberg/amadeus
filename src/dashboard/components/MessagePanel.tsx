@@ -64,7 +64,7 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 export function MessagePanel({ task, onClose }: MessagePanelProps) {
-  const { messages, isLoading, error } = useMessages(task?.key ?? null, task?.machineUrl);
+  const { messages, isLoading, error } = useMessages(task?.key ?? null, task?.machineName);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);

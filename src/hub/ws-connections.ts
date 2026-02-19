@@ -11,6 +11,7 @@ import type {
 import { WS_REQUEST_TIMEOUT_MS } from "../ws-protocol";
 
 export interface WsConnectionData {
+  connectionType: "machine" | "browser";
   machineName: string | null;
   machineId: string | null;
   orgId: string | null;

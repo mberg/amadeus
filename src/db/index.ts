@@ -94,12 +94,12 @@ export async function updateMachineLastSeen(id: string): Promise<void> {
 
 export async function authenticateMachine(
   apiKeyHash: string
-): Promise<{ orgId: string; machineName: string; machineId: string } | null> {
+): Promise<{ orgId: string; machineName: string; machineId: string; url: string } | null> {
   const [row] = await sql`
-    SELECT id, org_id, name FROM machines WHERE api_key_hash = ${apiKeyHash}
+    SELECT id, org_id, name, url FROM machines WHERE api_key_hash = ${apiKeyHash}
   `;
   if (!row) return null;
-  return { orgId: row.org_id, machineName: row.name, machineId: row.id };
+  return { orgId: row.org_id, machineName: row.name, machineId: row.id, url: row.url ?? "" };
 }
 
 function rowToMachine(row: Record<string, unknown>): DbMachine {
