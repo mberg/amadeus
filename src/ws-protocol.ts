@@ -103,6 +103,41 @@ export type HubToMachineMessage =
   | GetMessagesMessage
   | TriggerMessage;
 
+// --- Browser → Hub messages (dashboard WebSocket) ---
+
+export interface SubscribeMessagesMessage {
+  type: "subscribe-messages";
+  machineName: string | null;
+  agentKey: string;
+}
+
+export interface UnsubscribeMessagesMessage {
+  type: "unsubscribe-messages";
+  agentKey: string;
+}
+
+export type BrowserToHubMessage =
+  | SubscribeMessagesMessage
+  | UnsubscribeMessagesMessage;
+
+// --- Hub → Browser messages (dashboard WebSocket) ---
+
+export interface MessagesUpdateMessage {
+  type: "messages-update";
+  agentKey: string;
+  messages: unknown[];
+}
+
+export interface MessagesErrorMessage {
+  type: "messages-error";
+  agentKey: string;
+  error: string;
+}
+
+export type HubToBrowserMessage =
+  | MessagesUpdateMessage
+  | MessagesErrorMessage;
+
 // --- Shared utilities ---
 
 export type WsMessage = MachineToHubMessage | HubToMachineMessage;
