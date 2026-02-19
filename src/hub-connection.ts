@@ -263,17 +263,8 @@ export class HubConnection {
       const previousCount = this.lastAgentCount;
       this.lastAgentCount = agents.length;
 
-      // Track idle time
-      if (agents.length === 0) {
-        if (this.idleStartTime === null) {
-          this.idleStartTime = Date.now();
-        } else if (Date.now() - this.idleStartTime > IDLE_STOP_THRESHOLD_MS) {
-          this.stopForIdle();
-          return;
-        }
-      } else {
-        this.idleStartTime = null;
-      }
+      // Reset idle tracking (stay connected permanently)
+      this.idleStartTime = null;
 
       // Adjust interval on state change
       const isFirstRun = previousCount === -1;
