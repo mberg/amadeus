@@ -14,7 +14,7 @@ interface SignInPageProps {
   redirectTo?: string;
 }
 
-export function SignInPage({ title = "Amadeus", subtitle = "Sign in to continue", redirectTo = "/dashboard" }: SignInPageProps) {
+export function SignInPage({ title = "Amadeus Cloud", subtitle = "Sign in to continue", redirectTo = "/dashboard" }: SignInPageProps) {
   const [tab, setTab] = useState<Tab>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
