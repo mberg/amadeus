@@ -46,6 +46,30 @@ export function getWorktreePath(
 }
 
 /**
+ * Detects the default branch of a repository by checking for main, develop, master in order.
+ * Falls back to the current HEAD branch if none are found.
+ */
+export async function detectDefaultBranch(repoPath: string): Promise<string> {
+  // Check origin/HEAD first (most reliable for cloned repos)
+  const originHead = await Bun.$`cd ${repoPath} && git symbolic-ref refs/remotes/origin/HEAD`.nothrow().quiet();
+  if (originHead.exitCode === 0) {
+    const ref = originHead.stdout.toString().trim();
+    const branch = ref.replace("refs/remotes/origin/", "");
+    if (branch) return branch;
+  }
+
+  // Check for common branch names in priority order
+  for (const candidate of ["main", "develop", "master"]) {
+    const exists = await Bun.$`cd ${repoPath} && git show-ref --verify --quiet refs/heads/${candidate}`.nothrow();
+    if (exists.exitCode === 0) return candidate;
+  }
+
+  // Fall back to current HEAD branch
+  const head = await Bun.$`cd ${repoPath} && git rev-parse --abbrev-ref HEAD`.nothrow().quiet();
+  return head.stdout.toString().trim() || "main";
+}
+
+/**
  * Creates a new git worktree for an issue.
  * Creates a branch named `issue/{identifier}` and checks it out in the worktree.
  */
@@ -83,8 +107,18 @@ export async function createWorktree(
     // Use existing branch
     result = await Bun.$`cd ${repoPath} && git worktree add ${worktreePath} ${branchName}`.nothrow();
   } else {
-    // Create new branch with worktree
-    result = await Bun.$`cd ${repoPath} && git worktree add -b ${branchName} ${worktreePath}`.nothrow();
+    // Fetch the latest default branch from origin so the worktree starts from up-to-date code.
+    // Fetches to the remote tracking ref (origin/branch) to avoid conflicts with the checked-out branch.
+    // This is best-effort — silently continues if there's no remote or no network.
+    const defaultBranch = await detectDefaultBranch(repoPath);
+    const fetchResult = await Bun.$`cd ${repoPath} && git fetch origin ${defaultBranch}`.nothrow().quiet();
+    const base = fetchResult.exitCode === 0 ? `origin/${defaultBranch}` : defaultBranch;
+    if (fetchResult.exitCode !== 0) {
+      console.log(`[Worktree] Could not fetch origin/${defaultBranch}, using local state`);
+    }
+
+    // Create new branch from the fetched remote ref (or local default branch as fallback)
+    result = await Bun.$`cd ${repoPath} && git worktree add -b ${branchName} ${worktreePath} ${base}`.nothrow();
   }
 
   if (result.exitCode !== 0) {
