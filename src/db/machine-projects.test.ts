@@ -12,6 +12,8 @@ import {
   addMachineAccess,
   getMachineAccessList,
   removeMachineAccess,
+  getMachinesForUser,
+  userHasMachineAccess,
 } from "./machine-projects";
 
 const TEST_ORG = "test-org-mp";
@@ -123,5 +125,42 @@ describe("machine-access", () => {
     const entries = await getMachineAccessList(machineId);
     const found = entries.find((e) => e.userId === userId);
     expect(found).toBeUndefined();
+  });
+});
+
+describe("machine access by user", () => {
+  beforeAll(async () => {
+    await addMachineAccess(machineId, userId);
+  });
+
+  afterAll(async () => {
+    await removeMachineAccess(machineId, userId);
+  });
+
+  test("getMachinesForUser returns machine names the user has access to", async () => {
+    const names = await getMachinesForUser(userId);
+    expect(names).toContain("test-machine");
+  });
+
+  test("getMachinesForUser returns empty for user with no access", async () => {
+    const [otherUserRow] = await sql`INSERT INTO users (org_id, name, email, auth_method) VALUES (${TEST_ORG}, 'Other', 'other@t.com', 'api_key') RETURNING id`;
+    const names = await getMachinesForUser(otherUserRow.id);
+    expect(names).toHaveLength(0);
+    await sql`DELETE FROM users WHERE id = ${otherUserRow.id}`;
+  });
+
+  test("userHasMachineAccess returns true when user has access", async () => {
+    const hasAccess = await userHasMachineAccess("test-machine", userId);
+    expect(hasAccess).toBe(true);
+  });
+
+  test("userHasMachineAccess returns false when user has no access", async () => {
+    const hasAccess = await userHasMachineAccess("test-machine", crypto.randomUUID());
+    expect(hasAccess).toBe(false);
+  });
+
+  test("userHasMachineAccess returns false for nonexistent machine", async () => {
+    const hasAccess = await userHasMachineAccess("nonexistent-machine", userId);
+    expect(hasAccess).toBe(false);
   });
 });

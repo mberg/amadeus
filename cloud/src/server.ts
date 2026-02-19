@@ -325,6 +325,18 @@ async function handleDashboardWsMessage(
   if (msg.type === "subscribe-messages") {
     const { machineName, agentKey } = msg;
 
+    if (machineName && !ws.data.isAdmin) {
+      if (!ws.data.hubUserId) {
+        ws.send(JSON.stringify({ type: "messages-error", agentKey, error: "Not authenticated" }));
+        return;
+      }
+      const { userHasMachineAccess } = await import("../../src/db/machine-projects");
+      if (!(await userHasMachineAccess(machineName, ws.data.hubUserId))) {
+        ws.send(JSON.stringify({ type: "messages-error", agentKey, error: "Access denied" }));
+        return;
+      }
+    }
+
     if (!dashboardSubscriptions.has(ws)) {
       dashboardSubscriptions.set(ws, new Map());
     }
@@ -464,6 +476,25 @@ export const server = Bun.serve<WsConnectionData>({
 
     // WebSocket upgrade for browser dashboard connections
     if (url.pathname === "/ws/dashboard") {
+      let hubUserId: string | null = null;
+      let isAdmin = !isBetterAuthEnabled();
+
+      if (isBetterAuthEnabled()) {
+        const { auth: betterAuth } = await import("../../src/better-auth");
+        if (betterAuth) {
+          const session = await betterAuth.api.getSession({ headers: req.headers });
+          if (session?.user?.email) {
+            const { getUserByEmail } = await import("../../src/db/users");
+            const { getOrgMemberRole } = await import("../../src/db/org-members");
+            const hubUser = await getUserByEmail("default", session.user.email);
+            if (hubUser) {
+              hubUserId = hubUser.id;
+              isAdmin = (await getOrgMemberRole("default", hubUser.id)) === "admin";
+            }
+          }
+        }
+      }
+
       const upgraded = server.upgrade(req, {
         data: {
           connectionType: "browser" as const,
@@ -471,6 +502,8 @@ export const server = Bun.serve<WsConnectionData>({
           machineId: null,
           orgId: null,
           authenticated: false,
+          hubUserId,
+          isAdmin,
         },
       });
       if (upgraded) return undefined;

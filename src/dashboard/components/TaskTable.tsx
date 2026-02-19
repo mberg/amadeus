@@ -35,6 +35,7 @@ import { Badge } from "./ui/badge";
 import type { Task, CompletedTask } from "../types";
 import { formatUptime, getStateVariant, abbreviateProjectName } from "../lib/utils";
 import { filterTasks, filterCompletedTasks } from "../lib/filter";
+import { useAuth } from "./AuthProvider";
 
 interface TaskTableProps {
   tasks: Task[];
@@ -43,7 +44,7 @@ interface TaskTableProps {
   onToggleCompleted: () => void;
   linearWorkspace?: string;
   onSelectTask: (task: Task) => void;
-  onStopTask: (taskKey: string, machineUrl?: string) => void;
+  onStopTask: (taskKey: string, machineUrl?: string, machineName?: string) => void;
   onLoadMoreCompleted: () => void;
   hasMoreCompleted: boolean;
   searchQuery?: string;
@@ -125,9 +126,11 @@ export function TaskTable({
     [tasks]
   );
 
+  const { accessibleMachines } = useAuth();
+
   const handleStopConfirm = useCallback(() => {
     if (taskToStop) {
-      onStopTask(taskToStop.key, taskToStop.machineUrl);
+      onStopTask(taskToStop.key, taskToStop.machineUrl, taskToStop.machineName);
       setTaskToStop(null);
     }
   }, [taskToStop, onStopTask]);
@@ -310,6 +313,8 @@ export function TaskTable({
         const linearUrl = linearWorkspace
           ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
           : null;
+        const canStop = !task.machineName || accessibleMachines === null ||
+          accessibleMachines.has(task.machineName);
 
         return (
           <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -343,11 +348,12 @@ export function TaskTable({
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+              disabled={!canStop}
               onClick={(e) => {
                 e.stopPropagation();
                 setTaskToStop(task);
               }}
-              title="Stop Task"
+              title={canStop ? "Stop Task" : "No access to this machine"}
             >
               <Square className="h-4 w-4" />
             </Button>

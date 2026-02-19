@@ -57,6 +57,18 @@ import {
 import { fetchIssueDetails, fetchTeamWorkflowStates } from "./linear";
 import { getSystemResources } from "./machine/resources";
 
+async function getMachineAccessInfo(req: Request): Promise<{ hubUserId: string | null; isAdmin: boolean }> {
+  if (!isBetterAuthEnabled() || !auth) return { hubUserId: null, isAdmin: true };
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session?.user?.email) return { hubUserId: null, isAdmin: false };
+  const { getUserByEmail } = await import("./db/users");
+  const { getOrgMemberRole } = await import("./db/org-members");
+  const hubUser = await getUserByEmail("default", session.user.email);
+  if (!hubUser) return { hubUserId: null, isAdmin: false };
+  const role = await getOrgMemberRole("default", hubUser.id);
+  return { hubUserId: hubUser.id, isAdmin: role === "admin" };
+}
+
 export interface ServerContext {
   orchestrator: ClaudeOrchestrator | null;
   machineRegistry: MachineRegistry | null;
@@ -1011,6 +1023,19 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
 
       const machine = ctx.machineRegistry?.getAll().find(m => m.url === proxyMachineUrl);
 
+      {
+        const { hubUserId, isAdmin } = await getMachineAccessInfo(req);
+        if (!isAdmin) {
+          if (!hubUserId) return new Response("Unauthorized", { status: 401 });
+          if (machine) {
+            const { userHasMachineAccess } = await import("./db/machine-projects");
+            if (!(await userHasMachineAccess(machine.name, hubUserId))) {
+              return new Response("Access denied", { status: 403 });
+            }
+          }
+        }
+      }
+
       // Prefer WebSocket
       if (machine && ctx.wsConnections?.isConnected(machine.name)) {
         try {
@@ -1073,6 +1098,17 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         return new Response("Unknown machine", { status: 404 });
       }
 
+      {
+        const { hubUserId, isAdmin } = await getMachineAccessInfo(req);
+        if (!isAdmin) {
+          if (!hubUserId) return new Response("Unauthorized", { status: 401 });
+          const { userHasMachineAccess } = await import("./db/machine-projects");
+          if (!(await userHasMachineAccess(machine.name, hubUserId))) {
+            return new Response("Access denied", { status: 403 });
+          }
+        }
+      }
+
       // Prefer WebSocket for instant delivery
       if (ctx.wsConnections?.isConnected(machine.name)) {
         const sent = ctx.wsConnections.send(machine.name, {
@@ -1106,6 +1142,19 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       }
 
       const machine = ctx.machineRegistry?.getAll().find(m => m.url === proxyMachineUrl);
+
+      {
+        const { hubUserId, isAdmin } = await getMachineAccessInfo(req);
+        if (!isAdmin) {
+          if (!hubUserId) return new Response("Unauthorized", { status: 401 });
+          if (machine) {
+            const { userHasMachineAccess } = await import("./db/machine-projects");
+            if (!(await userHasMachineAccess(machine.name, hubUserId))) {
+              return new Response("Access denied", { status: 403 });
+            }
+          }
+        }
+      }
 
       // Prefer WebSocket
       if (machine && ctx.wsConnections?.isConnected(machine.name)) {
@@ -1178,6 +1227,21 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
           return api.handleDeleteUserLinearPat(req, orgId, targetUserId);
         }
       }
+    }
+
+    // Returns machine names the current user is allowed to access
+    if (req.method === "GET" && url.pathname === "/hub/my-machines") {
+      const { hubUserId, isAdmin } = await getMachineAccessInfo(req);
+      if (isAdmin) {
+        const allNames = ctx.machineRegistry?.getAll().map(m => m.name) ?? [];
+        return Response.json({ machineNames: allNames });
+      }
+      if (!hubUserId) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const { getMachinesForUser } = await import("./db/machine-projects");
+      const names = await getMachinesForUser(hubUserId);
+      return Response.json({ machineNames: names });
     }
 
     // Hub API endpoints for entity management

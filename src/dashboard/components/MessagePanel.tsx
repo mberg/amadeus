@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { useMessages } from "../hooks/useMessages";
+import { useAuth } from "./AuthProvider";
 import type { Task, Message } from "../types";
 import { cn, stripTerminalSequences } from "../lib/utils";
 import { sendMessage } from "../lib/send-message";
@@ -64,6 +65,7 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 export function MessagePanel({ task, onClose }: MessagePanelProps) {
+  const { accessibleMachines } = useAuth();
   const { messages, isLoading, error } = useMessages(task?.key ?? null, task?.machineName);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -152,6 +154,9 @@ export function MessagePanel({ task, onClose }: MessagePanelProps) {
   // Agent is not running if we have an error (typically 404)
   const isAgentRunning = !error;
 
+  const hasAccess = !task?.machineName || accessibleMachines === null ||
+    accessibleMachines.has(task.machineName);
+
   if (!task) return null;
 
   return (
@@ -201,7 +206,17 @@ export function MessagePanel({ task, onClose }: MessagePanelProps) {
           </div>
         </div>
 
-        {/* Messages */}
+        {!hasAccess ? (
+          <div className="flex items-center justify-center flex-1 p-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              You don't have permission to access {task.machineName}.<br />
+              Contact an admin to be added to this machine.
+            </p>
+          </div>
+        ) : null}
+
+        {/* Messages and input (only shown when user has access) */}
+        {hasAccess && (<>
         <div
           ref={scrollRef}
           onScroll={checkIfAtBottom}
@@ -290,6 +305,7 @@ export function MessagePanel({ task, onClose }: MessagePanelProps) {
             </Button>
           </div>
         )}
+        </>)}
       </div>
     </>
   );

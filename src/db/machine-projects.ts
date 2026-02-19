@@ -109,3 +109,22 @@ export async function removeMachineAccess(machineId: string, userId: string): Pr
   `;
   return result.count > 0;
 }
+
+export async function getMachinesForUser(userId: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT m.name FROM machine_access ma
+    JOIN machines m ON m.id = ma.machine_id
+    WHERE ma.user_id = ${userId}
+  `;
+  return rows.map(r => r.name as string);
+}
+
+export async function userHasMachineAccess(machineName: string, userId: string): Promise<boolean> {
+  const [row] = await sql`
+    SELECT 1 FROM machine_access ma
+    JOIN machines m ON m.id = ma.machine_id
+    WHERE m.name = ${machineName} AND ma.user_id = ${userId}
+    LIMIT 1
+  `;
+  return !!row;
+}

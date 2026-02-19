@@ -16,6 +16,8 @@ export interface WsConnectionData {
   machineId: string | null;
   orgId: string | null;
   authenticated: boolean;
+  hubUserId?: string | null;   // browser connections: for access checks
+  isAdmin?: boolean;           // browser connections: admin bypass
 }
 
 type PendingResolver = {

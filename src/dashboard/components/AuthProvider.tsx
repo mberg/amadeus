@@ -31,6 +31,7 @@ interface AuthContextValue {
   user?: { id: string; name: string; email: string; image?: string };
   hubUserId?: string;
   isSignedIn: boolean;
+  accessibleMachines: Set<string> | null; // null = no restriction (admin or simple mode)
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -40,6 +41,7 @@ const AuthContext = createContext<AuthContextValue>({
   canMessage: false,
   canEditConfig: false,
   isSignedIn: false,
+  accessibleMachines: null,
 });
 
 export function useAuth() {
@@ -50,6 +52,7 @@ function BetterAuthContent({ children, enableAgentMessaging }: { children: React
   const { data: session, isPending } = authClient.useSession();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [mePending, setMePending] = useState(true);
+  const [accessibleMachines, setAccessibleMachines] = useState<Set<string> | null>(null);
 
   useEffect(() => {
     if (isPending) return;
@@ -59,9 +62,18 @@ function BetterAuthContent({ children, enableAgentMessaging }: { children: React
       return;
     }
 
-    fetch("/auth/me")
-      .then((res) => res.json())
-      .then((data: MeResponse) => setMe(data))
+    Promise.all([
+      fetch("/auth/me").then((res) => res.json()),
+      fetch("/hub/my-machines").then((res) => res.json()).catch(() => ({ machineNames: [] })),
+    ])
+      .then(([meData, machinesData]: [MeResponse, { machineNames?: string[] }]) => {
+        setMe(meData);
+        if (meData.role === "admin") {
+          setAccessibleMachines(null);
+        } else {
+          setAccessibleMachines(new Set(machinesData.machineNames ?? []));
+        }
+      })
       .catch(() => setMe({ authenticated: false }))
       .finally(() => setMePending(false));
   }, [session?.user?.id, isPending]);
@@ -87,6 +99,7 @@ function BetterAuthContent({ children, enableAgentMessaging }: { children: React
     user: me?.user,
     hubUserId: me?.hubUserId ?? undefined,
     isSignedIn,
+    accessibleMachines,
   };
 
   return (
@@ -107,6 +120,7 @@ function SimpleAuthContent({ children, enableAgentMessaging }: { children: React
     canEditConfig: false,
     enableAgentMessaging,
     isSignedIn: false,
+    accessibleMachines: null,
   };
 
   return (

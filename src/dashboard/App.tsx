@@ -46,7 +46,13 @@ export function App() {
     setSelectedTask(null);
   }, []);
 
-  const handleStopTask = useCallback(async (taskKey: string, machineUrl?: string) => {
+  const { accessibleMachines } = useAuth();
+
+  const handleStopTask = useCallback(async (taskKey: string, machineUrl?: string, machineName?: string) => {
+    if (machineName && accessibleMachines !== null && !accessibleMachines.has(machineName)) {
+      return; // silently skip — button is already disabled in UI
+    }
+
     try {
       let response: Response;
 
@@ -75,7 +81,7 @@ export function App() {
       console.error("Failed to stop task:", error);
       alert("Failed to stop task");
     }
-  }, [selectedTask]);
+  }, [selectedTask, accessibleMachines]);
 
   const handleToggleCompleted = useCallback(() => {
     setShowCompleted((prev) => !prev);
