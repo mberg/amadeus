@@ -10,6 +10,7 @@ import {
   removeWorktree,
   listWorktrees,
   getWorktreePath,
+  detectDefaultBranch,
 } from "../src/worktree";
 
 describe("Worktree", () => {
@@ -42,6 +43,29 @@ describe("Worktree", () => {
     it("sanitizes issue identifier for filesystem safety", () => {
       const path = getWorktreePath("/tmp/worktrees", "TEST/123");
       expect(path).toBe("/tmp/worktrees/TEST-123");
+    });
+  });
+
+  describe("detectDefaultBranch", () => {
+    it("detects main as default branch", async () => {
+      const branch = await detectDefaultBranch(testRepoDir);
+      // git init creates 'master' or 'main' depending on git config
+      expect(["main", "master"]).toContain(branch);
+    });
+
+    it("prefers main over master when both exist", async () => {
+      await Bun.$`cd ${testRepoDir} && git branch main`.quiet().nothrow();
+      await Bun.$`cd ${testRepoDir} && git branch master`.quiet().nothrow();
+      const branch = await detectDefaultBranch(testRepoDir);
+      expect(branch).toBe("main");
+    });
+
+    it("detects develop when main and master do not exist", async () => {
+      // Rename current branch to develop
+      const currentBranch = (await Bun.$`cd ${testRepoDir} && git rev-parse --abbrev-ref HEAD`.quiet()).stdout.toString().trim();
+      await Bun.$`cd ${testRepoDir} && git branch -m ${currentBranch} develop`.quiet();
+      const branch = await detectDefaultBranch(testRepoDir);
+      expect(branch).toBe("develop");
     });
   });
 
@@ -97,6 +121,39 @@ describe("Worktree", () => {
       // but should end with the same identifier
       expect(second.worktreePath?.endsWith("TEST-3")).toBe(true);
       expect(second.branchName).toBe(first.branchName);
+    });
+
+    it("creates worktree from latest commit of default branch via fetch", async () => {
+      // Set up a bare "remote" with an extra commit
+      const remoteDir = await mkdtemp(join(tmpdir(), "amadeus-remote-test-"));
+      try {
+        await Bun.$`git clone --bare ${testRepoDir} ${remoteDir}`.quiet();
+        await Bun.$`cd ${testRepoDir} && git remote add origin ${remoteDir}`.quiet();
+
+        // Add a new commit to the remote that the local repo doesn't have
+        const cloneDir = await mkdtemp(join(tmpdir(), "amadeus-clone-test-"));
+        try {
+          await Bun.$`git clone ${remoteDir} ${cloneDir}`.quiet();
+          await Bun.$`cd ${cloneDir} && git config user.email "test@test.com" && git config user.name "Test" && echo "new" > NEW.md && git add . && git commit -m "new commit" && git push`.quiet();
+        } finally {
+          await rm(cloneDir, { recursive: true, force: true });
+        }
+
+        const defaultBranch = await detectDefaultBranch(testRepoDir);
+        const result = await createWorktree({
+          repoPath: testRepoDir,
+          worktreesDir,
+          issueIdentifier: "TEST-FETCH",
+        });
+
+        expect(result.success).toBe(true);
+
+        // The worktree should contain the new file from the remote commit
+        const hasNewFile = await Bun.file(join(result.worktreePath!, "NEW.md")).exists();
+        expect(hasNewFile).toBe(true);
+      } finally {
+        await rm(remoteDir, { recursive: true, force: true });
+      }
     });
 
     it("uses existing branch if it exists", async () => {
