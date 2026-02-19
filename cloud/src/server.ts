@@ -21,7 +21,6 @@ import { createCloudHandler } from "./cloud-handler";
 import { migrateCloud } from "./db/cloud-db";
 import amadeusHtml from "../../src/dashboard/index.html";
 import setupHtml from "./dashboard/index.html";
-import adminHtml from "./dashboard/admin.html";
 import {
   parseWsMessage,
   type MachineToHubMessage,
@@ -356,7 +355,6 @@ export const server = Bun.serve<WsConnectionData>({
   routes: {
     "/dashboard": amadeusHtml,
     "/setup": setupHtml,
-    "/admin": adminHtml,
   },
 
   fetch(req, server) {
@@ -440,7 +438,6 @@ process.on("SIGTERM", shutdown);
 console.log(`Amadeus Cloud listening on http://localhost:${server.port}`);
 console.log(`  Dashboard: http://localhost:${server.port}/dashboard`);
 console.log(`  WebSocket: ws://localhost:${server.port}/ws`);
-console.log(`  Admin:     http://localhost:${server.port}/admin`);
 console.log(`  Status:    http://localhost:${server.port}/status`);
 
 if (!isBetterAuthEnabled()) {
