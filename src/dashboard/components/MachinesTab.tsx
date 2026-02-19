@@ -2,7 +2,7 @@
 // ABOUTME: Machine creation generates an API key shown once. Uses /cloud/admin/machines and /hub/api endpoints.
 
 import { useState, useEffect, useCallback, Fragment, useRef } from "react";
-import { Trash2, ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, Copy, Check, RefreshCw } from "lucide-react";
 
 interface Machine {
   id: string;
@@ -32,6 +32,7 @@ export function MachinesTab() {
   const [submitting, setSubmitting] = useState(false);
   const [createdKey, setCreatedKey] = useState<{ machineId: string; apiKey: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [machineProjects, setMachineProjects] = useState<Record<string, MachineProjectLink[]>>({});
 
@@ -112,6 +113,21 @@ export function MachinesTab() {
     }
   }
 
+  async function handleRegenerateKey(machineId: string) {
+    setRegenerating(machineId);
+    try {
+      const res = await fetch(`/cloud/admin/machines/${machineId}/regenerate-key`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setCreatedKey({ machineId, apiKey: data.apiKey });
+      setCopied(false);
+    } catch (err) {
+      console.error("Failed to regenerate key:", err);
+    } finally {
+      setRegenerating(null);
+    }
+  }
+
   function handleCopy() {
     if (createdKey?.apiKey) {
       navigator.clipboard.writeText(createdKey.apiKey);
@@ -176,7 +192,9 @@ export function MachinesTab() {
       {/* API key display after creation */}
       {createdKey && (
         <div className="p-3 rounded-md border border-border bg-card space-y-2">
-          <p className="text-sm font-medium">Machine created</p>
+          <p className="text-sm font-medium">
+            {machines.some((m) => m.id === createdKey.machineId) ? "API key regenerated" : "Machine created"}
+          </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded-md border border-input bg-muted/50 px-3 py-1.5 text-sm font-mono break-all">
               {createdKey.apiKey}
@@ -216,7 +234,7 @@ export function MachinesTab() {
               <th className="pb-2 font-medium">Name</th>
               <th className="pb-2 font-medium">URL</th>
               <th className="pb-2 font-medium">Last Seen</th>
-              <th className="pb-2 font-medium w-16">Actions</th>
+              <th className="pb-2 font-medium w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -243,13 +261,23 @@ export function MachinesTab() {
                       : "never"}
                   </td>
                   <td className="py-2.5">
-                    <button
-                      onClick={() => handleDelete(machine.id)}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Delete machine"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleRegenerateKey(machine.id)}
+                        disabled={regenerating === machine.id}
+                        className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                        title="Regenerate API key"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${regenerating === machine.id ? "animate-spin" : ""}`} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(machine.id)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Delete machine"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 {expandedId === machine.id && (
