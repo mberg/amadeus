@@ -49,6 +49,18 @@ export async function updateMachinePermission(
   return row ? rowToMachineExtended(row) : null;
 }
 
+export async function updateMachineApiKeyHash(
+  id: string,
+  apiKeyHash: string
+): Promise<DbMachineExtended | null> {
+  const [row] = await sql`
+    UPDATE machines SET api_key_hash = ${apiKeyHash}
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return row ? rowToMachineExtended(row) : null;
+}
+
 export async function updateMachineStatus(
   id: string,
   status: string

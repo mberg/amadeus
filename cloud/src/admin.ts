@@ -1,7 +1,7 @@
 // ABOUTME: Admin API route handlers for machine creation and deletion.
 // ABOUTME: Wraps generateMachineApiKey for the admin UI.
 
-import { generateMachineApiKey } from "./api-keys";
+import { generateMachineApiKey, regenerateMachineApiKey } from "./api-keys";
 import { deleteMachine } from "../../src/db";
 
 export async function handleAdminRoutes(
@@ -29,6 +29,17 @@ export async function handleAdminRoutes(
 
     const { machineId, apiKey } = await generateMachineApiKey(orgId, name, machineUrl);
     return Response.json({ machineId, apiKey }, { status: 201 });
+  }
+
+  // POST /cloud/admin/machines/:id/regenerate-key
+  const machineRegenerateMatch = path.match(/^\/machines\/([^/]+)\/regenerate-key$/);
+  if (req.method === "POST" && machineRegenerateMatch) {
+    const machineId = machineRegenerateMatch[1];
+    const result = await regenerateMachineApiKey(orgId, machineId);
+    if (!result) {
+      return Response.json({ error: "Machine not found" }, { status: 404 });
+    }
+    return Response.json({ apiKey: result.apiKey });
   }
 
   // DELETE /cloud/admin/machines/:id
