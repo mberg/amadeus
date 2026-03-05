@@ -40,7 +40,7 @@ export function StatsBar({ tasks, completedCount = 0 }: StatsBarProps) {
   const totalMemoryMB = tasks.reduce((sum, t) => sum + (t.memoryMB ?? 0), 0);
 
   return (
-    <div className="mb-6 flex gap-3">
+    <div className="mb-6 grid grid-cols-2 gap-2 md:flex md:gap-3">
       <StatCard value={totalTasks} label="Active" />
       <StatCard value={workingTasks} label="Working" />
       <StatCard value={idleTasks} label="Idle" />

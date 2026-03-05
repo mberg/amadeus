@@ -1,8 +1,8 @@
 // ABOUTME: Main React application component for the dashboard.
-// ABOUTME: Manages task selection state and renders the sidebar layout.
+// ABOUTME: Manages task selection state and renders the sidebar layout with mobile responsiveness.
 
 import { useState, useCallback, useMemo } from "react";
-import { Sidebar, type NavItem } from "./components/Sidebar";
+import { Sidebar, MobileMenuButton, type NavItem } from "./components/Sidebar";
 import { StatsBar } from "./components/StatsBar";
 import { TaskTable } from "./components/TaskTable";
 import { MessagePanel } from "./components/MessagePanel";
@@ -35,6 +35,7 @@ export function App() {
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [activeNav, setActiveNav] = useState<NavItem>("tasks");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const availableSkills = useMemo(() => collectUniqueSkills(tasks), [tasks]);
 
@@ -89,13 +90,37 @@ export function App() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
         runtimeMode={config.runtimeMode}
+        mobileOpen={mobileMenuOpen}
+        onMobileOpenChange={setMobileMenuOpen}
       />
 
-      {/* Main content area - offset by sidebar width */}
-      <main className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-52")}>
-        {/* Machine identity header */}
+      {/* Main content area - offset by sidebar width on desktop, full width on mobile */}
+      <main className={cn(
+        "transition-all duration-300",
+        // Desktop: offset by sidebar width
+        sidebarCollapsed ? "md:pl-16" : "md:pl-52",
+        // Mobile: no offset (sidebar is a drawer overlay)
+        "pl-0"
+      )}>
+        {/* Mobile top bar */}
+        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/95 backdrop-blur px-4 py-2 md:hidden">
+          <div className="flex items-center gap-2">
+            <MobileMenuButton onClick={() => setMobileMenuOpen(true)} />
+            <span className="text-base font-semibold tracking-tight">Amadeus</span>
+          </div>
+          {config.machineName && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{config.machineName}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-500 text-white shadow-[0_0_8px_rgba(34,197,94,0.6)]">
+                {getMachineTypeLabel(config.runtimeMode)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop machine identity header */}
         {config.machineName && (
-          <div className="flex items-center justify-end px-8 py-3">
+          <div className="hidden md:flex items-center justify-end px-8 py-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{config.machineName}</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-green-500 text-white shadow-[0_0_8px_rgba(34,197,94,0.6)] dark:shadow-[0_0_10px_rgba(34,197,94,0.5)]">
@@ -104,13 +129,14 @@ export function App() {
             </div>
           </div>
         )}
-        <div className="min-h-screen p-8">
+
+        <div className="min-h-screen p-4 md:p-8">
           {activeNav === "tasks" && (
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
               {/* Page Header */}
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
-                <p className="text-muted-foreground">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight">Tasks</h1>
+                <p className="text-sm md:text-base text-muted-foreground">
                   Monitor and manage running agents
                 </p>
               </div>

@@ -70,9 +70,9 @@ export function SearchFilterBar({
     selectedSkills.length > 0;
 
   return (
-    <div className="flex items-center gap-3 mb-4">
+    <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-4">
       {/* Search Input */}
-      <div className="relative flex-1 max-w-sm">
+      <div className="relative w-full md:flex-1 md:max-w-sm md:w-auto">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           type="text"
