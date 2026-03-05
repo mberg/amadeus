@@ -376,8 +376,8 @@ export function TaskTable({
 
   return (
     <div className="space-y-4">
-      {/* Active Tasks */}
-      <div className="rounded-lg border border-border bg-card">
+      {/* Active Tasks - Desktop Table */}
+      <div className="hidden md:block rounded-lg border border-border bg-card">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -423,6 +423,116 @@ export function TaskTable({
         </Table>
       </div>
 
+      {/* Active Tasks - Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {filteredTasks.length > 0 ? (
+          filteredTasks.map((task) => {
+            const linearUrl = linearWorkspace
+              ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
+              : null;
+            return (
+              <div
+                key={task.key}
+                className="rounded-lg border border-border bg-card p-4 space-y-3 cursor-pointer active:bg-muted/30 transition-colors"
+                onClick={() => onSelectTask(task)}
+              >
+                {/* Top row: ID + Status */}
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-foreground text-sm">
+                    {task.issueIdentifier}
+                  </span>
+                  <Badge variant={getStatusVariant(task.status)} className="gap-1.5">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        task.status === "working"
+                          ? "bg-chart-1 animate-pulse-dot"
+                          : task.status === "starting"
+                            ? "bg-chart-3 animate-pulse-dot"
+                            : "bg-chart-2"
+                      }`}
+                    />
+                    {task.status}
+                  </Badge>
+                </div>
+
+                {/* Title */}
+                <div className="text-sm text-foreground leading-snug">
+                  {task.issueTitle}
+                  {task.linearProject && (
+                    <span className="text-xs text-muted-foreground/60 ml-1">
+                      ({abbreviateProjectName(task.linearProject)})
+                    </span>
+                  )}
+                </div>
+
+                {/* State + Uptime row */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {task.linearState && (
+                    <Badge variant={getStateVariant(task.linearState)} className="text-xs">
+                      {task.linearState}
+                    </Badge>
+                  )}
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formatUptime(task.uptime)}
+                  </span>
+                  {task.machineName && (
+                    <span className="text-xs text-muted-foreground">
+                      {task.machineName}
+                    </span>
+                  )}
+                </div>
+
+                {/* Action buttons - always visible on mobile */}
+                <div className="flex items-center gap-1 pt-1 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectTask(task);
+                    }}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Messages
+                  </Button>
+                  {linearUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(linearUrl, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Linear
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTaskToStop(task);
+                    }}
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                    Stop
+                  </Button>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
+            <span className="text-sm text-muted-foreground">No active tasks</span>
+          </div>
+        )}
+      </div>
+
       {/* Completed Tasks Section */}
       {filteredCompletedTasks.length > 0 && (
         <div className="rounded-lg border border-border bg-card/50">
@@ -445,88 +555,138 @@ export function TaskTable({
 
           {showCompleted && (
             <div className="border-t border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="px-4">ID</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Result</TableHead>
-                    <TableHead>Final State</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Completed</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCompletedTasks.map((task) => {
-                    const linearUrl = linearWorkspace
-                      ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
-                      : null;
+              {/* Desktop table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-4">ID</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Result</TableHead>
+                      <TableHead>Final State</TableHead>
+                      <TableHead>Duration</TableHead>
+                      <TableHead>Completed</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCompletedTasks.map((task) => {
+                      const linearUrl = linearWorkspace
+                        ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
+                        : null;
 
-                    return (
-                      <TableRow
-                        key={`${task.issueId}-${task.completedAt}`}
-                        className="opacity-80 hover:opacity-100 transition-opacity"
-                      >
-                        <TableCell className="px-4">
-                          <span className="font-medium text-foreground">
-                            {task.issueIdentifier}
-                          </span>
-                        </TableCell>
-                        <TableCell className="max-w-[350px]">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <span className="truncate text-foreground">
-                              {task.issueTitle}
+                      return (
+                        <TableRow
+                          key={`${task.issueId}-${task.completedAt}`}
+                          className="opacity-80 hover:opacity-100 transition-opacity"
+                        >
+                          <TableCell className="px-4">
+                            <span className="font-medium text-foreground">
+                              {task.issueIdentifier}
                             </span>
-                            {task.linearProject && (
-                              <span className="shrink-0 text-xs text-muted-foreground/60" title={task.linearProject}>
-                                ({abbreviateProjectName(task.linearProject)})
+                          </TableCell>
+                          <TableCell className="max-w-[350px]">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <span className="truncate text-foreground">
+                                {task.issueTitle}
                               </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={task.completionReason === "stopped" ? "stopped" : "default"} className="text-xs">
-                            {formatCompletionReason(task.completionReason)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {task.finalLinearState ? (
-                            <Badge variant={getStateVariant(task.finalLinearState)} className="text-xs">
-                              {task.finalLinearState}
+                              {task.linearProject && (
+                                <span className="shrink-0 text-xs text-muted-foreground/60" title={task.linearProject}>
+                                  ({abbreviateProjectName(task.linearProject)})
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={task.completionReason === "stopped" ? "stopped" : "default"} className="text-xs">
+                              {formatCompletionReason(task.completionReason)}
                             </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-muted-foreground tabular-nums text-sm">
-                            {formatUptime(task.duration)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-muted-foreground text-sm">
-                            {formatTimeAgo(task.completedAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {linearUrl && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
-                              onClick={() => window.open(linearUrl, "_blank", "noopener,noreferrer")}
-                              title="Open in Linear"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell>
+                            {task.finalLinearState ? (
+                              <Badge variant={getStateVariant(task.finalLinearState)} className="text-xs">
+                                {task.finalLinearState}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground tabular-nums text-sm">
+                              {formatUptime(task.duration)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-sm">
+                              {formatTimeAgo(task.completedAt)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {linearUrl && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
+                                onClick={() => window.open(linearUrl, "_blank", "noopener,noreferrer")}
+                                title="Open in Linear"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card view for completed tasks */}
+              <div className="md:hidden space-y-2 p-3">
+                {filteredCompletedTasks.map((task) => {
+                  const linearUrl = linearWorkspace
+                    ? `https://linear.app/${linearWorkspace}/issue/${task.issueIdentifier}`
+                    : null;
+
+                  return (
+                    <div
+                      key={`${task.issueId}-${task.completedAt}`}
+                      className="rounded-md border border-border bg-card/30 p-3 space-y-2 opacity-80"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-foreground text-sm">
+                          {task.issueIdentifier}
+                        </span>
+                        <Badge variant={task.completionReason === "stopped" ? "stopped" : "default"} className="text-xs">
+                          {formatCompletionReason(task.completionReason)}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-foreground leading-snug truncate">
+                        {task.issueTitle}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+                        {task.finalLinearState && (
+                          <Badge variant={getStateVariant(task.finalLinearState)} className="text-xs">
+                            {task.finalLinearState}
+                          </Badge>
+                        )}
+                        <span className="tabular-nums">{formatUptime(task.duration)}</span>
+                        <span>{formatTimeAgo(task.completedAt)}</span>
+                        {linearUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 ml-auto"
+                            onClick={() => window.open(linearUrl, "_blank", "noopener,noreferrer")}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
               {hasMoreCompleted && (
                 <div className="flex justify-center py-3 border-t border-border">
