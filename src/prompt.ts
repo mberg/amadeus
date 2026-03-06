@@ -28,6 +28,7 @@ import type { FetchedComment } from "./linear";
  *   {{profileSection}}         - profile capabilities
  *   {{notificationSection}}    - creator notification instructions
  *   {{reviewNotificationSection}} - review notification instructions
+ *   {{screenshotSection}}         - screenshot instructions for UI work
  */
 export const DEFAULT_PROMPT_TEMPLATE = `## New Task from Linear
 
@@ -130,7 +131,7 @@ The user can ONLY see messages you post to Linear. Your thoughts, questions, rea
 - STOP and wait after posting questions (don't keep working)
 
 **REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
-{{commentHistorySection}}{{profileSection}}`;
+{{screenshotSection}}{{commentHistorySection}}{{profileSection}}`;
 
 /**
  * Render a prompt template by substituting {{variable}} placeholders.
@@ -173,6 +174,7 @@ export function buildTemplateVariables(
     profileSection: buildProfileSection(profile),
     notificationSection: buildNotificationSection(workspace, issue.identifier),
     reviewNotificationSection: buildReviewNotificationSection(workspace, issue.identifier),
+    screenshotSection: buildScreenshotSection(issue.identifier),
   };
 }
 
@@ -310,7 +312,7 @@ The user can ONLY see messages you post to Linear. Your thoughts, questions, rea
 - STOP and wait after posting questions (don't keep working)
 
 **REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
-${commentHistorySection}${profileSection}`.trim();
+${buildScreenshotSection(issue.identifier)}${commentHistorySection}${profileSection}`.trim();
 }
 
 function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string, workspace?: string, workflowStates?: WorkflowState[]): string {
@@ -467,6 +469,45 @@ function buildProfileSection(profile?: AgentProfile): string {
 ### Profile Capabilities
 
 ${profile.promptAdditions.join("\n\n")}
+`;
+}
+
+function buildScreenshotSection(issueIdentifier: string): string {
+  return `
+
+### Screenshots of Completed Work
+
+When your work involves **visible UI changes** (frontend components, pages, dashboards, styling, etc.), take a screenshot after implementation to show the result.
+
+**How to take and post screenshots:**
+
+1. Use Playwright to navigate to the relevant page and take a screenshot:
+\`\`\`
+Use the browser_navigate and browser_take_screenshot MCP tools to capture the result.
+Save the screenshot to a local file path (e.g., /tmp/screenshot.png).
+\`\`\`
+
+2. Upload the screenshot to Linear:
+\`\`\`bash
+SCREENSHOT_URL=$(bun scripts/upload-to-linear.ts /tmp/screenshot.png)
+\`\`\`
+
+3. Include the screenshot in your Linear comment:
+\`\`\`bash
+linear-cli comments create --body "**🤖 Amadeus:** Implementation complete. Here's what it looks like:
+
+![Screenshot]($SCREENSHOT_URL)" ${issueIdentifier}
+\`\`\`
+
+**When to take screenshots:**
+- After completing UI/frontend changes
+- When the issue involves visual design or layout work
+- To demonstrate a bug fix that affects what users see
+
+**When NOT to take screenshots:**
+- Backend-only changes (APIs, database, configs)
+- Code refactoring with no visual impact
+- CI/CD or infrastructure changes
 `;
 }
 
