@@ -96,6 +96,21 @@ export const IdleTerminationConfigSchema = z.object({
   scanIntervalSeconds: z.number().int().positive().default(60),
 });
 
+/**
+ * Schema for orchestrator agent settings.
+ * The orchestrator agent actively monitors running agents via Linear API
+ * to detect state drift, terminal transitions, and stalled agents.
+ */
+export const OrchestratorAgentConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  reconcileIntervalMs: z.number().int().positive().default(60000),
+  stallTimeoutMs: z.number().int().positive().default(900000), // 15 minutes
+  terminalStates: z.array(z.string()).default(["Done", "Closed", "Cancelled", "Canceled", "Duplicate"]),
+  inactiveStates: z.array(z.string()).default(["Backlog", "Todo", "Triage"]),
+});
+
+export type OrchestratorAgentConfig = z.infer<typeof OrchestratorAgentConfigSchema>;
+
 export type IdleTerminationConfig = z.infer<typeof IdleTerminationConfigSchema>;
 
 /**
@@ -123,6 +138,13 @@ export const GlobalConfigSchema = z.object({
     timeoutMinutes: 15,
     idleStates: ["Needs Feedback"],
     scanIntervalSeconds: 60,
+  }),
+  orchestratorAgent: OrchestratorAgentConfigSchema.optional().default({
+    enabled: true,
+    reconcileIntervalMs: 60000,
+    stallTimeoutMs: 900000,
+    terminalStates: ["Done", "Closed", "Cancelled", "Canceled", "Duplicate"],
+    inactiveStates: ["Backlog", "Todo", "Triage"],
   }),
 });
 

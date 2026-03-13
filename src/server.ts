@@ -28,6 +28,7 @@ import { HubConnection } from "./hub-connection";
 import { ClaudeOrchestrator, type AgentDeathInfo, type AgentCompletionInfo } from "./orchestrator";
 import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
+import { OrchestratorAgent } from "./orchestrator-agent";
 import { isBetterAuthEnabled } from "./auth";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged, deleteBranch } from "./github";
@@ -157,6 +158,36 @@ if (isMachineMode() || isStandaloneMode()) {
 
   // Start health monitoring
   healthMonitor.start();
+}
+
+// Initialize orchestrator agent (machine or standalone mode)
+let orchestratorAgent: OrchestratorAgent | null = null;
+
+if ((isMachineMode() || isStandaloneMode()) && orchestrator && persistence && healthMonitor) {
+  const oaConfig = CONFIG.orchestratorAgent;
+
+  if (oaConfig?.enabled) {
+    orchestratorAgent = new OrchestratorAgent({
+      orchestrator,
+      persistence,
+      healthMonitor,
+      reconcileIntervalMs: oaConfig.reconcileIntervalMs,
+      stallTimeoutMs: oaConfig.stallTimeoutMs,
+      terminalStates: oaConfig.terminalStates,
+      inactiveStates: oaConfig.inactiveStates,
+      onAgentReconciled: (issueIdentifier, reason) => {
+        console.log(`[OrchestratorAgent] Reconciled ${issueIdentifier}: ${reason}`);
+      },
+      onAgentChange: () => {
+        hubConnection?.notifyAgentChange();
+        hubHeartbeat?.notifyAgentChange();
+        healthMonitor?.notifyAgentCountChanged();
+      },
+    });
+
+    orchestratorAgent.start();
+    console.log(`[Server] Orchestrator agent enabled (reconcile: ${oaConfig.reconcileIntervalMs}ms, stall: ${oaConfig.stallTimeoutMs}ms)`);
+  }
 }
 
 // Initialize router heartbeat if configured and enabled in machine config
@@ -391,6 +422,7 @@ const ctx: ServerContext = {
   routerHeartbeat,
   idleScanner,
   wsConnections,
+  orchestratorAgent,
 };
 const handler = createFetchHandler(ctx);
 
@@ -692,6 +724,11 @@ async function shutdown(): Promise<void> {
   // Stop hub heartbeat if running
   if (hubHeartbeat) {
     hubHeartbeat.stop();
+  }
+
+  // Stop orchestrator agent if running
+  if (orchestratorAgent) {
+    orchestratorAgent.stop();
   }
 
   // Stop idle scanner if running

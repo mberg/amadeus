@@ -43,6 +43,7 @@ import type { HubConnection } from "./hub-connection";
 import type { WsConnections } from "./hub/ws-connections";
 import type { IdleScanner } from "./hub/idle-scanner";
 import type { LinearWebhookPayload, LinearIssue, LinearComment, AgentStatus } from "./types";
+import type { OrchestratorAgent } from "./orchestrator-agent";
 import { checkPRMerged, deleteBranch } from "./github";
 import {
   shouldNotify,
@@ -67,6 +68,7 @@ export interface ServerContext {
   routerHeartbeat: RouterHeartbeat | null;
   idleScanner: IdleScanner | null;
   wsConnections: WsConnections | null;
+  orchestratorAgent: OrchestratorAgent | null;
 }
 
 export function createFetchHandler(ctx: ServerContext): (req: Request) => Promise<Response> {
@@ -837,6 +839,7 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
         agents,
         timestamp: new Date().toISOString(),
         mode: getRuntimeMode(),
+        orchestratorAgent: ctx.orchestratorAgent?.getStats() ?? null,
       });
     }
 
