@@ -439,4 +439,94 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.isAwaitingFeedback(issue)).toBe(true);
     });
   });
+
+  describe("resolveAgentType", () => {
+    it("returns claude by default when no codex label", () => {
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Scoping" },
+        team: { key: "TEST" },
+        labels: [{ name: "bug" }],
+      };
+
+      expect(orchestrator.resolveAgentType(issue)).toBe("claude");
+    });
+
+    it("returns codex when issue has Codex label", () => {
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Scoping" },
+        team: { key: "TEST" },
+        labels: [{ name: "Codex" }],
+      };
+
+      expect(orchestrator.resolveAgentType(issue)).toBe("codex");
+    });
+
+    it("returns codex case-insensitively", () => {
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Scoping" },
+        team: { key: "TEST" },
+        labels: [{ name: "CODEX" }],
+      };
+
+      expect(orchestrator.resolveAgentType(issue)).toBe("codex");
+    });
+
+    it("returns claude when no labels", () => {
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Scoping" },
+        team: { key: "TEST" },
+      };
+
+      expect(orchestrator.resolveAgentType(issue)).toBe("claude");
+    });
+
+    it("respects defaultAgentType config", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Scoping"],
+        defaultAgentType: "codex",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Scoping" },
+        team: { key: "TEST" },
+      };
+
+      expect(orchestrator.resolveAgentType(issue)).toBe("codex");
+    });
+
+    it("label overrides defaultAgentType", () => {
+      orchestrator = new ClaudeOrchestrator({
+        projectPaths: { TEST: "/tmp/test-project" },
+        triggerStates: ["Scoping"],
+        defaultAgentType: "codex",
+      });
+
+      const issue: LinearIssue = {
+        id: "issue-123",
+        identifier: "TEST-1",
+        title: "Test",
+        state: { id: "state-1", name: "Scoping" },
+        team: { key: "TEST" },
+        labels: [{ name: "Claude" }],
+      };
+
+      expect(orchestrator.resolveAgentType(issue)).toBe("claude");
+    });
+  });
 });

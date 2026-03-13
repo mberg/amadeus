@@ -127,6 +127,7 @@ if (isMachineMode() || isStandaloneMode()) {
     },
     linearWorkspace: CONFIG.linearWorkspace,
     agentName: CONFIG.agentName,
+    defaultAgentType: CONFIG.defaultAgentType,
     profilesDir: CONFIG.profilesDir,
     defaultProfile: CONFIG.defaultProfile,
     teamProfiles: CONFIG.teamProfiles,
