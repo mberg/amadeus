@@ -164,15 +164,9 @@ if (isMachineMode() || isStandaloneMode()) {
 let orchestratorAgent: OrchestratorAgent | null = null;
 
 if ((isMachineMode() || isStandaloneMode()) && orchestrator && persistence && healthMonitor) {
-  const oaConfig = CONFIG.orchestratorAgent ?? {
-    enabled: true,
-    reconcileIntervalMs: 60000,
-    stallTimeoutMs: 900000,
-    terminalStates: ["Done", "Closed", "Cancelled", "Canceled", "Duplicate"],
-    inactiveStates: ["Backlog", "Todo", "Triage"],
-  };
+  const oaConfig = CONFIG.orchestratorAgent;
 
-  if (oaConfig.enabled) {
+  if (oaConfig?.enabled) {
     orchestratorAgent = new OrchestratorAgent({
       orchestrator,
       persistence,

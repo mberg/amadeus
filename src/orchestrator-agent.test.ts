@@ -24,13 +24,14 @@ function createMockOrchestrator(agents: any[] = []) {
     getStatus: () => agents.map(a => ({
       key: a.key ?? `proj-${a.issueId}`,
       pid: 1234,
-      port: 8001,
+      port: a.port ?? 8001,
       issueId: a.issueId ?? "issue-1",
       issueIdentifier: a.issueIdentifier ?? "ENG-123",
       issueTitle: a.issueTitle ?? "Test issue",
       linearState: a.linearState ?? "Building",
       status: a.status ?? "idle",
       uptime: a.uptime ?? 60000,
+      worktreePath: a.worktreePath,
     })),
     stopAgent: async (key: string, reason?: string) => {
       stopped.push({ key, reason });
@@ -63,6 +64,18 @@ function createMockPersistence() {
 function createMockHealthMonitor() {
   return {
     notifyAgentCountChanged: () => {},
+    checkAgentHealth: async (port: number) => {
+      try {
+        const res = await fetch(`http://localhost:${port}/status`, {
+          signal: AbortSignal.timeout(1000),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return { healthy: true, status: data.status };
+        }
+      } catch {}
+      return { healthy: false, error: "unreachable" };
+    },
   };
 }
 
@@ -267,6 +280,116 @@ describe("OrchestratorAgent", () => {
     // Third tick - stall should not fire again
     const result2 = await agent.tick();
     expect(result2.stalled).toBe(0);
+  });
+
+  test("does not flag stall when agentapi reports running status", async () => {
+    // Use a port we can intercept with a mock server
+    const mockServer = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ status: "running" }),
+    });
+    const port = mockServer.port;
+
+    const agents = [{ issueId: "issue-1", issueIdentifier: "ENG-123", linearState: "Building", port }];
+    const orch = createMockOrchestrator(agents);
+
+    mockIssueResponse = {
+      id: "issue-1",
+      identifier: "ENG-123",
+      title: "Test",
+      state: { id: "s1", name: "Building", type: "started" },
+    };
+
+    agent = new OrchestratorAgent({
+      orchestrator: orch as any,
+      persistence: createMockPersistence() as any,
+      healthMonitor: createMockHealthMonitor() as any,
+      stallTimeoutMs: 1,
+    });
+
+    // First tick initializes snapshot
+    await agent.tick();
+    await Bun.sleep(5);
+    // Second tick — agent is "running" so should NOT be stalled
+    const result = await agent.tick();
+    expect(result.stalled).toBe(0);
+
+    mockServer.stop();
+  });
+
+  test("does not flag stall when worktree has dirty files", async () => {
+    // Create a temporary git repo to simulate a worktree with dirty files
+    const tmpDir = await Bun.$`mktemp -d`.quiet().text();
+    const worktreePath = tmpDir.trim();
+    await Bun.$`git -C ${worktreePath} init && git -C ${worktreePath} commit --allow-empty -m "init"`.quiet();
+    // Create a dirty file
+    await Bun.$`echo "dirty" > ${worktreePath}/dirty.txt`.quiet();
+
+    const agents = [{ issueId: "issue-1", issueIdentifier: "ENG-123", linearState: "Building", worktreePath }];
+    const orch = createMockOrchestrator(agents);
+
+    mockIssueResponse = {
+      id: "issue-1",
+      identifier: "ENG-123",
+      title: "Test",
+      state: { id: "s1", name: "Building", type: "started" },
+    };
+
+    agent = new OrchestratorAgent({
+      orchestrator: orch as any,
+      persistence: createMockPersistence() as any,
+      healthMonitor: createMockHealthMonitor() as any,
+      stallTimeoutMs: 1,
+    });
+
+    await agent.tick();
+    await Bun.sleep(5);
+    const result = await agent.tick();
+    expect(result.stalled).toBe(0);
+
+    // Cleanup
+    await Bun.$`rm -rf ${worktreePath}`.quiet();
+  });
+
+  test("flags stall when worktree is clean and agentapi is stable", async () => {
+    // Create a temporary git repo with no dirty files and an old commit
+    const tmpDir = await Bun.$`mktemp -d`.quiet().text();
+    const worktreePath = tmpDir.trim();
+    await Bun.$`git -C ${worktreePath} init`.quiet();
+    // Backdate the commit so git log --since doesn't find it
+    await Bun.$`GIT_AUTHOR_DATE="2020-01-01T00:00:00" GIT_COMMITTER_DATE="2020-01-01T00:00:00" git -C ${worktreePath} commit --allow-empty -m "init"`.env({ ...process.env, GIT_AUTHOR_DATE: "2020-01-01T00:00:00", GIT_COMMITTER_DATE: "2020-01-01T00:00:00" }).quiet();
+
+    // Mock agentapi returning "stable"
+    const mockServer = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ status: "stable" }),
+    });
+    const port = mockServer.port;
+
+    const agents = [{ issueId: "issue-1", issueIdentifier: "ENG-123", linearState: "Building", port, worktreePath }];
+    const orch = createMockOrchestrator(agents);
+
+    mockIssueResponse = {
+      id: "issue-1",
+      identifier: "ENG-123",
+      title: "Test",
+      state: { id: "s1", name: "Building", type: "started" },
+    };
+
+    agent = new OrchestratorAgent({
+      orchestrator: orch as any,
+      persistence: createMockPersistence() as any,
+      healthMonitor: createMockHealthMonitor() as any,
+      stallTimeoutMs: 1,
+    });
+
+    await agent.tick();
+    await Bun.sleep(5);
+    const result = await agent.tick();
+    expect(result.stalled).toBe(1);
+
+    mockServer.stop();
+    await Bun.$`rm -rf ${worktreePath}`.quiet();
   });
 
   test("handles API errors gracefully without stopping agents", async () => {

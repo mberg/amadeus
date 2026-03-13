@@ -13,7 +13,7 @@ import {
   type ResolvedRealm,
   type ConfigValidationResult,
 } from "./config-loader";
-import type { SecurityConfig, RuntimeMode, GlobalConfig, Project } from "./config-schema";
+import type { SecurityConfig, RuntimeMode, GlobalConfig, Project, OrchestratorAgentConfig } from "./config-schema";
 import { isBetterAuthEnabled } from "./auth";
 import { GlobalConfigSchema } from "./config-schema";
 import yaml from "js-yaml";
@@ -61,13 +61,7 @@ export interface LegacyConfig {
   notificationFromEmail: string;
   telegramBotToken?: string;
   telegramChatId?: string;
-  orchestratorAgent?: {
-    enabled: boolean;
-    reconcileIntervalMs: number;
-    stallTimeoutMs: number;
-    terminalStates: string[];
-    inactiveStates: string[];
-  };
+  orchestratorAgent?: OrchestratorAgentConfig;
 }
 
 function loadProjectPathsFromEnv(): Record<string, string> {

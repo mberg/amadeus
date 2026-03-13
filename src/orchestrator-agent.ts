@@ -1,7 +1,7 @@
 // ABOUTME: Supervisory orchestrator agent that actively monitors running agents.
 // ABOUTME: Provides stall detection, Linear state reconciliation, and progress tracking.
 
-import type { ClaudeOrchestrator } from "./orchestrator";
+import type { ClaudeOrchestrator, CompletionReason } from "./orchestrator";
 import type { AgentPersistence } from "./persistence";
 import type { HealthMonitor } from "./health-monitor";
 import { fetchIssueDetails } from "./linear";
@@ -38,8 +38,11 @@ interface AgentSnapshot {
   linearState?: string;
   status: string;
   uptime: number;
+  port: number;
+  worktreePath?: string;
   lastReconcileAt: number;
   lastStateChangeAt: number;
+  lastActivityAt: number;
   stallWarned: boolean;
 }
 
@@ -190,12 +193,18 @@ export class OrchestratorAgent {
           linearState: agent.linearState,
           status: agent.status,
           uptime: agent.uptime,
+          port: agent.port,
+          worktreePath: agent.worktreePath,
           lastReconcileAt: now,
           lastStateChangeAt: now,
+          lastActivityAt: now,
           stallWarned: false,
         });
       }
     }
+
+    // Cache API keys per team to avoid redundant lookups within a tick
+    const apiKeyCache = new Map<string, string | null>();
 
     // Reconcile each agent against Linear
     for (const agent of agents) {
@@ -207,13 +216,18 @@ export class OrchestratorAgent {
         snapshot.linearState = agent.linearState;
         snapshot.status = agent.status;
         snapshot.lastStateChangeAt = now;
+        snapshot.lastActivityAt = now;
         snapshot.stallWarned = false;
       }
 
       // 1. Check Linear state via API for drift
       try {
         const teamKey = agent.issueIdentifier.split("-")[0];
-        const apiKey = await resolveLinearApiKey("default", teamKey);
+        let apiKey = apiKeyCache.get(teamKey);
+        if (apiKey === undefined) {
+          apiKey = await resolveLinearApiKey("default", teamKey);
+          apiKeyCache.set(teamKey, apiKey);
+        }
 
         if (apiKey) {
           const issueDetails = await fetchIssueDetails(agent.issueId, apiKey);
@@ -232,7 +246,7 @@ export class OrchestratorAgent {
                 `[OrchestratorAgent] Issue ${agent.issueIdentifier} is now in terminal state "${issueDetails.state?.name}" - stopping agent`
               );
               const reason = this.getCompletionReason(currentStateName, currentStateType);
-              await this.config.orchestrator.stopAgent(agent.key, reason as any);
+              await this.config.orchestrator.stopAgent(agent.key, reason);
               this.snapshots.delete(agent.key);
               result.terminated++;
               this.totalTerminated++;
@@ -275,15 +289,23 @@ export class OrchestratorAgent {
         // Don't stop agents on reconciliation errors - try again next tick
       }
 
-      // 2. Stall detection
-      const timeSinceStateChange = now - snapshot.lastStateChangeAt;
-      if (timeSinceStateChange > this.stallTimeoutMs && !snapshot.stallWarned) {
-        console.warn(
-          `[OrchestratorAgent] Agent ${agent.issueIdentifier} appears stalled (no state change for ${Math.round(timeSinceStateChange / 60000)}min, status: ${agent.status})`
-        );
-        snapshot.stallWarned = true;
-        result.stalled++;
-        this.totalStalled++;
+      // 2. Stall detection — check multiple activity signals before declaring stalled
+      const timeSinceActivity = now - snapshot.lastActivityAt;
+      if (timeSinceActivity > this.stallTimeoutMs && !snapshot.stallWarned) {
+        // Check AgentAPI status and git worktree activity before flagging
+        const hasActivity = await this.checkAgentActivity(snapshot);
+        if (hasActivity) {
+          // Agent is actually active — reset the activity timer
+          snapshot.lastActivityAt = now;
+          snapshot.stallWarned = false;
+        } else {
+          console.warn(
+            `[OrchestratorAgent] Agent ${agent.issueIdentifier} appears stalled (no activity for ${Math.round(timeSinceActivity / 60000)}min, status: ${agent.status})`
+          );
+          snapshot.stallWarned = true;
+          result.stalled++;
+          this.totalStalled++;
+        }
       }
 
       snapshot.lastReconcileAt = now;
@@ -301,7 +323,50 @@ export class OrchestratorAgent {
     return result;
   }
 
-  private getCompletionReason(stateName: string, stateType: string): string {
+  /**
+   * Check if an agent shows signs of activity via AgentAPI status or git worktree changes.
+   * Returns true if any activity signal is detected.
+   */
+  private async checkAgentActivity(snapshot: AgentSnapshot): Promise<boolean> {
+    // 1. Check AgentAPI — if status is "running", agent is actively processing
+    const health = await this.config.healthMonitor.checkAgentHealth(snapshot.port);
+    if (health.healthy && health.status === "running") {
+      return true;
+    }
+
+    // 2. Check git worktree for recent commits or dirty files
+    if (snapshot.worktreePath) {
+      const hasGit = await this.hasRecentGitActivity(snapshot.worktreePath);
+      if (hasGit) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a git worktree has recent commits or uncommitted changes.
+   */
+  private async hasRecentGitActivity(worktreePath: string): Promise<boolean> {
+    try {
+      const sinceSeconds = Math.floor(this.stallTimeoutMs / 1000);
+      const [logResult, statusResult] = await Promise.all([
+        Bun.$`git -C ${worktreePath} log --oneline --since="${sinceSeconds} seconds ago" -1`.quiet().nothrow(),
+        Bun.$`git -C ${worktreePath} status --porcelain`.quiet().nothrow(),
+      ]);
+
+      const hasRecentCommits = logResult.exitCode === 0 && logResult.stdout.toString().trim().length > 0;
+      const hasDirtyFiles = statusResult.exitCode === 0 && statusResult.stdout.toString().trim().length > 0;
+
+      return hasRecentCommits || hasDirtyFiles;
+    } catch {
+      // If git commands fail, don't count as activity
+      return false;
+    }
+  }
+
+  private getCompletionReason(stateName: string, stateType: string): CompletionReason {
     if (stateType === "completed" || stateName.includes("done")) return "done";
     if (stateType === "canceled" || stateName.includes("cancel")) return "canceled";
     if (stateType === "backlog" || stateName.includes("backlog") || stateName.includes("todo")) return "backlog";
