@@ -2,8 +2,8 @@
 // ABOUTME: Defines the data structures used throughout the orchestrator.
 
 import type { Subprocess } from "bun";
-
-export type AgentType = "claude" | "codex";
+import type { AgentType } from "./config-schema";
+export type { AgentType };
 
 export interface LinearIssue {
   id: string;
@@ -62,7 +62,7 @@ export interface AgentStatus {
   linearProject?: string;
   linearState?: string;
   activeSkills?: string[];
-  agentType?: string;
+  agentType?: AgentType;
   status: string;
   uptime: number;
   worktreePath?: string;

@@ -3,7 +3,8 @@
 
 import { spawn, type Subprocess } from "bun";
 import { dirname, join } from "node:path";
-import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile, AgentType } from "./types";
+import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
+import { AgentTypeSchema, type AgentType } from "./config-schema";
 import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles, resolveSkillLabels, mergeSkillProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
@@ -48,7 +49,7 @@ export interface OrchestratorConfig {
   onAgentChange?: () => void; // Called immediately when agent list changes
   linearWorkspace?: string;
   agentName?: string;
-  defaultAgentType?: string;
+  defaultAgentType?: AgentType;
 }
 
 // Simple hash function for message deduplication
@@ -110,21 +111,15 @@ export class ClaudeOrchestrator {
   }
 
   resolveAgentType(issue: LinearIssue): AgentType {
-    const knownTypes: AgentType[] = ["claude", "codex"];
-    const labelType = issue.labels
-      ?.map((l) => l.name.toLowerCase())
-      .find((name) => knownTypes.includes(name as AgentType)) as AgentType | undefined;
+    const knownTypes = AgentTypeSchema.removeDefault().options;
+    const labelMatch = issue.labels
+      ?.find((l) => knownTypes.includes(l.name.toLowerCase() as AgentType));
 
-    if (labelType) {
-      return labelType;
+    if (labelMatch) {
+      return labelMatch.name.toLowerCase() as AgentType;
     }
 
-    const defaultType = this.config.defaultAgentType;
-    if (defaultType && knownTypes.includes(defaultType as AgentType)) {
-      return defaultType as AgentType;
-    }
-
-    return "claude";
+    return this.config.defaultAgentType ?? "claude";
   }
 
   shouldStartAgent(issue: LinearIssue): boolean {

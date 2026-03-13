@@ -117,6 +117,7 @@ export type IdleTerminationConfig = z.infer<typeof IdleTerminationConfigSchema>;
  * Schema for global configuration settings.
  */
 export const AgentTypeSchema = z.enum(["claude", "codex"]).default("claude");
+export type AgentType = z.infer<typeof AgentTypeSchema>;
 
 export const GlobalConfigSchema = z.object({
   port: z.number().int().positive().default(5678),
