@@ -131,6 +131,30 @@ The user can ONLY see messages you post to Linear. Your thoughts, questions, rea
 - STOP and wait after posting questions (don't keep working)
 
 **REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
+
+### Progress Updates During Work
+
+While you are actively working (especially during the Building phase), post periodic progress updates to Linear so the user knows what's happening. The user has no other way to see your work in progress.
+
+**Rules:**
+- Post a brief update every ~5 minutes of active work (no more frequently than that)
+- To track time, run \`date +%s\` and compare to your last update timestamp
+- Keep updates concise — 2-3 sentences max: what you just finished, what you're doing next
+- Always post an update before starting a long-running command (build, test suite, large refactor)
+
+**Example updates:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 {{agentName}}:** Finished setting up the database schema. Now writing the API endpoints for user management." {{issueIdentifier}}
+\`\`\`
+
+\`\`\`bash
+linear-cli comments create --body "**🤖 {{agentName}}:** API endpoints done, running the test suite now. 4 of 6 files modified so far." {{issueIdentifier}}
+\`\`\`
+
+**Do NOT post updates for:**
+- The planning phase (the plan comment itself is sufficient)
+- Trivial steps that take under a minute
+- Back-to-back updates with no meaningful progress between them
 {{screenshotSection}}{{commentHistorySection}}{{profileSection}}`;
 
 /**
@@ -312,6 +336,30 @@ The user can ONLY see messages you post to Linear. Your thoughts, questions, rea
 - STOP and wait after posting questions (don't keep working)
 
 **REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
+
+### Progress Updates During Work
+
+While you are actively working (especially during the Building phase), post periodic progress updates to Linear so the user knows what's happening. The user has no other way to see your work in progress.
+
+**Rules:**
+- Post a brief update every ~5 minutes of active work (no more frequently than that)
+- To track time, run \`date +%s\` and compare to your last update timestamp
+- Keep updates concise — 2-3 sentences max: what you just finished, what you're doing next
+- Always post an update before starting a long-running command (build, test suite, large refactor)
+
+**Example updates:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 ${agentName}:** Finished setting up the database schema. Now writing the API endpoints for user management." ${issue.identifier}
+\`\`\`
+
+\`\`\`bash
+linear-cli comments create --body "**🤖 ${agentName}:** API endpoints done, running the test suite now. 4 of 6 files modified so far." ${issue.identifier}
+\`\`\`
+
+**Do NOT post updates for:**
+- The planning phase (the plan comment itself is sufficient)
+- Trivial steps that take under a minute
+- Back-to-back updates with no meaningful progress between them
 ${buildScreenshotSection(issue.identifier)}${commentHistorySection}${profileSection}`.trim();
 }
 
@@ -684,5 +732,9 @@ The user can ONLY see messages you post to Linear. If you need to ask questions,
 - Git history shows what code was actually written
 - Always communicate your progress via Linear comments
 - Always update the issue status to reflect your current state
+
+### Progress Updates During Work
+
+While actively working, post brief progress updates to Linear every ~5 minutes so the user knows what's happening. Run \`date +%s\` to track time between updates. Keep updates to 2-3 sentences: what you just finished, what you're doing next. Do not post updates more frequently than every 5 minutes or for trivial steps.
 ${profileSection}`.trim();
 }
