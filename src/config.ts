@@ -61,6 +61,13 @@ export interface LegacyConfig {
   notificationFromEmail: string;
   telegramBotToken?: string;
   telegramChatId?: string;
+  orchestratorAgent?: {
+    enabled: boolean;
+    reconcileIntervalMs: number;
+    stallTimeoutMs: number;
+    terminalStates: string[];
+    inactiveStates: string[];
+  };
 }
 
 function loadProjectPathsFromEnv(): Record<string, string> {
@@ -164,6 +171,7 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL ?? "amadeus@resend.dev",
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
     telegramChatId: process.env.TELEGRAM_CHAT_ID,
+    orchestratorAgent: resolved.global.orchestratorAgent,
   };
 }
 
