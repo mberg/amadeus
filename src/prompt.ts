@@ -67,47 +67,7 @@ These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_IS
 ### Git Branch
 
 You are working in branch \`issue/{{issueIdentifier}}\`. All commits go to this branch.
-{{fileLinkingSection}}
-### Status Workflow
-
-The workflow has distinct phases:
-1. **Planning** → Analyze requirements, create implementation plan
-2. **Feedback Needed** → Present plan to user, wait for approval
-3. **Building** → Implement after user approves (only entered via user feedback)
-4. **Review** → Work complete, PR created
-
-### Workflow (Planning Phase)
-
-You are currently in the **Planning** phase. Do NOT start building yet.
-
-**Note:** The issue has already been acknowledged automatically. Proceed with the workflow below.
-
-**Step 1:** Analyze the requirements thoroughly:
-- Read and understand the issue description
-- Explore the codebase to understand the context
-- Identify files that need to be modified
-- Consider edge cases and potential challenges
-
-**Step 2:** Post your implementation plan as a comment:
-\`\`\`bash
-linear-cli comments create --body "**🤖 {{agentName}}:** Here's my implementation plan:
-
-[Your detailed plan here - include:
-- What files will be modified/created
-- The approach you'll take
-- Any assumptions you're making
-- Estimated scope of changes]
-
-Please review and let me know if you'd like any changes to this plan." {{issueIdentifier}}
-\`\`\`
-
-**Step 3:** Set status to Feedback Needed and STOP:
-\`\`\`bash
-linear-cli issues update {{issueIdentifier}} --state "{{feedbackNeededStateId}}"
-\`\`\`
-{{notificationSection}}
-**IMPORTANT:** After setting status to "Feedback Needed", STOP and wait for the user to respond. Do NOT proceed to building until the user provides feedback approving your plan.
-{{reviewNotificationSection}}
+{{fileLinkingSection}}{{workflowSection}}
 ### CRITICAL - User Communication
 
 **⚠️ THE USER CANNOT SEE YOUR TERMINAL OUTPUT ⚠️**
@@ -131,6 +91,30 @@ The user can ONLY see messages you post to Linear. Your thoughts, questions, rea
 - STOP and wait after posting questions (don't keep working)
 
 **REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
+
+### Progress Updates During Work
+
+While you are actively working (especially during the Building phase), post periodic progress updates to Linear so the user knows what's happening. The user has no other way to see your work in progress.
+
+**Rules:**
+- Post a brief update every ~5 minutes of active work (no more frequently than that)
+- To track time, run \`date +%s\` and compare to your last update timestamp
+- Keep updates concise — 2-3 sentences max: what you just finished, what you're doing next
+- Always post an update before starting a long-running command (build, test suite, large refactor)
+
+**Example updates:**
+\`\`\`bash
+linear-cli comments create --body "**🤖 {{agentName}}:** Finished setting up the database schema. Now writing the API endpoints for user management." {{issueIdentifier}}
+\`\`\`
+
+\`\`\`bash
+linear-cli comments create --body "**🤖 {{agentName}}:** API endpoints done, running the test suite now. 4 of 6 files modified so far." {{issueIdentifier}}
+\`\`\`
+
+**Do NOT post updates for:**
+- The planning phase (the plan comment itself is sufficient)
+- Trivial steps that take under a minute
+- Back-to-back updates with no meaningful progress between them
 {{screenshotSection}}{{commentHistorySection}}{{profileSection}}`;
 
 /**
@@ -154,6 +138,8 @@ export function buildTemplateVariables(
   existingComments?: FetchedComment[],
   workflowStates?: WorkflowState[]
 ): Record<string, string> {
+  const yolo = isYoloMode(issue);
+  const notificationSection = buildNotificationSection(workspace, issue.identifier);
   return {
     issueIdentifier: issue.identifier,
     issueTitle: issue.title,
@@ -170,9 +156,10 @@ export function buildTemplateVariables(
     reviewStateId: getStateId(workflowStates, "Review"),
     gitBranch: `issue/${issue.identifier}`,
     fileLinkingSection: buildFileLinkingSection(githubRepoUrl, issue.identifier),
+    workflowSection: buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace, workflowStates),
     commentHistorySection: buildCommentHistorySection(existingComments),
     profileSection: buildProfileSection(profile),
-    notificationSection: buildNotificationSection(workspace, issue.identifier),
+    notificationSection,
     reviewNotificationSection: buildReviewNotificationSection(workspace, issue.identifier),
     screenshotSection: buildScreenshotSection(issue.identifier),
   };
@@ -231,88 +218,15 @@ export function buildPrompt(
   workflowStates?: WorkflowState[],
   promptTemplate?: string | null
 ): string {
-  const yolo = isYoloMode(issue);
   const ultrathink = hasUltrathinkLabel(issue);
   const ultrathinkPrefix = ultrathink ? "ultrathink\n\n" : "";
 
-  // If a custom prompt template is set and NOT in YOLO mode, use the template
-  if (promptTemplate && !yolo) {
-    const variables = buildTemplateVariables(
-      issue, profile, workspace, agentName, githubRepoUrl, existingComments, workflowStates
-    );
-    return `${ultrathinkPrefix}${renderTemplate(promptTemplate, variables)}`.trim();
-  }
-
-  // Fall back to the code-driven prompt (original logic)
-  const profileSection = buildProfileSection(profile);
-  const notificationSection = buildNotificationSection(workspace, issue.identifier);
-  const workflowSection = buildWorkflowSection(issue, yolo, notificationSection, agentName, workspace, workflowStates);
-  const fileLinkingSection = buildFileLinkingSection(githubRepoUrl, issue.identifier);
-  const commentHistorySection = buildCommentHistorySection(existingComments);
-
-  return `${ultrathinkPrefix}
-## New Task from Linear
-
-**Issue**: ${issue.identifier} - ${issue.title}
-**Issue ID**: ${issue.id}
-**Priority**: ${issue.priority ?? "None"}
-**Labels**: ${issue.labels?.map((l) => l.name).join(", ") || "None"}
-
-### Description
-${issue.description || "No description provided."}
-
-### How to Communicate with Linear
-
-Use the \`linear-cli\` command line tool for all Linear interactions.
-
-**Post a comment:**
-\`\`\`bash
-linear-cli comments create --body "**🤖 ${agentName}:** Your message here" ${issue.identifier}
-\`\`\`
-**Important:** Always prefix your comments with \`**🤖 ${agentName}:**\` so users know it's from the AI agent.
-
-**Update status:**
-\`\`\`bash
-linear-cli issues update ${issue.identifier} --state "<state-id>"
-\`\`\`
-
-**State IDs:**
-${workflowStates?.length ? buildStateIdTable(workflowStates) : `*Use \`linear-cli statuses list --team <team>\` to find state IDs.*`}
-
-**Issue details:**
-- Issue ID: ${issue.id}
-- Issue identifier: ${issue.identifier}
-
-These are also available as environment variables: LINEAR_ISSUE_ID and LINEAR_ISSUE_IDENTIFIER.
-
-### Git Branch
-
-You are working in branch \`issue/${issue.identifier}\`. All commits go to this branch.
-${fileLinkingSection}${workflowSection}
-### CRITICAL - User Communication
-
-**⚠️ THE USER CANNOT SEE YOUR TERMINAL OUTPUT ⚠️**
-
-The user can ONLY see messages you post to Linear. Your thoughts, questions, reasoning, and terminal output are completely invisible to them.
-
-**If you need to communicate ANYTHING to the user:**
-1. Ask a clarifying question → **POST IT TO LINEAR** via \`linear-cli comments create\`
-2. Share your analysis or findings → **POST IT TO LINEAR**
-3. Request feedback or approval → **POST IT TO LINEAR**
-4. Report progress or blockers → **POST IT TO LINEAR**
-
-**DO NOT:**
-- Output questions to the terminal and wait for a response (user won't see it)
-- Assume the user can read your internal monologue
-- Skip posting to Linear because you already "said" something in your output
-
-**DO:**
-- Use \`linear-cli comments create --body "**🤖 ${agentName}:** your message" ${issue.identifier}\`
-- Update status to "Feedback Needed" when waiting for user input
-- STOP and wait after posting questions (don't keep working)
-
-**REMEMBER:** If you don't run \`linear-cli comments create\`, the user will never see your message. Period.
-${buildScreenshotSection(issue.identifier)}${commentHistorySection}${profileSection}`.trim();
+  // Always use template path — hub provides the template (custom or default)
+  const template = promptTemplate ?? DEFAULT_PROMPT_TEMPLATE;
+  const variables = buildTemplateVariables(
+    issue, profile, workspace, agentName, githubRepoUrl, existingComments, workflowStates
+  );
+  return `${ultrathinkPrefix}${renderTemplate(template, variables)}`.trim();
 }
 
 function buildWorkflowSection(issue: LinearIssue, yolo: boolean, notificationSection: string, agentName: string, workspace?: string, workflowStates?: WorkflowState[]): string {
@@ -684,5 +598,9 @@ The user can ONLY see messages you post to Linear. If you need to ask questions,
 - Git history shows what code was actually written
 - Always communicate your progress via Linear comments
 - Always update the issue status to reflect your current state
+
+### Progress Updates During Work
+
+While actively working, post brief progress updates to Linear every ~5 minutes so the user knows what's happening. Run \`date +%s\` to track time between updates. Keep updates to 2-3 sentences: what you just finished, what you're doing next. Do not post updates more frequently than every 5 minutes or for trivial steps.
 ${profileSection}`.trim();
 }

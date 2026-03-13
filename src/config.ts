@@ -16,6 +16,7 @@ import {
 import type { SecurityConfig, RuntimeMode, GlobalConfig, Project, OrchestratorAgentConfig } from "./config-schema";
 import { isBetterAuthEnabled } from "./auth";
 import { GlobalConfigSchema } from "./config-schema";
+import { DEFAULT_PROMPT_TEMPLATE } from "./prompt";
 import yaml from "js-yaml";
 import {
   migrate,
@@ -441,13 +442,14 @@ export function getRealmByTeamKey(teamKey: string): {
 
 /**
  * Get the prompt template for a team key's realm.
- * Returns null if no custom template is set.
+ * Returns the realm's custom template if set, otherwise the default template.
+ * Always returns a template so machines don't need their own fallback.
  */
-export function getPromptTemplateByTeamKey(teamKey: string): string | null {
-  if (!REALM_CONFIG) return null;
+export function getPromptTemplateByTeamKey(teamKey: string): string {
+  if (!REALM_CONFIG) return DEFAULT_PROMPT_TEMPLATE;
 
   const realm = REALM_CONFIG.realmByTeamKey.get(teamKey);
-  return realm?.promptTemplate ?? null;
+  return realm?.promptTemplate ?? DEFAULT_PROMPT_TEMPLATE;
 }
 
 /**
