@@ -3,6 +3,8 @@
 
 import type { Subprocess } from "bun";
 
+export type AgentType = "claude" | "codex";
+
 export interface LinearIssue {
   id: string;
   identifier: string;
@@ -45,6 +47,7 @@ export interface AgentInstance {
   linearProject?: string;
   linearState?: string;
   activeSkills?: string[];
+  agentType?: AgentType;
   status: "starting" | "idle" | "working";
   startedAt: Date;
 }
@@ -59,6 +62,7 @@ export interface AgentStatus {
   linearProject?: string;
   linearState?: string;
   activeSkills?: string[];
+  agentType?: string;
   status: string;
   uptime: number;
   worktreePath?: string;

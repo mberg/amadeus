@@ -43,6 +43,7 @@ export interface LegacyConfig {
   port: number;
   apiToken?: string;
   agentName: string;
+  defaultAgentType: string;
   linearWebhookSecret: string;
   claudeBotUserId?: string;
   projectPaths: Record<string, string>;
@@ -147,6 +148,7 @@ function buildLegacyConfigFromResolved(resolved: ResolvedConfig): LegacyConfig {
     port: resolved.global.port,
     apiToken: process.env.AMADEUS_API_TOKEN,
     agentName: resolved.global.agentName,
+    defaultAgentType: resolved.global.defaultAgentType,
     linearWebhookSecret: firstRealm?.webhookSecret ?? "",
     claudeBotUserId: firstRealm?.claudeBotUserId,
     projectPaths,
@@ -184,6 +186,7 @@ function loadLegacyConfigFromEnv(): LegacyConfig {
     port: Number(process.env.PORT) || 5678,
     apiToken: process.env.AMADEUS_API_TOKEN,
     agentName: process.env.AGENT_NAME ?? "Amadeus",
+    defaultAgentType: process.env.DEFAULT_AGENT_TYPE ?? "claude",
     linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
     claudeBotUserId: process.env.CLAUDE_BOT_USER_ID,
     projectPaths: loadProjectPathsFromEnv(),

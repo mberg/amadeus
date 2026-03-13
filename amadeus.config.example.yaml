@@ -59,6 +59,10 @@ global:
   # Agent name shown in dashboard
   agentName: Amadeus
 
+  # Default agent type: 'claude' or 'codex'
+  # Can be overridden per-issue with a 'Codex' or 'Claude' label
+  # defaultAgentType: claude
+
   # Machine identity (for dashboard display and hub registration)
   machine:
     name: "MyMachine"  # Friendly name shown in hub

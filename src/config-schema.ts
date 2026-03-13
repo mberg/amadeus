@@ -116,9 +116,12 @@ export type IdleTerminationConfig = z.infer<typeof IdleTerminationConfigSchema>;
 /**
  * Schema for global configuration settings.
  */
+export const AgentTypeSchema = z.enum(["claude", "codex"]).default("claude");
+
 export const GlobalConfigSchema = z.object({
   port: z.number().int().positive().default(5678),
   agentName: z.string().default("Amadeus"),
+  defaultAgentType: AgentTypeSchema,
   triggerStates: z.array(z.string()).default(["Planning"]),
   useWorktrees: z.boolean().default(true),
   worktreesDir: z.string().optional(),

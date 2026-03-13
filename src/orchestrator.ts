@@ -3,7 +3,7 @@
 
 import { spawn, type Subprocess } from "bun";
 import { dirname, join } from "node:path";
-import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
+import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile, AgentType } from "./types";
 import { buildPrompt } from "./prompt";
 import { loadProfiles, resolveProfile, resolveAndMergeProfiles, resolveSkillLabels, mergeSkillProfiles } from "./profiles";
 import { createWorktree, removeWorktree, getWorktreePath } from "./worktree";
@@ -48,6 +48,7 @@ export interface OrchestratorConfig {
   onAgentChange?: () => void; // Called immediately when agent list changes
   linearWorkspace?: string;
   agentName?: string;
+  defaultAgentType?: string;
 }
 
 // Simple hash function for message deduplication
@@ -108,6 +109,24 @@ export class ClaudeOrchestrator {
     return resolveAndMergeProfiles(issue, this.profiles, defaultProfile);
   }
 
+  resolveAgentType(issue: LinearIssue): AgentType {
+    const knownTypes: AgentType[] = ["claude", "codex"];
+    const labelType = issue.labels
+      ?.map((l) => l.name.toLowerCase())
+      .find((name) => knownTypes.includes(name as AgentType)) as AgentType | undefined;
+
+    if (labelType) {
+      return labelType;
+    }
+
+    const defaultType = this.config.defaultAgentType;
+    if (defaultType && knownTypes.includes(defaultType as AgentType)) {
+      return defaultType as AgentType;
+    }
+
+    return "claude";
+  }
+
   shouldStartAgent(issue: LinearIssue): boolean {
     // Check if issue has the required agent label (case-insensitive)
     const agentName = this.config.agentName?.toLowerCase();
@@ -161,6 +180,7 @@ export class ClaudeOrchestrator {
       linearProject: agent.linearProject,
       linearState: agent.linearState,
       activeSkills: agent.activeSkills,
+      agentType: agent.agentType,
       status: agent.status,
       uptime: Date.now() - agent.startedAt.getTime(),
       worktreePath: agent.worktreePath,
@@ -451,16 +471,15 @@ export class ClaudeOrchestrator {
       console.log(`[Agent] Applied profile config (${configResult.filesWritten.length} files)`);
     }
 
+    const agentType = this.resolveAgentType(issue);
+    const cmd = agentType === "codex"
+      ? ["agentapi", "server", "codex", "--port", String(port), "--", "--full-auto"]
+      : ["agentapi", "server", "claude", "--port", String(port), "--", "--dangerously-skip-permissions"];
+
+    console.log(`[Agent] Using agent type: ${agentType}`);
+
     const proc = spawn({
-      cmd: [
-        "agentapi",
-        "server",
-        "claude",
-        "--port",
-        String(port),
-        "--",
-        "--dangerously-skip-permissions",
-      ],
+      cmd,
       cwd: workingDir,
       env: {
         ...process.env,
@@ -488,6 +507,7 @@ export class ClaudeOrchestrator {
       linearProject: issue.project?.name,
       linearState: issue.state?.name,
       activeSkills: activeSkills.length > 0 ? activeSkills : undefined,
+      agentType,
       status: "starting",
       startedAt: new Date(),
     });
