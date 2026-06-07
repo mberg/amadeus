@@ -468,7 +468,7 @@ export class ClaudeOrchestrator {
 
     const agentType = this.resolveAgentType(issue);
     const cmd = agentType === "codex"
-      ? ["agentapi", "server", "codex", "--port", String(port), "--", "--full-auto"]
+      ? ["agentapi", "server", "codex", "--port", String(port), "--", "--dangerously-bypass-approvals-and-sandbox"]
       : ["agentapi", "server", "claude", "--port", String(port), "--", "--dangerously-skip-permissions"];
 
     console.log(`[Agent] Using agent type: ${agentType}`);
