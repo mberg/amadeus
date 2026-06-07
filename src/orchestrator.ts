@@ -3,6 +3,7 @@
 
 import { spawn, type Subprocess } from "bun";
 import { dirname, join } from "node:path";
+import { rename } from "node:fs/promises";
 import type { LinearIssue, AgentInstance, AgentStatus, AgentProfile } from "./types";
 import { AgentTypeSchema, type AgentType } from "./config-schema";
 import { buildPrompt } from "./prompt";
@@ -89,6 +90,9 @@ export class ClaudeOrchestrator {
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
   private profilesLoaded = false;
+  // Serializes read-modify-write of the shared ~/.claude.json trust file
+  // so concurrent spawns don't clobber each other's entries.
+  private claudeTrustLock: Promise<unknown> = Promise.resolve();
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
@@ -468,13 +472,16 @@ export class ClaudeOrchestrator {
 
     const agentType = this.resolveAgentType(issue);
 
-    // Codex refuses to start in an untrusted directory: it shows a
-    // "Do you trust the contents of this directory?" prompt and waits,
-    // which agentapi reports as perpetually "running" so the initial
-    // prompt can never be delivered. Pre-trust the working dir (worktrees
-    // are fresh each time) so Codex starts in non-interactive flow.
+    // Both agents show an interactive "trust this directory?" prompt in
+    // fresh worktrees that their skip-permission flags do NOT dismiss, and
+    // they wait at it forever (agentapi reports "running" / never "stable",
+    // so the initial prompt is never delivered). Pre-trust the working dir
+    // for whichever agent we're about to launch. Worktrees are fresh each
+    // time, so this is a per-spawn step.
     if (agentType === "codex") {
       await this.ensureCodexTrust(workingDir);
+    } else {
+      await this.ensureClaudeTrust(workingDir);
     }
 
     const cmd = agentType === "codex"
@@ -779,6 +786,41 @@ export class ClaudeOrchestrator {
       console.log(`[Agent] Marked ${dir} as trusted for Codex`);
     } catch (err) {
       console.warn(`[Agent] Failed to set Codex trust for ${dir}:`, err);
+    }
+  }
+
+  // Mark a directory as trusted in Claude Code's config (~/.claude.json) so
+  // it skips the interactive "Do you trust this folder?" prompt that
+  // --dangerously-skip-permissions does not dismiss in the PTY agentapi
+  // drives. Writes are serialized (claudeTrustLock) and atomic (temp +
+  // rename) because ~/.claude.json is shared with running agents.
+  // Best-effort and idempotent.
+  private async ensureClaudeTrust(dir: string): Promise<void> {
+    const run = this.claudeTrustLock.then(() => this.writeClaudeTrust(dir));
+    this.claudeTrustLock = run.catch(() => {});
+    await run;
+  }
+
+  private async writeClaudeTrust(dir: string): Promise<void> {
+    try {
+      const configPath = `${process.env.HOME}/.claude.json`;
+      const file = Bun.file(configPath);
+      if (!(await file.exists())) {
+        return; // Claude not initialized; don't fabricate its config
+      }
+      const config = await file.json();
+      config.projects = config.projects ?? {};
+      const existing = config.projects[dir] ?? {};
+      if (existing.hasTrustDialogAccepted === true) {
+        return; // already trusted
+      }
+      config.projects[dir] = { ...existing, hasTrustDialogAccepted: true };
+      const tmp = `${configPath}.amadeus-${hashMessage(dir)}.tmp`;
+      await Bun.write(tmp, JSON.stringify(config, null, 2));
+      await rename(tmp, configPath);
+      console.log(`[Agent] Marked ${dir} as trusted for Claude`);
+    } catch (err) {
+      console.warn(`[Agent] Failed to set Claude trust for ${dir}:`, err);
     }
   }
 

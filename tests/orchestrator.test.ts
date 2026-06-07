@@ -570,4 +570,48 @@ describe("ClaudeOrchestrator", () => {
       expect(content).toContain('[projects."/tmp/wt/REC-2"]');
     });
   });
+
+  describe("ensureClaudeTrust", () => {
+    let origHome: string | undefined;
+    let tmpHome: string;
+
+    beforeEach(() => {
+      origHome = process.env.HOME;
+      tmpHome = `/tmp/claude-trust-test-${Math.floor(performance.now() * 1000)}`;
+      process.env.HOME = tmpHome;
+    });
+
+    afterEach(async () => {
+      process.env.HOME = origHome;
+      await Bun.$`rm -rf ${tmpHome}`.quiet().nothrow();
+    });
+
+    const configPath = () => `${process.env.HOME}/.claude.json`;
+
+    it("sets hasTrustDialogAccepted for the directory", async () => {
+      await Bun.write(configPath(), JSON.stringify({ projects: {} }));
+      await (orchestrator as any).ensureClaudeTrust("/tmp/wt/REC-1");
+      const config = await Bun.file(configPath()).json();
+      expect(config.projects["/tmp/wt/REC-1"].hasTrustDialogAccepted).toBe(true);
+    });
+
+    it("preserves other projects and existing project fields", async () => {
+      await Bun.write(configPath(), JSON.stringify({
+        projects: {
+          "/other": { hasTrustDialogAccepted: true },
+          "/tmp/wt/REC-2": { projectOnboardingSeenCount: 3, hasTrustDialogAccepted: false },
+        },
+      }));
+      await (orchestrator as any).ensureClaudeTrust("/tmp/wt/REC-2");
+      const config = await Bun.file(configPath()).json();
+      expect(config.projects["/other"].hasTrustDialogAccepted).toBe(true);
+      expect(config.projects["/tmp/wt/REC-2"].hasTrustDialogAccepted).toBe(true);
+      expect(config.projects["/tmp/wt/REC-2"].projectOnboardingSeenCount).toBe(3);
+    });
+
+    it("is a no-op when ~/.claude.json does not exist", async () => {
+      await (orchestrator as any).ensureClaudeTrust("/tmp/wt/REC-3");
+      expect(await Bun.file(configPath()).exists()).toBe(false);
+    });
+  });
 });
