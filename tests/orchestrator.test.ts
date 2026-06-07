@@ -529,4 +529,45 @@ describe("ClaudeOrchestrator", () => {
       expect(orchestrator.resolveAgentType(issue)).toBe("claude");
     });
   });
+
+  describe("ensureCodexTrust", () => {
+    let origHome: string | undefined;
+    let tmpHome: string;
+
+    beforeEach(async () => {
+      origHome = process.env.HOME;
+      tmpHome = `/tmp/codex-trust-test-${Math.floor(performance.now() * 1000)}`;
+      process.env.HOME = tmpHome;
+    });
+
+    afterEach(async () => {
+      process.env.HOME = origHome;
+      await Bun.$`rm -rf ${tmpHome}`.quiet().nothrow();
+    });
+
+    const configPath = () => `${process.env.HOME}/.codex/config.toml`;
+
+    it("creates a trusted entry for the directory", async () => {
+      await (orchestrator as any).ensureCodexTrust("/tmp/wt/REC-1");
+      const content = await Bun.file(configPath()).text();
+      expect(content).toContain('[projects."/tmp/wt/REC-1"]');
+      expect(content).toContain('trust_level = "trusted"');
+    });
+
+    it("is idempotent for the same directory", async () => {
+      await (orchestrator as any).ensureCodexTrust("/tmp/wt/REC-1");
+      await (orchestrator as any).ensureCodexTrust("/tmp/wt/REC-1");
+      const content = await Bun.file(configPath()).text();
+      const matches = content.match(/\[projects\."\/tmp\/wt\/REC-1"\]/g) ?? [];
+      expect(matches.length).toBe(1);
+    });
+
+    it("preserves existing config and appends new entries", async () => {
+      await Bun.write(configPath(), '[projects."/existing"]\ntrust_level = "trusted"\n');
+      await (orchestrator as any).ensureCodexTrust("/tmp/wt/REC-2");
+      const content = await Bun.file(configPath()).text();
+      expect(content).toContain('[projects."/existing"]');
+      expect(content).toContain('[projects."/tmp/wt/REC-2"]');
+    });
+  });
 });

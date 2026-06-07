@@ -467,6 +467,16 @@ export class ClaudeOrchestrator {
     }
 
     const agentType = this.resolveAgentType(issue);
+
+    // Codex refuses to start in an untrusted directory: it shows a
+    // "Do you trust the contents of this directory?" prompt and waits,
+    // which agentapi reports as perpetually "running" so the initial
+    // prompt can never be delivered. Pre-trust the working dir (worktrees
+    // are fresh each time) so Codex starts in non-interactive flow.
+    if (agentType === "codex") {
+      await this.ensureCodexTrust(workingDir);
+    }
+
     const cmd = agentType === "codex"
       ? ["agentapi", "server", "codex", "--port", String(port), "--", "--ask-for-approval", "never", "--sandbox", "workspace-write"]
       : ["agentapi", "server", "claude", "--port", String(port), "--", "--dangerously-skip-permissions"];
@@ -748,6 +758,28 @@ export class ClaudeOrchestrator {
       await Bun.sleep(500);
     }
     console.warn(`[Agent] Agent on port ${port} never became stable, sending anyway`);
+  }
+
+  // Mark a directory as trusted in Codex's config so it skips the
+  // interactive "trust this directory?" prompt. Idempotent: each worktree
+  // path gets at most one entry, and re-spawns are no-ops. Best-effort —
+  // failures only mean Codex may prompt (it won't corrupt anything).
+  private async ensureCodexTrust(dir: string): Promise<void> {
+    try {
+      const configPath = `${process.env.HOME}/.codex/config.toml`;
+      const header = `[projects."${dir}"]`;
+      const file = Bun.file(configPath);
+      const content = (await file.exists()) ? await file.text() : "";
+      if (content.includes(header)) {
+        return; // already trusted
+      }
+      const separator = content === "" || content.endsWith("\n") ? "\n" : "\n\n";
+      const entry = `${separator}${header}\ntrust_level = "trusted"\n`;
+      await Bun.write(configPath, content + entry);
+      console.log(`[Agent] Marked ${dir} as trusted for Codex`);
+    } catch (err) {
+      console.warn(`[Agent] Failed to set Codex trust for ${dir}:`, err);
+    }
   }
 
   private async clearInputBuffer(port: number): Promise<void> {
