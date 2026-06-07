@@ -485,7 +485,7 @@ export class ClaudeOrchestrator {
     }
 
     const cmd = agentType === "codex"
-      ? ["agentapi", "server", "codex", "--port", String(port), "--", "--ask-for-approval", "never", "--sandbox", "workspace-write"]
+      ? ["agentapi", "server", "codex", "--port", String(port), "--", "--dangerously-bypass-approvals-and-sandbox"]
       : ["agentapi", "server", "claude", "--port", String(port), "--", "--dangerously-skip-permissions"];
 
     console.log(`[Agent] Using agent type: ${agentType}`);
