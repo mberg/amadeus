@@ -244,9 +244,24 @@ export function createFetchHandler(ctx: ServerContext): (req: Request) => Promis
       );
     }
 
+    const teamKey = issue.identifier.split("-")[0];
+    const apiKey = routingApiKey ?? await resolveLinearApiKey(orgId, teamKey, issue.assignee?.id);
+
+    // Linear's issue webhooks (especially "create") often omit labels/state.
+    // Re-fetch full details when they're missing so label-based decisions —
+    // shouldStartAgent and agent-type selection (e.g. the Codex label) — see
+    // the real labels instead of falling back to defaults.
+    if (apiKey && (!issue.state?.name || !issue.labels?.length)) {
+      const fullIssue = await fetchIssueDetails(issue.id, apiKey);
+      if (fullIssue) {
+        issue = fullIssue;
+        console.log(
+          `[${new Date().toISOString()}] Fetched full issue details for ${issue.identifier} (state: ${issue.state?.name}, labels: ${issue.labels?.map(l => l.name).join(", ") ?? "none"})`
+        );
+      }
+    }
+
     if (ctx.orchestrator.shouldStartAgent(issue)) {
-      const teamKey = issue.identifier.split("-")[0];
-      const apiKey = routingApiKey ?? await resolveLinearApiKey(orgId, teamKey, issue.assignee?.id);
       const promptTemplate = routingPromptTemplate ?? getPromptTemplateByTeamKey(teamKey);
 
       if (ctx.orchestrator.hasAgent(agentKey)) {
