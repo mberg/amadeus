@@ -103,6 +103,11 @@ export class ClaudeOrchestrator {
   // Serializes read-modify-write of the shared ~/.claude.json trust file
   // so concurrent spawns don't clobber each other's entries.
   private claudeTrustLock: Promise<unknown> = Promise.resolve();
+  // Serializes the entire port-selection critical section (read nextPort +
+  // findFreePort + add to inflightPorts) so two concurrent allocatePort()
+  // calls can never both pass the probe for the same port before either
+  // has reserved it.
+  private portAllocLock: Promise<unknown> = Promise.resolve();
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
@@ -882,19 +887,29 @@ export class ClaudeOrchestrator {
     }
   }
 
-  private async allocatePort(): Promise<number> {
-    const port = await findFreePort({
-      from: this.nextPort,
-      start: this.portStart,
-      end: this.portEnd,
-      // Treat in-flight reservations as occupied so concurrent allocations
-      // never receive the same port.
-      probe: (p) => this.inflightPorts.has(p) ? Promise.resolve(true) : isPortOccupied(p),
+  private allocatePort(): Promise<number> {
+    // Chain the critical section onto portAllocLock so that for any two
+    // concurrent calls, the second does not begin selecting until the first
+    // has fully completed: found a port, advanced nextPort, AND added to
+    // inflightPorts.  This is the same mutex pattern used by claudeTrustLock.
+    const run = this.portAllocLock.then(async () => {
+      const port = await findFreePort({
+        from: this.nextPort,
+        start: this.portStart,
+        end: this.portEnd,
+        // Also check inflightPorts so the probe is still correct for the
+        // window between allocation and the agent becoming tracked.
+        probe: (p) => this.inflightPorts.has(p) ? Promise.resolve(true) : isPortOccupied(p),
+      });
+      this.nextPort = port + 1 > this.portEnd ? this.portStart : port + 1;
+      this.inflightPorts.add(port);
+      return port;
     });
-    this.nextPort = port + 1 > this.portEnd ? this.portStart : port + 1;
-    // Reserve SYNCHRONOUSLY before any await so a concurrent call sees it.
-    this.inflightPorts.add(port);
-    return port;
+    // If findFreePort throws, swallow the rejection on the lock chain so the
+    // mutex is released and future allocations are not deadlocked, but let
+    // the caller's `run` promise still reject (same pattern as claudeTrustLock).
+    this.portAllocLock = run.catch(() => {});
+    return run;
   }
 
   async stopAgent(key: string, completionReason?: CompletionReason): Promise<void> {
