@@ -15,6 +15,7 @@ import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
 import { fetchIssueComments, fetchTeamWorkflowStates } from "./linear";
 import { findFreePort, isPortOccupied } from "./port-utils";
+import type { ProcessInspector } from "./process-inspector";
 
 export interface AgentDeathInfo {
   key: string;
@@ -54,6 +55,7 @@ export interface OrchestratorConfig {
   defaultAgentType?: AgentType;
   agentPortStart?: number;
   agentPortEnd?: number;
+  processInspector?: ProcessInspector;
 }
 
 // Simple hash function for message deduplication
@@ -852,6 +854,15 @@ export class ClaudeOrchestrator {
     return new Set(Array.from(this.agents.values()).map((a) => a.port));
   }
 
+  /** Kill an agent process tree (agentapi + child) by pid, if an inspector is configured. */
+  killTrackedAgent(pid: number): void {
+    if (this.config.processInspector) {
+      void this.config.processInspector.killTree(pid).catch((err) => {
+        console.warn(`[Agent] killTree(${pid}) failed: ${err}`);
+      });
+    }
+  }
+
   private async allocatePort(): Promise<number> {
     const port = await findFreePort({
       from: this.nextPort,
@@ -886,7 +897,13 @@ export class ClaudeOrchestrator {
 
     // Mark as intentionally stopping so exit handler doesn't fire death callback
     this.stoppingAgents.add(key);
-    agent.process.kill();
+    if (this.config.processInspector && agent.pid) {
+      this.config.processInspector.killTree(agent.pid).catch((err) => {
+        console.warn(`[Agent] killTree(${agent.pid}) failed: ${err}`);
+      });
+    } else {
+      agent.process.kill();
+    }
 
     // Only clean up worktree when issue is truly finished (done, canceled, backlog)
     // Keep worktree for "stopped" (manual stop) so agent can resume with existing work
