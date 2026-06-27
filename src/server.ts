@@ -66,6 +66,7 @@ if (isHubMode() || isStandaloneMode()) {
 let persistence: AgentPersistence | null = null;
 let orchestrator: ClaudeOrchestrator | null = null;
 let healthMonitor: HealthMonitor | null = null;
+let orphanReapInterval: ReturnType<typeof setInterval> | null = null;
 
 if (isMachineMode() || isStandaloneMode()) {
   // Initialize persistence layer
@@ -187,22 +188,12 @@ if (isMachineMode() || isStandaloneMode()) {
   );
 
   // Watchdog.
-  setInterval(() => {
+  orphanReapInterval = setInterval(() => {
     reapOrphans(reapDeps).catch((err) =>
       console.error("[OrphanReaper] Watchdog reap failed:", err)
     );
   }, CONFIG.orphanReapIntervalMs);
   console.log(`[OrphanReaper] Watchdog enabled (every ${CONFIG.orphanReapIntervalMs}ms)`);
-
-  const shutdown = (signal: string) => {
-    console.log(`[Server] ${signal} received — tearing down tracked agents`);
-    for (const status of orchestrator!.getStatus()) {
-      if (status.pid) orchestrator!.killTrackedAgent(status.pid);
-    }
-    setTimeout(() => process.exit(0), 1000);
-  };
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 // Initialize orchestrator agent (machine or standalone mode)
@@ -786,8 +777,19 @@ async function shutdown(): Promise<void> {
     wsConnections.close();
   }
 
+  if (orphanReapInterval) {
+    clearInterval(orphanReapInterval);
+  }
+
   if (prCheckInterval) {
     clearInterval(prCheckInterval);
+  }
+
+  // Kill agent process trees (ensures agentapi's claude child dies too)
+  if (orchestrator) {
+    for (const status of orchestrator.getStatus()) {
+      if (status.pid) orchestrator.killTrackedAgent(status.pid);
+    }
   }
 
   // Stop all agents
