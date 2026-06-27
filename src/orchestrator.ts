@@ -14,6 +14,7 @@ import { getGitHubRepoUrl } from "./git-utils";
 import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
 import { fetchIssueComments, fetchTeamWorkflowStates } from "./linear";
+import { findFreePort, isPortOccupied } from "./port-utils";
 
 export interface AgentDeathInfo {
   key: string;
@@ -51,6 +52,8 @@ export interface OrchestratorConfig {
   linearWorkspace?: string;
   agentName?: string;
   defaultAgentType?: AgentType;
+  agentPortStart?: number;
+  agentPortEnd?: number;
 }
 
 // Simple hash function for message deduplication
@@ -86,7 +89,9 @@ export class ClaudeOrchestrator {
   private messageCache = new Map<string, CacheEntry[]>(); // Deduplication cache
   private pendingMessages = new Map<string, PendingMessage[]>(); // Buffered messages for busy agents
   private pendingMessageTimer: ReturnType<typeof setInterval> | null = null;
-  private nextPort = 8001;
+  private nextPort: number;
+  private readonly portStart: number;
+  private readonly portEnd: number;
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
   private profilesLoaded = false;
@@ -96,6 +101,9 @@ export class ClaudeOrchestrator {
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
+    this.portStart = config.agentPortStart ?? 8001;
+    this.portEnd = config.agentPortEnd ?? 8999;
+    this.nextPort = this.portStart;
   }
 
   async loadProfiles(): Promise<void> {
@@ -430,7 +438,7 @@ export class ClaudeOrchestrator {
       console.log(`[Agent] Active skills: ${activeSkills.join(", ")}`);
     }
 
-    const port = this.nextPort++;
+    const port = await this.allocatePort();
     console.log(`[Agent] Starting new agent on port ${port} for ${issue.identifier}`);
 
     // Determine working directory (worktree or project root)
@@ -838,6 +846,21 @@ export class ClaudeOrchestrator {
     } catch {
       // Ignore errors - this is a best-effort cleanup
     }
+  }
+
+  getTrackedPorts(): Set<number> {
+    return new Set(Array.from(this.agents.values()).map((a) => a.port));
+  }
+
+  private async allocatePort(): Promise<number> {
+    const port = await findFreePort({
+      from: this.nextPort,
+      start: this.portStart,
+      end: this.portEnd,
+      probe: (p) => isPortOccupied(p),
+    });
+    this.nextPort = port + 1 > this.portEnd ? this.portStart : port + 1;
+    return port;
   }
 
   async stopAgent(key: string, completionReason?: CompletionReason): Promise<void> {
