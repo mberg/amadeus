@@ -131,6 +131,9 @@ export const GlobalConfigSchema = z.object({
   dbPath: z.string().default("./amadeus-agents.db"),
   healthCheckIntervalMs: z.number().int().positive().default(30000),
   healthCheckTimeoutMs: z.number().int().positive().default(5000),
+  agentPortStart: z.number().int().positive().default(8001),
+  agentPortEnd: z.number().int().positive().default(8999),
+  orphanReapIntervalMs: z.number().int().positive().default(30000),
   disablePRCheck: z.boolean().default(false), // Disable periodic PR merge checking
   security: SecurityConfigSchema.optional().default({ enableAgentMessaging: false, publicDashboard: false }),
   router: RouterConfigSchema.optional(),

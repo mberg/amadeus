@@ -2,7 +2,7 @@
 // ABOUTME: Verifies RuntimeModeSchema, MachineConfigSchema, and StaticMachineSchema behavior.
 
 import { describe, test, expect } from "bun:test";
-import { RuntimeModeSchema, MachineConfigSchema, StaticMachineSchema, AmadeusConfigSchema } from "./config-schema";
+import { RuntimeModeSchema, MachineConfigSchema, StaticMachineSchema, AmadeusConfigSchema, GlobalConfigSchema } from "./config-schema";
 
 describe("RuntimeModeSchema", () => {
   test("accepts 'standalone' mode", () => {
@@ -98,4 +98,22 @@ describe("StaticMachineSchema", () => {
   test("requires valid URL", () => {
     expect(() => StaticMachineSchema.parse({ name: "Test", url: "not-a-url" })).toThrow();
   });
+});
+
+test("GlobalConfig provides orphan-cleanup defaults", () => {
+  const cfg = GlobalConfigSchema.parse({});
+  expect(cfg.agentPortStart).toBe(8001);
+  expect(cfg.agentPortEnd).toBe(8999);
+  expect(cfg.orphanReapIntervalMs).toBe(30000);
+});
+
+test("GlobalConfig accepts custom orphan-cleanup values", () => {
+  const cfg = GlobalConfigSchema.parse({
+    agentPortStart: 9000,
+    agentPortEnd: 9100,
+    orphanReapIntervalMs: 15000,
+  });
+  expect(cfg.agentPortStart).toBe(9000);
+  expect(cfg.agentPortEnd).toBe(9100);
+  expect(cfg.orphanReapIntervalMs).toBe(15000);
 });
