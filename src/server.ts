@@ -30,6 +30,9 @@ import { AgentPersistence } from "./persistence";
 import { HealthMonitor } from "./health-monitor";
 import { OrchestratorAgent } from "./orchestrator-agent";
 import { isBetterAuthEnabled } from "./auth";
+import { RealProcessInspector } from "./process-inspector";
+import { reapOrphans, type ReapDeps } from "./orphan-reaper";
+import { isPortOccupied } from "./port-utils";
 import dashboardHtml from "./dashboard/index.html";
 import { checkPRMerged, deleteBranch } from "./github";
 import { createFetchHandler, type ServerContext } from "./create-server";
@@ -131,6 +134,9 @@ if (isMachineMode() || isStandaloneMode()) {
     profilesDir: CONFIG.profilesDir,
     defaultProfile: CONFIG.defaultProfile,
     teamProfiles: CONFIG.teamProfiles,
+    agentPortStart: CONFIG.agentPortStart,
+    agentPortEnd: CONFIG.agentPortEnd,
+    processInspector: new RealProcessInspector(),
   });
 
   // Initialize health monitor
@@ -159,6 +165,44 @@ if (isMachineMode() || isStandaloneMode()) {
 
   // Start health monitoring
   healthMonitor.start();
+
+  // Orphaned-process cleanup: clear leftovers at startup, then on an interval.
+  const reapInspector = new RealProcessInspector();
+  const terminalStates = new Set(
+    (CONFIG.orchestratorAgent?.terminalStates ?? []).map((s) => s.toLowerCase())
+  );
+  const reapDeps: ReapDeps = {
+    inspector: reapInspector,
+    getTrackedPorts: () => orchestrator!.getTrackedPorts(),
+    isResponsive: (port) => isPortOccupied(port),
+    isIssueTerminal: async (port) => {
+      const rec = persistence!.getAllAgents().find((a) => a.port === port);
+      return rec?.linearState ? terminalStates.has(rec.linearState.toLowerCase()) : false;
+    },
+  };
+
+  // Startup sweep (tracked map is empty -> previous-run leftovers, conservatively reaped).
+  reapOrphans(reapDeps).catch((err) =>
+    console.error("[OrphanReaper] Startup reap failed:", err)
+  );
+
+  // Watchdog.
+  setInterval(() => {
+    reapOrphans(reapDeps).catch((err) =>
+      console.error("[OrphanReaper] Watchdog reap failed:", err)
+    );
+  }, CONFIG.orphanReapIntervalMs);
+  console.log(`[OrphanReaper] Watchdog enabled (every ${CONFIG.orphanReapIntervalMs}ms)`);
+
+  const shutdown = (signal: string) => {
+    console.log(`[Server] ${signal} received — tearing down tracked agents`);
+    for (const status of orchestrator!.getStatus()) {
+      if (status.pid) orchestrator!.killTrackedAgent(status.pid);
+    }
+    setTimeout(() => process.exit(0), 1000);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 // Initialize orchestrator agent (machine or standalone mode)
