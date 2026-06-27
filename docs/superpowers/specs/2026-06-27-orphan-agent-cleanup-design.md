@@ -82,20 +82,23 @@ A single function used by both the startup sweep and the periodic watchdog.
 
 1. **Enumerate** processes matching `agentapi server claude --port N` **and** with
    `N` inside `[agentPortStart, agentPortEnd]`. (Both conditions required.)
-2. **Exclude** any process in the orchestrator's tracked-agent set, and any process
-   younger than `orphanGraceMs` (covers the spawn race window where a process exists
-   but is not yet in the map).
+2. **Exclude** any process in the orchestrator's tracked-agent set. Agents enter the
+   tracked map synchronously immediately after `spawn()` (no `await` between
+   `orchestrator.ts:493` and `:510`), so the tracked-port filter already covers the
+   spawn race — no separate time-based grace window is needed.
 3. **Conservative gate** — for each remaining candidate, kill only if:
    - it is **unresponsive** on `/status`, **or**
    - its Linear issue is in a **terminal state** (done / closed / cancelled /
-     duplicate).
+     duplicate), resolved from the persisted `linearState` for that port.
 
    A responsive + active candidate is **spared** and logged. (The port probe means
    spared orphans cannot block new spawns anyway.)
-4. **Kill** via **process group**: `kill(-pid, SIGTERM)` → wait ~5s → `kill(-pid,
-   SIGKILL)`. This reaps the child `claude` together with its `agentapi` parent.
-   Requires spawning agents in their own process group (`setsid` / `detached`) — a
-   small change to the spawn call in `orchestrator.ts:493-508`.
+4. **Kill** via **tree-kill**: `pkill -TERM -P <pid>` (children) + `process.kill(pid,
+   SIGTERM)` → wait ~5s → `pkill -KILL -P <pid>` + `process.kill(pid, SIGKILL)`. This
+   reaps the child `claude` together with its `agentapi` parent. `pkill -P` is chosen
+   over process groups / `setsid` because `setsid` is unavailable on macOS, and
+   tree-kill also works on orphans spawned by older code (no spawn-path change
+   required).
 
 ### 3. Callers + shutdown hook
 
@@ -115,15 +118,14 @@ A single function used by both the startup sweep and the periodic watchdog.
 | `agentPortStart` | `8001` | Inclusive lower bound of the agent port range |
 | `agentPortEnd` | `8999` | Inclusive upper bound of the agent port range |
 | `orphanReapIntervalMs` | `30000` | Watchdog cadence |
-| `orphanGraceMs` | `30000` | Do not reap processes younger than this |
 
 ## Data flow
 
 ```
-spawn:    findFreePort(range) → setsid spawn agentapi → track in map (pid, port, startedAt)
+spawn:    findFreePort(range) → spawn agentapi → track in map (pid, port)
 startup:  reapOrphans()  [map empty → previous-run leftovers, conservatively reaped]
 watchdog: reapOrphans()  [every orphanReapIntervalMs; only untracked candidates]
-shutdown: SIGTERM/SIGINT → kill process group of every tracked agent → exit
+shutdown: SIGTERM/SIGINT → tree-kill (pkill -P) every tracked agent → exit
 ```
 
 ## Error handling
@@ -163,9 +165,10 @@ behavior, so a future incident is diagnosable without manually listing processes
 
 ## Affected files (anticipated)
 
-- `src/orchestrator.ts` — free-port probe, process-group spawn, `reapOrphans()`,
-  process-group kill helper.
+- `src/orchestrator.ts` — free-port probe allocation, `getTrackedPorts()`, tree-kill
+  on stop via an injected `ProcessInspector`.
 - `src/server.ts` — startup reap call, watchdog interval, SIGTERM/SIGINT handler.
 - `src/config-schema.ts` — new config keys + defaults.
-- New: a small process-inspection module (enumerate/kill behind an interface) + its
-  tests.
+- New: `src/port-utils.ts` (free-port probing), `src/process-inspector.ts`
+  (enumerate/tree-kill behind an interface), `src/orphan-reaper.ts` (decision +
+  orchestration) + their tests.
