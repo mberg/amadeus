@@ -180,6 +180,7 @@ if (isMachineMode() || isStandaloneMode()) {
       const rec = persistence!.getAllAgents().find((a) => a.port === port);
       return rec?.linearState ? terminalStates.has(rec.linearState.toLowerCase()) : false;
     },
+    portRange: { start: CONFIG.agentPortStart, end: CONFIG.agentPortEnd },
   };
 
   // Startup sweep (tracked map is empty -> previous-run leftovers, conservatively reaped).

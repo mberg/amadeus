@@ -38,6 +38,7 @@ export interface ReapDeps {
   isResponsive: (port: number) => Promise<boolean>;
   isIssueTerminal: (port: number) => Promise<boolean>;
   log?: (msg: string) => void;
+  portRange?: { start: number; end: number };
 }
 
 export async function reapOrphans(deps: ReapDeps): Promise<ReapResult> {
@@ -48,6 +49,10 @@ export async function reapOrphans(deps: ReapDeps): Promise<ReapResult> {
   const spared: number[] = [];
 
   for (const c of candidates) {
+    if (deps.portRange && (c.port < deps.portRange.start || c.port > deps.portRange.end)) {
+      log(`[OrphanReaper] Skipping out-of-range pid=${c.pid} port=${c.port}`);
+      continue;
+    }
     if (tracked.has(c.port)) {
       spared.push(c.port);
       continue;

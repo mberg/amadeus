@@ -28,8 +28,9 @@ test("findFreePort throws when the whole range is occupied", async () => {
 
 test("isPortOccupied is true for a port with a live listener", async () => {
   const server = Bun.serve({ port: 0, fetch: () => new Response("ok") });
+  const port = server.port!;
   try {
-    expect(await isPortOccupied(server.port)).toBe(true);
+    expect(await isPortOccupied(port)).toBe(true);
   } finally {
     server.stop(true);
   }
@@ -37,7 +38,7 @@ test("isPortOccupied is true for a port with a live listener", async () => {
 
 test("isPortOccupied is false for a closed port", async () => {
   const server = Bun.serve({ port: 0, fetch: () => new Response("ok") });
-  const port = server.port;
+  const port = server.port!;
   server.stop(true);
   expect(await isPortOccupied(port, 300)).toBe(false);
 });

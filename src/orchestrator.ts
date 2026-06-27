@@ -92,6 +92,9 @@ export class ClaudeOrchestrator {
   private pendingMessages = new Map<string, PendingMessage[]>(); // Buffered messages for busy agents
   private pendingMessageTimer: ReturnType<typeof setInterval> | null = null;
   private nextPort: number;
+  // Ports reserved by concurrent allocatePort() calls not yet tracked in this.agents.
+  // Prevents two simultaneous spawns from being handed the same port.
+  private inflightPorts = new Set<number>();
   private readonly portStart: number;
   private readonly portEnd: number;
   private config: OrchestratorConfig;
@@ -500,22 +503,33 @@ export class ClaudeOrchestrator {
 
     console.log(`[Agent] Using agent type: ${agentType}`);
 
-    const proc = spawn({
-      cmd,
-      cwd: workingDir,
-      env: {
-        ...process.env,
-        CLAUDECODE: undefined, // Allow spawning Claude Code from within a Claude Code session
-        LINEAR_ISSUE_ID: issue.id,
-        LINEAR_ISSUE_IDENTIFIER: issue.identifier,
-        ...(linearApiKey && {
-          LINEAR_API_KEY: linearApiKey,
-          LINEAR_TOKEN: linearApiKey,
-        }),
-      },
-      stdout: "inherit",
-      stderr: "inherit",
-    });
+    // Wrap spawn so a synchronous throw releases the inflight reservation.
+    let proc: ReturnType<typeof spawn>;
+    try {
+      proc = spawn({
+        cmd,
+        cwd: workingDir,
+        env: {
+          ...process.env,
+          CLAUDECODE: undefined, // Allow spawning Claude Code from within a Claude Code session
+          LINEAR_ISSUE_ID: issue.id,
+          LINEAR_ISSUE_IDENTIFIER: issue.identifier,
+          ...(linearApiKey && {
+            LINEAR_API_KEY: linearApiKey,
+            LINEAR_TOKEN: linearApiKey,
+          }),
+        },
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+    } catch (err) {
+      this.inflightPorts.delete(port);
+      console.error(`[Agent] Failed to spawn process for ${key}:`, err);
+      if (worktreePath) {
+        await removeWorktree({ repoPath: projectPath, worktreePath });
+      }
+      return;
+    }
 
     this.agents.set(key, {
       process: proc,
@@ -533,6 +547,8 @@ export class ClaudeOrchestrator {
       status: "starting",
       startedAt: new Date(),
     });
+    // Port is now covered by the tracked agents map; release inflight reservation.
+    this.inflightPorts.delete(port);
 
     // Notify immediately when agent is added (before waiting for ready)
     this.config.onAgentChange?.();
@@ -550,6 +566,9 @@ export class ClaudeOrchestrator {
       if (worktreePath) {
         await removeWorktree({ repoPath: projectPath, worktreePath });
       }
+      // Belt-and-suspenders: port was already removed from inflightPorts at agents.set,
+      // but delete again (no-op on Set) in case code ordering ever changes.
+      this.inflightPorts.delete(port);
       this.agents.delete(key);
       this.config.onAgentChange?.();
       return;
@@ -868,9 +887,13 @@ export class ClaudeOrchestrator {
       from: this.nextPort,
       start: this.portStart,
       end: this.portEnd,
-      probe: (p) => isPortOccupied(p),
+      // Treat in-flight reservations as occupied so concurrent allocations
+      // never receive the same port.
+      probe: (p) => this.inflightPorts.has(p) ? Promise.resolve(true) : isPortOccupied(p),
     });
     this.nextPort = port + 1 > this.portEnd ? this.portStart : port + 1;
+    // Reserve SYNCHRONOUSLY before any await so a concurrent call sees it.
+    this.inflightPorts.add(port);
     return port;
   }
 

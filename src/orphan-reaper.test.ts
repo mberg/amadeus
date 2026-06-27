@@ -71,6 +71,31 @@ test("reapOrphans kills only the orphans that fail the gate", async () => {
   expect(result.spared.sort()).toEqual([8004, 8005]);
 });
 
+test("reapOrphans skips out-of-range candidates and kills in-range unresponsive", async () => {
+  const killed: number[] = [];
+  const inspector: ProcessInspector = {
+    // pid 201 is out of range (port 9999), pid 202 is in range (port 8500)
+    list: async () => [cand(201, 9999), cand(202, 8500)],
+    killTree: async (pid) => {
+      killed.push(pid);
+    },
+  };
+  const result = await reapOrphans({
+    inspector,
+    getTrackedPorts: () => new Set(),
+    isResponsive: async () => false, // both unresponsive
+    isIssueTerminal: async () => false,
+    portRange: { start: 8001, end: 8999 },
+    log: () => {},
+  });
+  // out-of-range port 9999 (pid 201): neither killed nor spared
+  expect(result.killed).not.toContain(201);
+  expect(result.spared).not.toContain(9999);
+  // in-range unresponsive port 8500 (pid 202): killed
+  expect(result.killed).toContain(202);
+  expect(killed).toContain(202);
+});
+
 test("reapOrphans continues past a killTree failure", async () => {
   const killed: number[] = [];
   const inspector: ProcessInspector = {
