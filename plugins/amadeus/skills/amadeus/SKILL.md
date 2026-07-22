@@ -7,6 +7,8 @@ description: Use when queueing, monitoring, or coordinating coding work through 
 
 ## Mental model
 
+**Linear IS the interface to Amadeus.** Everything — queueing work, starting/stopping agents, reading progress, answering questions, aborting — is done through Linear issues, states, and comments. Do not reach for the Amadeus server, dashboard, or its API to control agents; those are for debugging only.
+
 Amadeus watches Linear webhooks and spawns **one Claude Code agent per issue**. Each agent gets its own git worktree, branch `issue/<IDENTIFIER>`, and port. Linear state transitions are the only control surface — Amadeus enforces nothing else (no dependency awareness, no "blocked by" handling).
 
 An agent spawns when an issue **enters a trigger state** (default: `Planning`) or is assigned to the configured bot user. **If `agentName` is set in `amadeus.config.yaml` (e.g. `Amadeus`), the issue MUST also carry a label with that exact name — without it the issue is silently ignored, on both the state and assignment paths.** Check `global.agentName` and `global.triggerStates` in the config if unsure.
@@ -50,7 +52,7 @@ linear issue comment add REC-123 -b "Use approach B, skip the migration"
 linear issue update REC-123 -s Canceled
 ```
 
-Also: dashboard at `http://localhost:5678` (agent list, live chat), logs at `tail -f /tmp/amadeus.log`.
+Debugging fallbacks only (when Linear shows nothing happening): dashboard at `http://localhost:5678`, logs at `tail -f /tmp/amadeus.log`.
 
 ## Labels
 
@@ -81,5 +83,5 @@ The state transition **is** the gate — Amadeus ignores Linear relations.
 - Forgetting the `Amadeus` label → nothing happens, no error anywhere.
 - Creating an issue directly in Planning before the description is final.
 - Moving an issue to Backlog/Todo to "pause" → that kills the agent; comments while Backlog'd are ignored. Resume by moving back to Planning.
-- Waiting for a blocked agent in the terminal — all communication is Linear comments (or dashboard chat).
+- Waiting for a blocked agent in the terminal — all communication is Linear comments.
 - Releasing a dependent issue before the prerequisite's PR is merged — the new worktree won't contain the unmerged code.
