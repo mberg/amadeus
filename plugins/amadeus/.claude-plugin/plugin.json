@@ -1,0 +1,11 @@
+{
+  "name": "amadeus",
+  "description": "Manage Amadeus via Linear: create and gate issues that spawn coding agents, group related work into a single agent for shared context, sequence dependent tasks, and monitor running agents via the linear CLI.",
+  "version": "0.1.0",
+  "author": {
+    "name": "mberg"
+  },
+  "license": "MIT",
+  "keywords": ["amadeus", "linear", "orchestrator", "agents", "claude-code", "workflow"],
+  "skills": ["./skills/amadeus"]
+}
