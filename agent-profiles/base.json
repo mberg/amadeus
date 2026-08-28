@@ -8,5 +8,10 @@
       "Bash(curl:*)"
     ]
   },
-  "promptAdditions": []
+  "promptAdditions": [
+    "A skill named `amadeus-agent` is available in .claude/skills/ in your working directory. Read it before creating Linear issues, changing states, or starting long-running work — it documents how to operate inside Amadeus."
+  ],
+  "skills": {
+    "local": ["plugins/amadeus/skills/amadeus-agent"]
+  }
 }
