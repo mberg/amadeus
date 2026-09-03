@@ -14,6 +14,8 @@ import { getGitHubRepoUrl } from "./git-utils";
 import { getProcessMemoryMB } from "./process-memory";
 import { processDescription } from "./image-downloader";
 import { fetchIssueComments, fetchTeamWorkflowStates } from "./linear";
+import { findFreePort, isPortOccupied } from "./port-utils";
+import type { ProcessInspector } from "./process-inspector";
 
 export interface AgentDeathInfo {
   key: string;
@@ -51,6 +53,9 @@ export interface OrchestratorConfig {
   linearWorkspace?: string;
   agentName?: string;
   defaultAgentType?: AgentType;
+  agentPortStart?: number;
+  agentPortEnd?: number;
+  processInspector?: ProcessInspector;
 }
 
 // Simple hash function for message deduplication
@@ -86,16 +91,29 @@ export class ClaudeOrchestrator {
   private messageCache = new Map<string, CacheEntry[]>(); // Deduplication cache
   private pendingMessages = new Map<string, PendingMessage[]>(); // Buffered messages for busy agents
   private pendingMessageTimer: ReturnType<typeof setInterval> | null = null;
-  private nextPort = 8001;
+  private nextPort: number;
+  // Ports reserved by concurrent allocatePort() calls not yet tracked in this.agents.
+  // Prevents two simultaneous spawns from being handed the same port.
+  private inflightPorts = new Set<number>();
+  private readonly portStart: number;
+  private readonly portEnd: number;
   private config: OrchestratorConfig;
   private profiles: Record<string, AgentProfile> = {};
   private profilesLoaded = false;
   // Serializes read-modify-write of the shared ~/.claude.json trust file
   // so concurrent spawns don't clobber each other's entries.
   private claudeTrustLock: Promise<unknown> = Promise.resolve();
+  // Serializes the entire port-selection critical section (read nextPort +
+  // findFreePort + add to inflightPorts) so two concurrent allocatePort()
+  // calls can never both pass the probe for the same port before either
+  // has reserved it.
+  private portAllocLock: Promise<unknown> = Promise.resolve();
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
+    this.portStart = config.agentPortStart ?? 8001;
+    this.portEnd = config.agentPortEnd ?? 8999;
+    this.nextPort = this.portStart;
   }
 
   async loadProfiles(): Promise<void> {
@@ -430,7 +448,7 @@ export class ClaudeOrchestrator {
       console.log(`[Agent] Active skills: ${activeSkills.join(", ")}`);
     }
 
-    const port = this.nextPort++;
+    const port = await this.allocatePort();
     console.log(`[Agent] Starting new agent on port ${port} for ${issue.identifier}`);
 
     // Determine working directory (worktree or project root)
@@ -490,22 +508,33 @@ export class ClaudeOrchestrator {
 
     console.log(`[Agent] Using agent type: ${agentType}`);
 
-    const proc = spawn({
-      cmd,
-      cwd: workingDir,
-      env: {
-        ...process.env,
-        CLAUDECODE: undefined, // Allow spawning Claude Code from within a Claude Code session
-        LINEAR_ISSUE_ID: issue.id,
-        LINEAR_ISSUE_IDENTIFIER: issue.identifier,
-        ...(linearApiKey && {
-          LINEAR_API_KEY: linearApiKey,
-          LINEAR_TOKEN: linearApiKey,
-        }),
-      },
-      stdout: "inherit",
-      stderr: "inherit",
-    });
+    // Wrap spawn so a synchronous throw releases the inflight reservation.
+    let proc: ReturnType<typeof spawn>;
+    try {
+      proc = spawn({
+        cmd,
+        cwd: workingDir,
+        env: {
+          ...process.env,
+          CLAUDECODE: undefined, // Allow spawning Claude Code from within a Claude Code session
+          LINEAR_ISSUE_ID: issue.id,
+          LINEAR_ISSUE_IDENTIFIER: issue.identifier,
+          ...(linearApiKey && {
+            LINEAR_API_KEY: linearApiKey,
+            LINEAR_TOKEN: linearApiKey,
+          }),
+        },
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+    } catch (err) {
+      this.inflightPorts.delete(port);
+      console.error(`[Agent] Failed to spawn process for ${key}:`, err);
+      if (worktreePath) {
+        await removeWorktree({ repoPath: projectPath, worktreePath });
+      }
+      return;
+    }
 
     this.agents.set(key, {
       process: proc,
@@ -523,6 +552,8 @@ export class ClaudeOrchestrator {
       status: "starting",
       startedAt: new Date(),
     });
+    // Port is now covered by the tracked agents map; release inflight reservation.
+    this.inflightPorts.delete(port);
 
     // Notify immediately when agent is added (before waiting for ready)
     this.config.onAgentChange?.();
@@ -540,6 +571,9 @@ export class ClaudeOrchestrator {
       if (worktreePath) {
         await removeWorktree({ repoPath: projectPath, worktreePath });
       }
+      // Belt-and-suspenders: port was already removed from inflightPorts at agents.set,
+      // but delete again (no-op on Set) in case code ordering ever changes.
+      this.inflightPorts.delete(port);
       this.agents.delete(key);
       this.config.onAgentChange?.();
       return;
@@ -840,6 +874,44 @@ export class ClaudeOrchestrator {
     }
   }
 
+  getTrackedPorts(): Set<number> {
+    return new Set(Array.from(this.agents.values()).map((a) => a.port));
+  }
+
+  /** Kill an agent process tree (agentapi + child) by pid, if an inspector is configured. */
+  killTrackedAgent(pid: number): void {
+    if (this.config.processInspector) {
+      void this.config.processInspector.killTree(pid).catch((err) => {
+        console.warn(`[Agent] killTree(${pid}) failed: ${err}`);
+      });
+    }
+  }
+
+  private allocatePort(): Promise<number> {
+    // Chain the critical section onto portAllocLock so that for any two
+    // concurrent calls, the second does not begin selecting until the first
+    // has fully completed: found a port, advanced nextPort, AND added to
+    // inflightPorts.  This is the same mutex pattern used by claudeTrustLock.
+    const run = this.portAllocLock.then(async () => {
+      const port = await findFreePort({
+        from: this.nextPort,
+        start: this.portStart,
+        end: this.portEnd,
+        // Also check inflightPorts so the probe is still correct for the
+        // window between allocation and the agent becoming tracked.
+        probe: (p) => this.inflightPorts.has(p) ? Promise.resolve(true) : isPortOccupied(p),
+      });
+      this.nextPort = port + 1 > this.portEnd ? this.portStart : port + 1;
+      this.inflightPorts.add(port);
+      return port;
+    });
+    // If findFreePort throws, swallow the rejection on the lock chain so the
+    // mutex is released and future allocations are not deadlocked, but let
+    // the caller's `run` promise still reject (same pattern as claudeTrustLock).
+    this.portAllocLock = run.catch(() => {});
+    return run;
+  }
+
   async stopAgent(key: string, completionReason?: CompletionReason): Promise<void> {
     const agent = this.agents.get(key);
     if (!agent) return;
@@ -863,7 +935,13 @@ export class ClaudeOrchestrator {
 
     // Mark as intentionally stopping so exit handler doesn't fire death callback
     this.stoppingAgents.add(key);
-    agent.process.kill();
+    if (this.config.processInspector && agent.pid) {
+      this.config.processInspector.killTree(agent.pid).catch((err) => {
+        console.warn(`[Agent] killTree(${agent.pid}) failed: ${err}`);
+      });
+    } else {
+      agent.process.kill();
+    }
 
     // Only clean up worktree when issue is truly finished (done, canceled, backlog)
     // Keep worktree for "stopped" (manual stop) so agent can resume with existing work
